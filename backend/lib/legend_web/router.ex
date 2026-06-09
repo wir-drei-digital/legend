@@ -15,4 +15,9 @@ defmodule LegendWeb.Router do
     pipe_through :api
     forward "/", LegendWeb.AshJsonApiRouter
   end
+
+  # SPA catch-all: anything that isn't /api or a static asset gets index.html.
+  scope "/", LegendWeb do
+    get "/*path", SPAController, :index
+  end
 end

@@ -17,7 +17,8 @@ defmodule LegendWeb do
   those modules here.
   """
 
-  def static_paths, do: ~w(assets fonts images favicon.ico robots.txt)
+  def static_paths,
+    do: ~w(_app assets fonts images favicon.ico favicon.png favicon.svg robots.txt)
 
   def router do
     quote do
