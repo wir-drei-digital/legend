@@ -1,5 +1,5 @@
 defmodule LegendWeb.ChatChannelTest do
-  use LegendWeb.ChannelCase
+  use LegendWeb.ChannelCase, async: true
 
   setup do
     {:ok, _, socket} =
