@@ -7,6 +7,8 @@ defmodule LegendWeb.Router do
 
   scope "/api", LegendWeb do
     pipe_through :api
+
+    get "/health", HealthController, :show
   end
 
   scope "/api" do
