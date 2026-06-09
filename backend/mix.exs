@@ -10,8 +10,29 @@ defmodule Legend.MixProject do
       start_permanent: Mix.env() == :prod,
       aliases: aliases(),
       deps: deps(),
+      releases: releases(),
       listeners: [Phoenix.CodeReloader],
       consolidate_protocols: Mix.env() != :dev
+    ]
+  end
+
+  # Release definitions.
+  defp releases do
+    [
+      # Plain release for web deployment
+      legend: [
+        include_executables_for: [:unix]
+      ],
+      # Self-contained sidecar binary for the desktop app (requires zig)
+      legend_desktop: [
+        include_executables_for: [:unix],
+        steps: [:assemble, &Burrito.wrap/1],
+        burrito: [
+          targets: [
+            macos_arm: [os: :darwin, cpu: :aarch64]
+          ]
+        ]
+      ]
     ]
   end
 
@@ -57,7 +78,8 @@ defmodule Legend.MixProject do
       {:dns_cluster, "~> 0.2.0"},
       {:bandit, "~> 1.5"},
       {:dotenvy, "~> 1.0"},
-      {:corsica, "~> 2.1"}
+      {:corsica, "~> 2.1"},
+      {:burrito, "~> 1.0", runtime: false}
     ]
   end
 

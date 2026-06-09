@@ -32,3 +32,6 @@ legend-*.tar
 # Local environment variables
 .env
 
+# Burrito build output
+burrito_out/
+

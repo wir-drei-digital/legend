@@ -7,6 +7,10 @@ defmodule Legend.Application do
 
   @impl true
   def start(_type, _args) do
+    if Application.get_env(:legend, :auto_migrate, false) do
+      Legend.Release.migrate()
+    end
+
     children = [
       LegendWeb.Telemetry,
       Legend.Repo,
