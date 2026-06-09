@@ -1,6 +1,10 @@
 defmodule LegendWeb.Endpoint do
   use Phoenix.Endpoint, otp_app: :legend
 
+  socket "/socket", LegendWeb.UserSocket,
+    websocket: true,
+    longpoll: false
+
   # The session will be stored in the cookie and signed,
   # this means its contents can be read but not tampered with.
   # Set :encryption_salt if you would also like to encrypt it.
@@ -46,5 +50,11 @@ defmodule LegendWeb.Endpoint do
   plug Plug.MethodOverride
   plug Plug.Head
   plug Plug.Session, @session_options
+
+  plug Corsica,
+    origins: ["tauri://localhost", "http://tauri.localhost", "https://tauri.localhost"],
+    allow_headers: :all,
+    allow_methods: :all
+
   plug LegendWeb.Router
 end
