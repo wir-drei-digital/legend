@@ -7,10 +7,6 @@ defmodule Legend.Application do
 
   @impl true
   def start(_type, _args) do
-    if Application.get_env(:legend, :auto_migrate, false) do
-      Legend.Release.migrate()
-    end
-
     children = [
       LegendWeb.Telemetry,
       Legend.Repo,
@@ -39,7 +35,9 @@ defmodule Legend.Application do
   end
 
   defp skip_migrations?() do
-    # By default, sqlite migrations are run when using a release
-    System.get_env("RELEASE_NAME") == nil
+    # Migrations run only inside a release (web release or desktop sidecar) and
+    # can be disabled there via AUTO_MIGRATE=false. Dev/test use mix ecto.setup.
+    System.get_env("RELEASE_NAME") == nil or
+      not Application.get_env(:legend, :auto_migrate, true)
   end
 end
