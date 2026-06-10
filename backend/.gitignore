@@ -35,3 +35,8 @@ legend-*.tar
 # Burrito build output
 burrito_out/
 
+# SPA build artifacts copied in by `just build` (frontend/build → priv/static).
+# robots.txt and favicon.ico already live here tracked, so they're not listed.
+/priv/static/_app/
+/priv/static/index.html
+
