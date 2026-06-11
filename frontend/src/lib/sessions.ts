@@ -31,6 +31,16 @@ function toSession(resource: JsonApiResource): Session {
 	return { id: resource.id, ...(resource.attributes as Omit<Session, 'id'>) };
 }
 
+async function errorMessage(res: Response, fallback: string): Promise<string> {
+	try {
+		const body = await res.json();
+		const detail = body?.errors?.[0]?.detail ?? body?.errors?.[0]?.title;
+		return detail ? `${fallback}: ${detail}` : `${fallback}: ${res.status}`;
+	} catch {
+		return `${fallback}: ${res.status}`;
+	}
+}
+
 export async function listHarnesses(): Promise<Harness[]> {
 	const res = await fetch(`${apiBase}/api/harnesses`);
 	if (!res.ok) throw new Error(`listing harnesses failed: ${res.status}`);
@@ -53,7 +63,7 @@ export async function createSession(attrs: {
 		headers: { 'Content-Type': JSONAPI, Accept: JSONAPI },
 		body: JSON.stringify({ data: { type: 'session', attributes: attrs } })
 	});
-	if (!res.ok) throw new Error(`creating session failed: ${res.status}`);
+	if (!res.ok) throw new Error(await errorMessage(res, 'creating session failed'));
 	return toSession((await res.json()).data);
 }
 
@@ -62,5 +72,5 @@ export async function deleteSession(id: string): Promise<void> {
 		method: 'DELETE',
 		headers: { Accept: JSONAPI }
 	});
-	if (!res.ok && res.status !== 204) throw new Error(`deleting session failed: ${res.status}`);
+	if (!res.ok && res.status !== 204) throw new Error(await errorMessage(res, 'deleting session failed'));
 }

@@ -4,6 +4,8 @@
 	import { sessionsStore } from '$lib/stores/sessions.svelte';
 	import type { SessionStatus } from '$lib/sessions';
 
+	// One-shot: connect() is idempotent and the lobby channel lives for the app's
+	// lifetime, so no teardown is needed if the sidebar ever remounts.
 	$effect(() => {
 		sessionsStore.connect();
 	});
@@ -26,7 +28,7 @@
 				class="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent
 					{page.params.id === session.id ? 'bg-accent' : ''}"
 			>
-				<span class="size-2 shrink-0 rounded-full {dotClass[session.status]}"></span>
+				<span title={session.status} class="size-2 shrink-0 rounded-full {dotClass[session.status]}"></span>
 				<span class="truncate">{session.name || session.harness_id}</span>
 				<span class="ml-auto shrink-0 text-xs text-muted-foreground">{session.harness_id}</span>
 			</a>

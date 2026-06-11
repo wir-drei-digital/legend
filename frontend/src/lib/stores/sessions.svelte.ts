@@ -21,7 +21,9 @@ class SessionsStore {
 		if (this.#channel) return;
 		this.#channel = getSocket().channel('sessions:lobby');
 		this.#channel.on('changed', () => void this.refresh());
-		this.#channel.join();
+		// 'ok' fires on every (re)join, so a backend restart triggers a refetch
+		// of whatever changed while we were disconnected.
+		this.#channel.join().receive('ok', () => void this.refresh());
 		void this.refresh();
 	}
 }
