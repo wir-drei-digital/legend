@@ -46,4 +46,25 @@ defmodule Legend.Storage.LocalDiskTest do
   test "list_tree of an empty root is empty", %{tmp_dir: root} do
     assert {:ok, []} = LocalDisk.list_tree(root)
   end
+
+  test "write overwrites existing content (last-write-wins)", %{tmp_dir: root} do
+    :ok = LocalDisk.write(root, "a.md", "first")
+    :ok = LocalDisk.write(root, "a.md", "second")
+    assert {:ok, "second"} = LocalDisk.read(root, "a.md")
+  end
+
+  test "write accepts empty content", %{tmp_dir: root} do
+    :ok = LocalDisk.write(root, "empty.md", "")
+    assert {:ok, ""} = LocalDisk.read(root, "empty.md")
+  end
+
+  @tag :unix_permissions
+  test "list_tree surfaces filesystem errors instead of raising", %{tmp_dir: root} do
+    :ok = LocalDisk.write(root, "locked/secret.md", "x")
+    locked = Path.join(root, "locked")
+    File.chmod!(locked, 0o000)
+    on_exit(fn -> File.chmod!(locked, 0o755) end)
+
+    assert {:error, :eacces} = LocalDisk.list_tree(root)
+  end
 end

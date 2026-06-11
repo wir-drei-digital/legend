@@ -1,5 +1,10 @@
 defmodule Legend.Storage.LocalDisk do
-  @moduledoc "Library storage on the local filesystem — the PoC adapter."
+  @moduledoc """
+  Library storage on the local filesystem — the PoC adapter. Symlinks are
+  followed (`File.stat/2`): a link to a file lists as `:file`, a link to a
+  directory as `:dir` and is recursed into; cyclic links surface as
+  `{:error, :eloop}` from `list_tree/1` via the OS depth limit.
+  """
 
   @behaviour Legend.Core.Library.Storage
 
@@ -10,6 +15,8 @@ defmodule Legend.Storage.LocalDisk do
     else
       {:ok, []}
     end
+  rescue
+    e in File.Error -> {:error, e.reason}
   end
 
   @impl true
