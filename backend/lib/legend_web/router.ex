@@ -10,6 +10,11 @@ defmodule LegendWeb.Router do
 
     get "/health", HealthController, :show
     get "/harnesses", HarnessController, :index
+
+    get "/library/tree", LibraryController, :tree
+    get "/library/file", LibraryController, :show
+    put "/library/file", LibraryController, :update
+    delete "/library/file", LibraryController, :delete
   end
 
   scope "/api" do
