@@ -33,6 +33,27 @@ defmodule Legend.Agents.Session do
 
       validate {KnownRegistryId, attribute: :harness_id, registry: Legend.Harness.Registry}
       validate {KnownRegistryId, attribute: :runtime_id, registry: Legend.Runtime.Registry}
+
+      # after_transaction (not after_action): SessionServer.start_session/1
+      # writes to the DB from the server process, which must run OUTSIDE the
+      # enclosing create transaction.
+      change after_transaction(fn
+               _changeset, {:ok, session}, _context ->
+                 case Legend.Agents.SessionServer.start_session(session) do
+                   {:ok, _pid} ->
+                     {:ok, Legend.Agents.get_session!(session.id)}
+
+                   :ignore ->
+                     # init marked the record :failed before returning :ignore
+                     {:ok, Legend.Agents.get_session!(session.id)}
+
+                   {:error, reason} ->
+                     {:ok, Legend.Agents.fail_session!(session, %{error: inspect(reason)})}
+                 end
+
+               _changeset, {:error, _} = error, _context ->
+                 error
+             end)
     end
 
     # require_atomic? false on all updates: AshSqlite has no atomic-update
@@ -59,6 +80,21 @@ defmodule Legend.Agents.Session do
 
     destroy :destroy do
       primary? true
+      require_atomic? false
+
+      change before_action(fn changeset, _context ->
+               Legend.Agents.SessionServer.ensure_stopped(changeset.data.id)
+               changeset
+             end)
+
+      change after_transaction(fn
+               _changeset, {:ok, _} = result, _context ->
+                 Legend.Agents.Notifications.sessions_changed()
+                 result
+
+               _changeset, other, _context ->
+                 other
+             end)
     end
   end
 

@@ -5,9 +5,9 @@ defmodule Legend.Agents.SessionTest do
 
   @valid %{harness_id: "claude_code", runtime_id: "test", cwd: "/tmp", name: "demo"}
 
-  test "start creates a session in :starting" do
+  test "start creates a session and reports its live status" do
     session = Agents.start_session!(@valid)
-    assert session.status == :starting
+    assert session.status == :running
     assert session.harness_id == "claude_code"
     assert session.cwd == "/tmp"
   end
