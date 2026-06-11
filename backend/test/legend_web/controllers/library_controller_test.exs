@@ -58,4 +58,21 @@ defmodule LegendWeb.LibraryControllerTest do
     File.write!(Path.join(tmp, "blob.bin"), <<0xFF, 0xFE, 0x00>>)
     assert json_response(get(conn, "/api/library/file", path: "blob.bin"), 415)
   end
+
+  test "missing params get the uniform error envelope", %{conn: conn} do
+    assert %{"error" => msg} = json_response(get(conn, "/api/library/file"), 400)
+    assert msg =~ "path"
+
+    assert %{"error" => _} = json_response(put(conn, "/api/library/file", %{}), 400)
+    assert %{"error" => _} = json_response(delete(conn, "/api/library/file"), 400)
+  end
+
+  test "tree surfaces storage errors as JSON errors, not 500", %{conn: conn, tmp_dir: tmp} do
+    File.mkdir_p!(Path.join(tmp, "locked"))
+    File.chmod!(Path.join(tmp, "locked"), 0o000)
+    on_exit(fn -> File.chmod!(Path.join(tmp, "locked"), 0o755) end)
+
+    assert %{"error" => msg} = json_response(get(conn, "/api/library/tree"), 400)
+    assert msg =~ "eacces"
+  end
 end
