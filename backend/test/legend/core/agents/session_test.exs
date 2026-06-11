@@ -103,5 +103,18 @@ defmodule Legend.Core.Agents.SessionTest do
       assert found.id == a.id
       assert {:error, _} = Agents.get_session_by_token("nope")
     end
+
+    test "mcp_token cannot be forged through :start" do
+      # mcp_token is not an accepted input on the :start action, so Ash rejects
+      # the forged key outright (NoSuchInput) rather than silently dropping it.
+      assert_raise Ash.Error.Invalid, fn ->
+        Agents.start_session!(%{
+          harness_id: "claude_code",
+          runtime_id: "test",
+          cwd: "/tmp",
+          mcp_token: "forged"
+        })
+      end
+    end
   end
 end
