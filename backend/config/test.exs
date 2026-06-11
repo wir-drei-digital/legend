@@ -38,3 +38,6 @@ config :legend, run_session_janitor: false
 # Isolated library for tests; individual tests override :library_path with a
 # per-test tmp_dir on top of this.
 config :legend, library_path: Path.expand("../tmp/test-library", __DIR__)
+
+# Keep the library's *default* root out of the real OS user-data dir in tests.
+config :legend, library_default_root: Path.expand("../tmp/test-library-default", __DIR__)

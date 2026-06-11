@@ -15,11 +15,21 @@ defmodule Legend.Core.Settings do
     end
   end
 
-  @doc "Returns the stored value or nil."
+  @doc "Returns the stored value, nil when absent. Raises on genuine store failures (fail-loud)."
   def get_setting(key) when is_binary(key) do
     case get_setting_record(key) do
-      {:ok, %{value: value}} -> value
-      {:error, _} -> nil
+      {:ok, %{value: value}} ->
+        value
+
+      {:error, %Ash.Error.Invalid{errors: errors} = error} ->
+        if Enum.any?(errors, &match?(%Ash.Error.Query.NotFound{}, &1)) do
+          nil
+        else
+          raise error
+        end
+
+      {:error, error} ->
+        raise error
     end
   end
 

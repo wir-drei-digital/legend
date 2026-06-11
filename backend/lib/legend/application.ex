@@ -7,15 +7,14 @@ defmodule Legend.Application do
 
   @impl true
   def start(_type, _args) do
-    # Seed the shared library before anything serves traffic — a bad
-    # LIBRARY_PATH must abort boot loudly, not degrade silently.
-    Legend.Core.Library.ensure_seeded!()
-
     children = [
       LegendWeb.Telemetry,
       Legend.Repo,
       {Ecto.Migrator,
        repos: Application.fetch_env!(:legend, :ecto_repos), skip: skip_migrations?()},
+      # After the Migrator so the settings table is readable for root
+      # resolution; a bad root raises here and aborts boot loudly.
+      Legend.Core.Library.Seeder,
       {DNSCluster, query: Application.get_env(:legend, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Legend.PubSub},
       Legend.Core.Agents.Supervisor,
