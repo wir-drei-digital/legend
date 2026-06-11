@@ -9,6 +9,7 @@ defmodule LegendWeb.Router do
     pipe_through :api
 
     get "/health", HealthController, :show
+    get "/harnesses", HarnessController, :index
   end
 
   scope "/api" do
