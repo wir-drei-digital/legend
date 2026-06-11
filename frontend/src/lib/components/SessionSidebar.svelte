@@ -43,12 +43,19 @@
 		<a
 			href="/"
 			class="flex-1 rounded-md px-2 py-1.5 text-center hover:bg-accent
-				{page.url.pathname.startsWith('/library') ? '' : 'bg-accent'}">Sessions</a
+				{!page.url.pathname.startsWith('/library') && !page.url.pathname.startsWith('/settings')
+				? 'bg-accent'
+				: ''}">Sessions</a
 		>
 		<a
 			href="/library"
 			class="flex-1 rounded-md px-2 py-1.5 text-center hover:bg-accent
 				{page.url.pathname.startsWith('/library') ? 'bg-accent' : ''}">Library</a
+		>
+		<a
+			href="/settings"
+			class="flex-1 rounded-md px-2 py-1.5 text-center hover:bg-accent
+				{page.url.pathname.startsWith('/settings') ? 'bg-accent' : ''}">Settings</a
 		>
 	</nav>
 </aside>
