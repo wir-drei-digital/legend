@@ -29,8 +29,19 @@
 		}
 	}
 
+	// window.confirm/alert/prompt are no-ops in the Tauri webview (wry returns
+	// false), so all confirmations here are in-UI two-step interactions.
+	let confirmingDelete = $state(false);
+	let pendingOpen = $state<string | null>(null);
+
 	async function open(path: string) {
-		if (dirty && !confirm('Discard unsaved changes?')) return;
+		if (dirty && pendingOpen !== path) {
+			pendingOpen = path;
+			error = 'Unsaved changes — click the file again to discard them.';
+			return;
+		}
+		pendingOpen = null;
+		confirmingDelete = false;
 		error = '';
 		try {
 			content = await readFile(path);
@@ -68,15 +79,17 @@
 	}
 
 	async function removeSelected() {
-		if (!selected || !confirm(`Delete ${selected}?`)) return;
+		if (!selected) return;
 		error = '';
 		try {
 			await deleteFile(selected);
 			selected = null;
 			content = '';
 			savedContent = '';
+			confirmingDelete = false;
 			await refresh();
 		} catch (e) {
+			confirmingDelete = false;
 			error = e instanceof Error ? e.message : 'failed to delete';
 		}
 	}
@@ -104,7 +117,18 @@
 			<div class="ml-auto flex gap-2">
 				{#if selected}
 					<Button size="sm" onclick={save} disabled={!dirty}>Save</Button>
-					<Button size="sm" variant="destructive" onclick={removeSelected}>Delete</Button>
+					{#if confirmingDelete}
+						<Button size="sm" variant="destructive" onclick={removeSelected}>
+							Confirm delete
+						</Button>
+						<Button size="sm" variant="outline" onclick={() => (confirmingDelete = false)}>
+							Cancel
+						</Button>
+					{:else}
+						<Button size="sm" variant="destructive" onclick={() => (confirmingDelete = true)}>
+							Delete
+						</Button>
+					{/if}
 				{/if}
 			</div>
 		</div>
