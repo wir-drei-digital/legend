@@ -26,4 +26,15 @@ defmodule Legend.Agents.ScrollbackTest do
   test "empty buffer renders empty binary" do
     assert Scrollback.to_binary(Scrollback.new()) == ""
   end
+
+  test "evicts a previously kept oversized chunk once newer data arrives" do
+    sb =
+      Scrollback.new(4)
+      |> Scrollback.append("aa")
+      |> Scrollback.append("bbbbbbbb")
+      |> Scrollback.append("c")
+
+    assert Scrollback.to_binary(sb) == "c"
+    assert sb.bytes == 1
+  end
 end
