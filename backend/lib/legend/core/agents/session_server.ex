@@ -79,7 +79,11 @@ defmodule Legend.Core.Agents.SessionServer do
 
     with {:ok, harness} <- fetch_registered(Legend.Core.Harness.Registry, session.harness_id),
          {:ok, runtime} <- fetch_registered(Legend.Core.Runtime.Registry, session.runtime_id),
-         spec = harness.build_command(%{}),
+         spec =
+           harness.build_command(%{
+             library: %{path: Legend.Core.Library.root(), primer: Legend.Core.Library.primer()}
+           }),
+         spec = %{spec | env: Map.put(spec.env, "LEGEND_LIBRARY", Legend.Core.Library.root())},
          {:ok, handle} <- runtime.start(spec, %{owner: self(), cwd: session.cwd}) do
       try do
         session = Agents.mark_session_running!(session)

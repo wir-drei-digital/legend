@@ -81,7 +81,7 @@ defmodule Legend.Core.Agents.SessionServerTest do
     boot!(session)
     :ok = SessionServer.stop(session.id)
     assert_receive {:test_runtime, :stop}
-    # TestRuntime.stop sends {:runtime_exit, nil} to the owner.
+    # Legend.Runtimes.Test.stop sends {:runtime_exit, nil} to the owner.
     eventually(fn -> Agents.get_session!(session.id).status == :exited end)
   end
 
@@ -137,6 +137,17 @@ defmodule Legend.Core.Agents.SessionServerTest do
 
     send(pid, {:runtime_output, "late"})
     assert_receive {:session_output, 6, "late"}
+  end
+
+  test "sessions get LEGEND_LIBRARY env and the harness receives library opts", %{
+    session: session
+  } do
+    boot!(session)
+    assert_receive {:test_runtime, :start, spec, _opts}
+
+    assert spec.env["LEGEND_LIBRARY"] == Legend.Core.Library.root()
+    # claude_code delivers the primer as CLI args — proof build_command got library opts.
+    assert "--append-system-prompt" in spec.args
   end
 
   defp eventually(fun, attempts \\ 50) do

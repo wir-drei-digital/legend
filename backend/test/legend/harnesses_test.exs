@@ -42,4 +42,35 @@ defmodule Legend.HarnessesTest do
     ids = Legend.Core.Harness.Registry.list() |> Enum.map(& &1.id) |> Enum.sort()
     assert ids == ["claude_code", "hermes"]
   end
+
+  describe "library primer delivery" do
+    @library %{path: "/lib/root", primer: "Use the library."}
+
+    test "claude_code appends --append-system-prompt when library opts present" do
+      assert %CommandSpec{args: args} =
+               Legend.Harnesses.ClaudeCode.build_command(%{library: @library})
+
+      assert ["--append-system-prompt", "Use the library."] = Enum.take(args, -2)
+    end
+
+    test "claude_code emits no primer args without library opts" do
+      assert %CommandSpec{args: []} = Legend.Harnesses.ClaudeCode.build_command(%{})
+    end
+
+    test "hermes delivers the primer only when a flag template is configured" do
+      assert %CommandSpec{args: []} = Legend.Harnesses.Hermes.build_command(%{library: @library})
+
+      Application.put_env(
+        :legend,
+        :harness_commands,
+        hermes: "hermes",
+        hermes_primer_flag: "--system-prompt"
+      )
+
+      assert %CommandSpec{args: args} =
+               Legend.Harnesses.Hermes.build_command(%{library: @library})
+
+      assert ["--system-prompt", "Use the library."] = Enum.take(args, -2)
+    end
+  end
 end

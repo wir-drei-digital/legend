@@ -23,11 +23,22 @@ defmodule Legend.Harnesses.Hermes do
 
     %CommandSpec{
       cmd: cmd,
-      args: args,
+      args: args ++ primer_args(opts),
       env: Map.merge(%{"TERM" => "xterm-256color"}, opts[:env] || %{}),
       io: :pty
     }
   end
+
+  # Hermes' CLI primer mechanism is unknown; deliver only when the operator
+  # configures a flag template (HARNESS_HERMES_PRIMER_FLAG), per the contract.
+  defp primer_args(%{library: %{primer: primer}}) when is_binary(primer) and primer != "" do
+    case Application.get_env(:legend, :harness_commands, [])[:hermes_primer_flag] do
+      flag when is_binary(flag) and flag != "" -> [flag, primer]
+      _ -> []
+    end
+  end
+
+  defp primer_args(_opts), do: []
 
   defp configured_command(key, default) do
     :legend

@@ -14,7 +14,8 @@ source!([
 # machine via .env, e.g. HARNESS_HERMES_CMD="hermes --profile work".
 config :legend, :harness_commands,
   claude_code: env!("HARNESS_CLAUDE_CMD", :string, "claude"),
-  hermes: env!("HARNESS_HERMES_CMD", :string, "hermes")
+  hermes: env!("HARNESS_HERMES_CMD", :string, "hermes"),
+  hermes_primer_flag: env!("HARNESS_HERMES_PRIMER_FLAG", :string, nil)
 
 # Shared library root. Default: OS user-data dir (~/Library/Application
 # Support/legend/library on macOS) — dev and the desktop sidecar share it.

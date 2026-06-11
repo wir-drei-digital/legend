@@ -23,11 +23,17 @@ defmodule Legend.Harnesses.ClaudeCode do
 
     %CommandSpec{
       cmd: cmd,
-      args: args,
+      args: args ++ primer_args(opts),
       env: Map.merge(%{"TERM" => "xterm-256color"}, opts[:env] || %{}),
       io: :pty
     }
   end
+
+  defp primer_args(%{library: %{primer: primer}}) when is_binary(primer) and primer != "" do
+    ["--append-system-prompt", primer]
+  end
+
+  defp primer_args(_opts), do: []
 
   defp configured_command(key, default) do
     :legend
