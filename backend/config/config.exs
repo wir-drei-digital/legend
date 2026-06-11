@@ -57,7 +57,7 @@ config :spark,
 
 config :legend,
   ecto_repos: [Legend.Repo],
-  ash_domains: [],
+  ash_domains: [Legend.Agents],
   generators: [timestamp_type: :utc_datetime]
 
 config :legend,
