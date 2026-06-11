@@ -15,6 +15,10 @@ defmodule LegendWeb.Router do
     get "/library/file", LibraryController, :show
     put "/library/file", LibraryController, :update
     delete "/library/file", LibraryController, :delete
+
+    get "/settings/library-path", SettingsController, :show_library_path
+    put "/settings/library-path", SettingsController, :update_library_path
+    delete "/settings/library-path", SettingsController, :delete_library_path
   end
 
   scope "/api" do
