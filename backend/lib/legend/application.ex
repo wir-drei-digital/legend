@@ -15,6 +15,7 @@ defmodule Legend.Application do
       {DNSCluster, query: Application.get_env(:legend, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Legend.PubSub},
       Legend.Core.Agents.Supervisor,
+      Legend.Core.Library.Seeder,
       # Start a worker by calling: Legend.Worker.start_link(arg)
       # {Legend.Worker, arg},
       # Start to serve requests, typically the last entry

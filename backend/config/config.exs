@@ -62,7 +62,8 @@ config :legend,
 
 config :legend,
   harnesses: [Legend.Harnesses.ClaudeCode, Legend.Harnesses.Hermes],
-  runtimes: [Legend.Runtimes.LocalPty]
+  runtimes: [Legend.Runtimes.LocalPty],
+  library_storage: Legend.Storage.LocalDisk
 
 # Configure the endpoint
 config :legend, LegendWeb.Endpoint,

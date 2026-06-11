@@ -34,3 +34,7 @@ config :legend, :runtimes, [Legend.Runtimes.Test, Legend.Runtimes.LocalPty]
 
 # The janitor's boot pass conflicts with the SQL sandbox; tests call it directly.
 config :legend, run_session_janitor: false
+
+# Isolated library for tests; individual tests override :library_path with a
+# per-test tmp_dir on top of this.
+config :legend, library_path: Path.expand("../tmp/test-library", __DIR__)
