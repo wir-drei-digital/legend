@@ -36,7 +36,7 @@ defmodule Legend.Core.LibraryTest do
   end
 
   test "containment rejects escaping paths" do
-    for bad <- ["../outside.txt", "/etc/passwd", "a/../../b", "skills/../../x"] do
+    for bad <- ["../outside.txt", "/etc/passwd", "a/../../b", "skills/../../x", "~/escape.txt"] do
       assert {:error, :unsafe_path} = Library.read(bad), "expected rejection: #{bad}"
       assert {:error, :unsafe_path} = Library.write(bad, "x"), "expected rejection: #{bad}"
       assert {:error, :unsafe_path} = Library.delete(bad), "expected rejection: #{bad}"
@@ -60,5 +60,10 @@ defmodule Legend.Core.LibraryTest do
   test "primer mentions the env var and layout" do
     assert Library.primer() =~ "LEGEND_LIBRARY"
     assert Library.primer() =~ "skills/"
+  end
+
+  test "null bytes surface as :badarg, not a crash" do
+    assert {:error, :badarg} = Library.read(<<?a, 0, ?b>>)
+    assert {:error, :badarg} = Library.write(<<?a, 0, ?b>>, "x")
   end
 end
