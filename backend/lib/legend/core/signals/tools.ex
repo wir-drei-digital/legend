@@ -142,7 +142,7 @@ defmodule Legend.Core.Signals.Tools do
            payload: payload
          }) do
       {:ok, message} -> {:ok, "Delivered (message #{message.id})."}
-      {:error, error} -> {:error, "delivery failed: #{Exception.message(error)}"}
+      {:error, error} -> {:error, "delivery failed: #{render_error(error)}"}
     end
   end
 
@@ -153,6 +153,7 @@ defmodule Legend.Core.Signals.Tools do
       Harness.Registry.fetch(harness) == :error ->
         {:error, "unknown harness: #{harness}. Known: #{known_harnesses()}"}
 
+      # Known TOCTOU: concurrent start_agent calls can briefly overshoot the cap — accepted for the local single-user PoC.
       running_count() >= max ->
         {:error, "session cap reached (#{max} running) — stop a session first"}
 
@@ -180,7 +181,7 @@ defmodule Legend.Core.Signals.Tools do
                "to you; you will also get a system message when it exits."}
 
           {:error, error} ->
-            {:error, "could not start agent: #{Exception.message(error)}"}
+            {:error, "could not start agent: #{render_error(error)}"}
         end
     end
   end
@@ -222,4 +223,34 @@ defmodule Legend.Core.Signals.Tools do
     "[#{message.inserted_at} | #{message.kind} | from #{summary.from_label} " <>
       "(#{message.from_session_id || "human"})] #{message.payload}"
   end
+
+  # Agents consume these errors as tool output — render just the validation
+  # facts, never Ash bread crumbs / echoed values / stack traces.
+  defp render_error(%Ash.Error.Invalid{errors: errors}) do
+    Enum.map_join(errors, "; ", &render_entry/1)
+  end
+
+  defp render_error(error) when is_exception(error), do: Exception.message(error)
+  defp render_error(error), do: inspect(error)
+
+  defp render_entry(%{field: field, message: message} = entry) when not is_nil(field) do
+    "#{field}: #{render_message(message, entry)}"
+  end
+
+  defp render_entry(%{message: message} = entry), do: render_message(message, entry)
+  defp render_entry(other) when is_exception(other), do: Exception.message(other)
+  defp render_entry(other), do: inspect(other)
+
+  # Ash messages are templates like "length must be less than or equal to %{max}"
+  # with the substitutions in the entry's :vars — interpolate them, never echo
+  # the offending value.
+  defp render_message(message, entry) when is_binary(message) do
+    vars = Map.get(entry, :vars) || []
+
+    Enum.reduce(vars, message, fn {key, value}, acc ->
+      String.replace(acc, "%{#{key}}", to_string(value))
+    end)
+  end
+
+  defp render_message(message, _entry), do: inspect(message)
 end

@@ -144,6 +144,21 @@ defmodule Legend.Core.Signals.ToolsTest do
     assert {:error, _} = Tools.dispatch(a, "fly_to_moon", %{})
   end
 
+  test "malformed args fall through to a clean error", %{a: a, b: b} do
+    assert {:error, _} = Tools.dispatch(a, "send_message", %{"to" => 123, "content" => "x"})
+    assert {:error, _} = Tools.dispatch(a, "start_agent", %{"harness" => "hermes"})
+    assert {:error, _} = Tools.dispatch(a, "handoff", nil)
+    _ = b
+  end
+
+  test "oversize payload returns a short clean error, not the echoed payload", %{a: a, b: b} do
+    big = String.duplicate("x", 65_537)
+    assert {:error, text} = Tools.dispatch(a, "send_message", %{"to" => b.id, "content" => big})
+    assert byte_size(text) < 500
+    refute text =~ "xxxxx"
+    refute text =~ "Bread Crumbs"
+  end
+
   test "messaging_primer mentions the session id and the requester when spawned", %{a: a} do
     primer = Signals.messaging_primer(a)
     assert primer =~ a.id
