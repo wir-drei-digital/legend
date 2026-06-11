@@ -37,6 +37,11 @@ Agent harness commands are configurable in `backend/.env` (`HARNESS_CLAUDE_CMD`,
 need flags. Sessions spawn these CLIs under a PTY on the machine the backend
 runs on.
 
+All sessions share a library (knowledge, skills, artifacts) at
+`~/Library/Application Support/legend/library` by default (`LIBRARY_PATH` in
+`backend/.env` overrides). Agents are pointed at it via `$LEGEND_LIBRARY` and
+a primer; browse and edit it in the app under Library.
+
 ## Development
 
 ```bash
