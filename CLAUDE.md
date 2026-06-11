@@ -32,6 +32,8 @@ Release builds must go through `backend/scripts/build-release.sh [legend|legend_
 
 ## Architecture
 
+`docs/ARCHITECTURE.md` is the canonical record of the architectural decisions and their rationale — read it before structural work, and **update it in the same feature cycle whenever a change alters a decision recorded there** (new plugin seams, boot order, contracts, accepted caveats). The sections below are the working-knowledge condensate.
+
 ### Backend (`backend/`, Elixir 1.20 / Phoenix 1.8 / Ash 3 / SQLite)
 
 - **No HTML/LiveView layer** — API + channels only. `backend/AGENTS.md` has generated Elixir guidelines; its LiveView/Layouts/core_components sections don't apply here.
