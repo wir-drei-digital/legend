@@ -61,10 +61,15 @@
 		);
 		chan.on('status', ({ status }: { status: SessionStatus }) => onstatus?.(status, null, null));
 
+		let joined = false;
+
 		chan
 			.join()
 			.receive('ok', (reply: JoinReply) => {
-				if (reply.buffer) term.write(b64ToBytes(reply.buffer));
+				// phoenix re-fires this hook on every socket rejoin: re-sync status
+				// and size each time, but write the scrollback snapshot only once.
+				if (!joined && reply.buffer) term.write(b64ToBytes(reply.buffer));
+				joined = true;
 				onstatus?.(reply.status, reply.exit_code, reply.error);
 				chan.push('resize', { cols: term.cols, rows: term.rows });
 				term.focus();
