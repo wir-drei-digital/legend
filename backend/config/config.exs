@@ -60,6 +60,10 @@ config :legend,
   ash_domains: [],
   generators: [timestamp_type: :utc_datetime]
 
+config :legend,
+  harnesses: [Legend.Harnesses.ClaudeCode, Legend.Harnesses.Hermes],
+  runtimes: [Legend.Runtimes.LocalPty]
+
 # Configure the endpoint
 config :legend, LegendWeb.Endpoint,
   url: [host: "localhost"],

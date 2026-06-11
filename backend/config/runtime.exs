@@ -10,6 +10,12 @@ source!([
   System.get_env()
 ])
 
+# Harness command lines (whitespace-split into cmd + args). Override per
+# machine via .env, e.g. HARNESS_HERMES_CMD="hermes --profile work".
+config :legend, :harness_commands,
+  claude_code: env!("HARNESS_CLAUDE_CMD", :string, "claude"),
+  hermes: env!("HARNESS_HERMES_CMD", :string, "hermes")
+
 if System.get_env("PHX_SERVER") do
   config :legend, LegendWeb.Endpoint, server: true
 end
