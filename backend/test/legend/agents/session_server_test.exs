@@ -122,6 +122,23 @@ defmodule Legend.Agents.SessionServerTest do
     assert record.error == "backend restarted"
   end
 
+  test "attach mid-stream returns the snapshot and live chunks continue at its offset", %{
+    session: session
+  } do
+    pid = boot!(session)
+    send(pid, {:runtime_output, "early "})
+
+    eventually(fn ->
+      match?({:ok, %{buffer: "early "}}, SessionServer.attach(session.id))
+    end)
+
+    Phoenix.PubSub.subscribe(Legend.PubSub, "session:#{session.id}")
+    assert {:ok, %{buffer: "early ", offset: 6}} = SessionServer.attach(session.id)
+
+    send(pid, {:runtime_output, "late"})
+    assert_receive {:session_output, 6, "late"}
+  end
+
   defp eventually(fun, attempts \\ 50) do
     cond do
       fun.() ->

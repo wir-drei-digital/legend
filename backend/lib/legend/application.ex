@@ -12,9 +12,9 @@ defmodule Legend.Application do
       Legend.Repo,
       {Ecto.Migrator,
        repos: Application.fetch_env!(:legend, :ecto_repos), skip: skip_migrations?()},
-      Legend.Agents.Supervisor,
       {DNSCluster, query: Application.get_env(:legend, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Legend.PubSub},
+      Legend.Agents.Supervisor,
       # Start a worker by calling: Legend.Worker.start_link(arg)
       # {Legend.Worker, arg},
       # Start to serve requests, typically the last entry

@@ -23,7 +23,13 @@ defmodule Legend.Agents.SessionServer do
     GenServer.start_link(__MODULE__, session, name: via(session.id))
   end
 
-  @doc "Returns {:ok, %{status, buffer, offset}} or {:error, :not_running}."
+  @doc """
+  Returns {:ok, %{status, buffer, offset}} or {:error, :not_running}.
+
+  The returned `offset` is both the byte length of the snapshot and the offset
+  at which live `{:session_output, chunk_offset, data}` chunks resume — channel
+  consumers drop chunks with `chunk_offset < offset`.
+  """
   def attach(id), do: call(id, :attach)
 
   def write(id, data), do: cast(id, {:write, data})
@@ -75,22 +81,38 @@ defmodule Legend.Agents.SessionServer do
          {:ok, runtime} <- fetch_registered(Legend.Runtime.Registry, session.runtime_id),
          spec = harness.build_command(%{}),
          {:ok, handle} <- runtime.start(spec, %{owner: self(), cwd: session.cwd}) do
-      session = Agents.mark_session_running!(session)
-      broadcast(session.id, {:session_status, :running})
-      Notifications.sessions_changed()
+      try do
+        session = Agents.mark_session_running!(session)
+        broadcast(session.id, {:session_status, :running})
+        Notifications.sessions_changed()
 
-      {:ok,
-       %{
-         session: session,
-         runtime: runtime,
-         handle: handle,
-         scrollback: Scrollback.new(),
-         offset: 0,
-         exited?: false
-       }}
+        {:ok,
+         %{
+           session: session,
+           runtime: runtime,
+           handle: handle,
+           scrollback: Scrollback.new(),
+           offset: 0,
+           exited?: false
+         }}
+      rescue
+        e ->
+          # The record write failed (e.g. deleted concurrently) — don't leak
+          # the just-started OS process, and best-effort mark the record.
+          runtime.stop(handle)
+
+          try do
+            Agents.fail_session!(session, %{error: Exception.message(e)})
+            Notifications.sessions_changed()
+          rescue
+            _ -> :ok
+          end
+
+          :ignore
+      end
     else
       {:error, reason} ->
-        Agents.fail_session!(session, %{error: to_string(reason)})
+        Agents.fail_session!(session, %{error: reason})
         Notifications.sessions_changed()
         :ignore
     end
