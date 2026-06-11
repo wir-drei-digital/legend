@@ -19,6 +19,7 @@
 		{#if n.type === 'dir'}
 			<button
 				class="flex w-full items-center gap-1 rounded px-1 py-0.5 text-sm hover:bg-accent"
+				aria-expanded={!collapsed[n.path]}
 				onclick={() => (collapsed[n.path] = !collapsed[n.path])}
 			>
 				<span class="text-muted-foreground">{collapsed[n.path] ? '▸' : '▾'}</span>

@@ -30,6 +30,7 @@
 	}
 
 	async function open(path: string) {
+		if (dirty && !confirm('Discard unsaved changes?')) return;
 		error = '';
 		try {
 			content = await readFile(path);
@@ -110,6 +111,12 @@
 		{#if selected}
 			<textarea
 				bind:value={content}
+				onkeydown={(e) => {
+					if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+						e.preventDefault();
+						void save();
+					}
+				}}
 				class="min-h-0 flex-1 resize-none bg-background p-3 font-mono text-sm outline-none"
 				spellcheck="false"
 			></textarea>
