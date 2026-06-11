@@ -5,7 +5,7 @@ defmodule LegendWeb.SessionsLobbyChannel do
 
   @impl true
   def join("sessions:lobby", _payload, socket) do
-    Phoenix.PubSub.subscribe(Legend.PubSub, Legend.Agents.Notifications.topic())
+    Phoenix.PubSub.subscribe(Legend.PubSub, Legend.Core.Agents.Notifications.topic())
     {:ok, socket}
   end
 

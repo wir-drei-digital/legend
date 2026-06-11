@@ -1,4 +1,4 @@
-defmodule Legend.Agents.Janitor do
+defmodule Legend.Core.Agents.Janitor do
   @moduledoc """
   Boot pass: sessions recorded :starting/:running belong to a previous backend
   run (their PTYs died with it) — mark them failed so the UI never shows
@@ -12,9 +12,9 @@ defmodule Legend.Agents.Janitor do
   def start_link(_arg), do: Task.start_link(&run/0)
 
   def run do
-    Legend.Agents.Session
+    Legend.Core.Agents.Session
     |> Ash.Query.filter(status in [:starting, :running])
     |> Ash.read!()
-    |> Enum.each(&Legend.Agents.fail_session!(&1, %{error: "backend restarted"}))
+    |> Enum.each(&Legend.Core.Agents.fail_session!(&1, %{error: "backend restarted"}))
   end
 end

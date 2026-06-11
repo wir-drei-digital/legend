@@ -1,4 +1,4 @@
-defmodule Legend.Agents.SessionServer do
+defmodule Legend.Core.Agents.SessionServer do
   @moduledoc """
   One process per live session. Resolves harness -> command spec -> runtime,
   owns the scrollback buffer, broadcasts output on PubSub topic
@@ -9,14 +9,14 @@ defmodule Legend.Agents.SessionServer do
 
   use GenServer, restart: :temporary
 
-  alias Legend.Agents
-  alias Legend.Agents.Notifications
-  alias Legend.Agents.Scrollback
+  alias Legend.Core.Agents
+  alias Legend.Core.Agents.Notifications
+  alias Legend.Core.Agents.Scrollback
 
   ## Client API
 
   def start_session(%Agents.Session{} = session) do
-    DynamicSupervisor.start_child(Legend.Agents.SessionSupervisor, {__MODULE__, session})
+    DynamicSupervisor.start_child(Legend.Core.Agents.SessionSupervisor, {__MODULE__, session})
   end
 
   def start_link(session) do
@@ -38,9 +38,9 @@ defmodule Legend.Agents.SessionServer do
 
   @doc "Terminates the server (and its runtime) if alive. Used by destroy."
   def ensure_stopped(id) do
-    case Registry.lookup(Legend.Agents.SessionRegistry, id) do
+    case Registry.lookup(Legend.Core.Agents.SessionRegistry, id) do
       [{pid, _}] ->
-        DynamicSupervisor.terminate_child(Legend.Agents.SessionSupervisor, pid)
+        DynamicSupervisor.terminate_child(Legend.Core.Agents.SessionSupervisor, pid)
         :ok
 
       [] ->
@@ -49,13 +49,13 @@ defmodule Legend.Agents.SessionServer do
   end
 
   def whereis(id) do
-    case Registry.lookup(Legend.Agents.SessionRegistry, id) do
+    case Registry.lookup(Legend.Core.Agents.SessionRegistry, id) do
       [{pid, _}] -> pid
       [] -> nil
     end
   end
 
-  defp via(id), do: {:via, Registry, {Legend.Agents.SessionRegistry, id}}
+  defp via(id), do: {:via, Registry, {Legend.Core.Agents.SessionRegistry, id}}
 
   defp call(id, msg) do
     case whereis(id) do
@@ -77,8 +77,8 @@ defmodule Legend.Agents.SessionServer do
   def init(session) do
     Process.flag(:trap_exit, true)
 
-    with {:ok, harness} <- fetch_registered(Legend.Harness.Registry, session.harness_id),
-         {:ok, runtime} <- fetch_registered(Legend.Runtime.Registry, session.runtime_id),
+    with {:ok, harness} <- fetch_registered(Legend.Core.Harness.Registry, session.harness_id),
+         {:ok, runtime} <- fetch_registered(Legend.Core.Runtime.Registry, session.runtime_id),
          spec = harness.build_command(%{}),
          {:ok, handle} <- runtime.start(spec, %{owner: self(), cwd: session.cwd}) do
       try do

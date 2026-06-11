@@ -1,4 +1,4 @@
-defmodule Legend.Agents.Supervisor do
+defmodule Legend.Core.Agents.Supervisor do
   @moduledoc "Supervises session process infrastructure (registry, dynamic supervisor, janitor)."
 
   use Supervisor
@@ -11,8 +11,8 @@ defmodule Legend.Agents.Supervisor do
   def init(_init_arg) do
     children =
       [
-        {Registry, keys: :unique, name: Legend.Agents.SessionRegistry},
-        {DynamicSupervisor, name: Legend.Agents.SessionSupervisor, strategy: :one_for_one}
+        {Registry, keys: :unique, name: Legend.Core.Agents.SessionRegistry},
+        {DynamicSupervisor, name: Legend.Core.Agents.SessionSupervisor, strategy: :one_for_one}
       ] ++ janitor()
 
     Supervisor.init(children, strategy: :rest_for_one)
@@ -20,7 +20,7 @@ defmodule Legend.Agents.Supervisor do
 
   defp janitor do
     if Application.get_env(:legend, :run_session_janitor, true) do
-      [Legend.Agents.Janitor]
+      [Legend.Core.Agents.Janitor]
     else
       []
     end

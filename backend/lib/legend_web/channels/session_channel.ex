@@ -7,8 +7,8 @@ defmodule LegendWeb.SessionChannel do
 
   use LegendWeb, :channel
 
-  alias Legend.Agents
-  alias Legend.Agents.SessionServer
+  alias Legend.Core.Agents
+  alias Legend.Core.Agents.SessionServer
 
   @impl true
   def join("session:" <> id, _payload, socket) do

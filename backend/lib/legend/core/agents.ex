@@ -1,4 +1,4 @@
-defmodule Legend.Agents do
+defmodule Legend.Core.Agents do
   @moduledoc """
   Agent sessions domain: session records, their lifecycle actions, and the
   JSON:API surface at /api/sessions.
@@ -8,7 +8,7 @@ defmodule Legend.Agents do
 
   json_api do
     routes do
-      base_route "/sessions", Legend.Agents.Session do
+      base_route "/sessions", Legend.Core.Agents.Session do
         index :list
         get :read
         post :start
@@ -18,7 +18,7 @@ defmodule Legend.Agents do
   end
 
   resources do
-    resource Legend.Agents.Session do
+    resource Legend.Core.Agents.Session do
       define :start_session, action: :start
       define :list_sessions, action: :list
       define :get_session, action: :read, get_by: [:id]

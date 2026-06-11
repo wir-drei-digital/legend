@@ -1,7 +1,7 @@
-defmodule Legend.Agents.SessionTest do
+defmodule Legend.Core.Agents.SessionTest do
   use Legend.DataCase, async: false
 
-  alias Legend.Agents
+  alias Legend.Core.Agents
 
   @valid %{harness_id: "claude_code", runtime_id: "test", cwd: "/tmp", name: "demo"}
 

@@ -1,17 +1,17 @@
-defmodule Legend.Agents.SessionServerTest do
+defmodule Legend.Core.Agents.SessionServerTest do
   use Legend.DataCase, async: false
 
-  alias Legend.Agents
-  alias Legend.Agents.SessionServer
+  alias Legend.Core.Agents
+  alias Legend.Core.Agents.SessionServer
 
   @valid %{harness_id: "claude_code", runtime_id: "test", cwd: "/tmp"}
 
   setup do
-    Legend.TestRuntime.subscribe()
+    Legend.Runtimes.Test.subscribe()
 
     on_exit(fn ->
-      for {_, pid, _, _} <- DynamicSupervisor.which_children(Legend.Agents.SessionSupervisor) do
-        DynamicSupervisor.terminate_child(Legend.Agents.SessionSupervisor, pid)
+      for {_, pid, _, _} <- DynamicSupervisor.which_children(Legend.Core.Agents.SessionSupervisor) do
+        DynamicSupervisor.terminate_child(Legend.Core.Agents.SessionSupervisor, pid)
       end
     end)
 
@@ -112,10 +112,10 @@ defmodule Legend.Agents.SessionServerTest do
     assert Agents.get_session!(session.id).status == :running
 
     # Simulate a backend restart: the process dies, the record stays :running.
-    DynamicSupervisor.terminate_child(Legend.Agents.SessionSupervisor, pid)
+    DynamicSupervisor.terminate_child(Legend.Core.Agents.SessionSupervisor, pid)
     assert Agents.get_session!(session.id).status == :running
 
-    Legend.Agents.Janitor.run()
+    Legend.Core.Agents.Janitor.run()
 
     record = Agents.get_session!(session.id)
     assert record.status == :failed

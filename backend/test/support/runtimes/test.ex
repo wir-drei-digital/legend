@@ -1,12 +1,12 @@
-defmodule Legend.TestRuntime do
+defmodule Legend.Runtimes.Test do
   @moduledoc """
-  In-memory `Legend.Runtime` for tests — the second runtime implementation that
+  In-memory `Legend.Core.Runtime` for tests — the second runtime implementation that
   proves the seam. Tests observe calls by subscribing (`subscribe/0`) and drive
   output/exit by sending `{:runtime_output, data}` / `{:runtime_exit, code}`
   directly to the owning SessionServer pid.
   """
 
-  @behaviour Legend.Runtime
+  @behaviour Legend.Core.Runtime
 
   def subscribe, do: Application.put_env(:legend, :test_runtime_listener, self())
 
@@ -14,7 +14,7 @@ defmodule Legend.TestRuntime do
   def id, do: "test"
 
   @impl true
-  def start(%Legend.Runtime.CommandSpec{cmd: "fail"}, _opts), do: {:error, "boom"}
+  def start(%Legend.Core.Runtime.CommandSpec{cmd: "fail"}, _opts), do: {:error, "boom"}
 
   def start(spec, opts) do
     notify({:test_runtime, :start, spec, opts})

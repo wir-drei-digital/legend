@@ -1,17 +1,17 @@
-defmodule Legend.Agents.SessionLifecycleTest do
+defmodule Legend.Core.Agents.SessionLifecycleTest do
   use Legend.DataCase, async: false
 
-  alias Legend.Agents
-  alias Legend.Agents.SessionServer
+  alias Legend.Core.Agents
+  alias Legend.Core.Agents.SessionServer
 
   @valid %{harness_id: "claude_code", runtime_id: "test", cwd: "/tmp"}
 
   setup do
-    Legend.TestRuntime.subscribe()
+    Legend.Runtimes.Test.subscribe()
 
     on_exit(fn ->
-      for {_, pid, _, _} <- DynamicSupervisor.which_children(Legend.Agents.SessionSupervisor) do
-        DynamicSupervisor.terminate_child(Legend.Agents.SessionSupervisor, pid)
+      for {_, pid, _, _} <- DynamicSupervisor.which_children(Legend.Core.Agents.SessionSupervisor) do
+        DynamicSupervisor.terminate_child(Legend.Core.Agents.SessionSupervisor, pid)
       end
     end)
 

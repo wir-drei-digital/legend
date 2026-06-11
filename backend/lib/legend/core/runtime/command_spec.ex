@@ -1,4 +1,4 @@
-defmodule Legend.Runtime.CommandSpec do
+defmodule Legend.Core.Runtime.CommandSpec do
   @moduledoc """
   How to invoke an agent process. Produced by a harness, consumed by a runtime.
   `io: :pty` runs under a pseudo-terminal (terminal harnesses); `:pipes` is

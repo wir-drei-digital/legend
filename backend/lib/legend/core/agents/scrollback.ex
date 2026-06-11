@@ -1,4 +1,4 @@
-defmodule Legend.Agents.Scrollback do
+defmodule Legend.Core.Agents.Scrollback do
   @moduledoc """
   Bounded byte buffer holding the most recent terminal output for replay on
   (re)attach. Trims whole chunks from the oldest end, but never drops the

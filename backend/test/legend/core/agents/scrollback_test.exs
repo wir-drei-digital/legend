@@ -1,7 +1,7 @@
-defmodule Legend.Agents.ScrollbackTest do
+defmodule Legend.Core.Agents.ScrollbackTest do
   use ExUnit.Case, async: true
 
-  alias Legend.Agents.Scrollback
+  alias Legend.Core.Agents.Scrollback
 
   test "appends and renders in order" do
     sb = Scrollback.new() |> Scrollback.append("hello ") |> Scrollback.append("world")

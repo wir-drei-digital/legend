@@ -1,4 +1,4 @@
-defmodule Legend.Agents.Validations.KnownRegistryId do
+defmodule Legend.Core.Agents.Validations.KnownRegistryId do
   @moduledoc """
   Validates that a string attribute matches a registered plugin id. Ids stay
   strings throughout — user input is never converted to an atom.

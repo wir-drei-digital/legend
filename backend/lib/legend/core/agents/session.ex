@@ -1,4 +1,4 @@
-defmodule Legend.Agents.Session do
+defmodule Legend.Core.Agents.Session do
   @moduledoc """
   An agent session: one harness composed with one runtime. The record mirrors
   the live SessionServer process; lifecycle actions keep the two in lockstep.
@@ -6,11 +6,11 @@ defmodule Legend.Agents.Session do
 
   use Ash.Resource,
     otp_app: :legend,
-    domain: Legend.Agents,
+    domain: Legend.Core.Agents,
     data_layer: AshSqlite.DataLayer,
     extensions: [AshJsonApi.Resource]
 
-  alias Legend.Agents.Validations.KnownRegistryId
+  alias Legend.Core.Agents.Validations.KnownRegistryId
 
   sqlite do
     table "sessions"
@@ -31,24 +31,24 @@ defmodule Legend.Agents.Session do
     create :start do
       accept [:name, :harness_id, :runtime_id, :cwd]
 
-      validate {KnownRegistryId, attribute: :harness_id, registry: Legend.Harness.Registry}
-      validate {KnownRegistryId, attribute: :runtime_id, registry: Legend.Runtime.Registry}
+      validate {KnownRegistryId, attribute: :harness_id, registry: Legend.Core.Harness.Registry}
+      validate {KnownRegistryId, attribute: :runtime_id, registry: Legend.Core.Runtime.Registry}
 
       # after_transaction (not after_action): SessionServer.start_session/1
       # writes to the DB from the server process, which must run OUTSIDE the
       # enclosing create transaction.
       change after_transaction(fn
                _changeset, {:ok, session}, _context ->
-                 case Legend.Agents.SessionServer.start_session(session) do
+                 case Legend.Core.Agents.SessionServer.start_session(session) do
                    {:ok, _pid} ->
-                     {:ok, Legend.Agents.get_session!(session.id)}
+                     {:ok, Legend.Core.Agents.get_session!(session.id)}
 
                    :ignore ->
                      # init marked the record :failed before returning :ignore
-                     {:ok, Legend.Agents.get_session!(session.id)}
+                     {:ok, Legend.Core.Agents.get_session!(session.id)}
 
                    {:error, reason} ->
-                     {:ok, Legend.Agents.fail_session!(session, %{error: inspect(reason)})}
+                     {:ok, Legend.Core.Agents.fail_session!(session, %{error: inspect(reason)})}
                  end
 
                _changeset, {:error, _} = error, _context ->
@@ -83,13 +83,13 @@ defmodule Legend.Agents.Session do
       require_atomic? false
 
       change before_action(fn changeset, _context ->
-               Legend.Agents.SessionServer.ensure_stopped(changeset.data.id)
+               Legend.Core.Agents.SessionServer.ensure_stopped(changeset.data.id)
                changeset
              end)
 
       change after_transaction(fn
                _changeset, {:ok, _} = result, _context ->
-                 Legend.Agents.Notifications.sessions_changed()
+                 Legend.Core.Agents.Notifications.sessions_changed()
                  result
 
                _changeset, other, _context ->
@@ -104,7 +104,7 @@ defmodule Legend.Agents.Session do
     attribute :name, :string, public?: true
     attribute :harness_id, :string, allow_nil?: false, public?: true
     attribute :runtime_id, :string, allow_nil?: false, default: "local_pty", public?: true
-    attribute :cwd, :string, public?: true, default: &Legend.Agents.Session.default_cwd/0
+    attribute :cwd, :string, public?: true, default: &Legend.Core.Agents.Session.default_cwd/0
 
     attribute :status, :atom,
       allow_nil?: false,

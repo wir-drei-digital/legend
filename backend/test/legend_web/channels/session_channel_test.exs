@@ -1,17 +1,17 @@
 defmodule LegendWeb.SessionChannelTest do
   use LegendWeb.ChannelCase, async: false
 
-  alias Legend.Agents
-  alias Legend.Agents.SessionServer
+  alias Legend.Core.Agents
+  alias Legend.Core.Agents.SessionServer
 
   @valid %{harness_id: "claude_code", runtime_id: "test", cwd: "/tmp"}
 
   setup do
-    Legend.TestRuntime.subscribe()
+    Legend.Runtimes.Test.subscribe()
 
     on_exit(fn ->
-      for {_, pid, _, _} <- DynamicSupervisor.which_children(Legend.Agents.SessionSupervisor) do
-        DynamicSupervisor.terminate_child(Legend.Agents.SessionSupervisor, pid)
+      for {_, pid, _, _} <- DynamicSupervisor.which_children(Legend.Core.Agents.SessionSupervisor) do
+        DynamicSupervisor.terminate_child(Legend.Core.Agents.SessionSupervisor, pid)
       end
     end)
 
@@ -64,7 +64,7 @@ defmodule LegendWeb.SessionChannelTest do
 
   test "joining a dead session falls back to the record", %{session: session} do
     SessionServer.ensure_stopped(session.id)
-    Legend.Agents.Janitor.run()
+    Legend.Core.Agents.Janitor.run()
 
     {reply, _socket} = join!(session)
     assert reply.status == "failed"

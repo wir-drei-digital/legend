@@ -14,7 +14,7 @@ defmodule Legend.Application do
        repos: Application.fetch_env!(:legend, :ecto_repos), skip: skip_migrations?()},
       {DNSCluster, query: Application.get_env(:legend, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Legend.PubSub},
-      Legend.Agents.Supervisor,
+      Legend.Core.Agents.Supervisor,
       # Start a worker by calling: Legend.Worker.start_link(arg)
       # {Legend.Worker, arg},
       # Start to serve requests, typically the last entry

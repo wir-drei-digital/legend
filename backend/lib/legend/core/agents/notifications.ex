@@ -1,4 +1,4 @@
-defmodule Legend.Agents.Notifications do
+defmodule Legend.Core.Agents.Notifications do
   @moduledoc "PubSub fan-out for session list changes (consumed by the lobby channel)."
 
   @topic "sessions:changed"

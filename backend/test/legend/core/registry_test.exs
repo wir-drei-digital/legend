@@ -2,11 +2,11 @@ defmodule Legend.RegistryTest do
   use ExUnit.Case, async: true
 
   defmodule FakeHarness do
-    @behaviour Legend.Harness
+    @behaviour Legend.Core.Harness
 
     @impl true
     def definition do
-      %Legend.Harness.Definition{
+      %Legend.Core.Harness.Definition{
         id: "fake",
         name: "Fake",
         description: "test harness",
@@ -16,7 +16,7 @@ defmodule Legend.RegistryTest do
   end
 
   defmodule FakeRuntime do
-    @behaviour Legend.Runtime
+    @behaviour Legend.Core.Runtime
 
     @impl true
     def id, do: "fake_rt"
@@ -30,7 +30,7 @@ defmodule Legend.RegistryTest do
     def stop(_handle), do: :ok
   end
 
-  describe "Legend.Harness.Registry" do
+  describe "Legend.Core.Harness.Registry" do
     setup do
       original = Application.get_env(:legend, :harnesses, [])
       Application.put_env(:legend, :harnesses, [FakeHarness])
@@ -38,17 +38,17 @@ defmodule Legend.RegistryTest do
     end
 
     test "list/0 returns definitions" do
-      assert [%Legend.Harness.Definition{id: "fake", kind: :terminal}] =
-               Legend.Harness.Registry.list()
+      assert [%Legend.Core.Harness.Definition{id: "fake", kind: :terminal}] =
+               Legend.Core.Harness.Registry.list()
     end
 
     test "fetch/1 finds a module by string id" do
-      assert {:ok, FakeHarness} = Legend.Harness.Registry.fetch("fake")
-      assert :error = Legend.Harness.Registry.fetch("nope")
+      assert {:ok, FakeHarness} = Legend.Core.Harness.Registry.fetch("fake")
+      assert :error = Legend.Core.Harness.Registry.fetch("nope")
     end
   end
 
-  describe "Legend.Runtime.Registry" do
+  describe "Legend.Core.Runtime.Registry" do
     setup do
       original = Application.get_env(:legend, :runtimes, [])
       Application.put_env(:legend, :runtimes, [FakeRuntime])
@@ -56,13 +56,13 @@ defmodule Legend.RegistryTest do
     end
 
     test "fetch/1 finds a module by string id" do
-      assert {:ok, FakeRuntime} = Legend.Runtime.Registry.fetch("fake_rt")
-      assert :error = Legend.Runtime.Registry.fetch("nope")
+      assert {:ok, FakeRuntime} = Legend.Core.Runtime.Registry.fetch("fake_rt")
+      assert :error = Legend.Core.Runtime.Registry.fetch("nope")
     end
   end
 
   test "CommandSpec defaults" do
-    spec = %Legend.Runtime.CommandSpec{cmd: "echo"}
+    spec = %Legend.Core.Runtime.CommandSpec{cmd: "echo"}
     assert spec.args == []
     assert spec.env == %{}
     assert spec.io == :pty

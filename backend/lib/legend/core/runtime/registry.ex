@@ -1,4 +1,4 @@
-defmodule Legend.Runtime.Registry do
+defmodule Legend.Core.Runtime.Registry do
   @moduledoc "Looks up runtime modules from `config :legend, :runtimes` by string id."
 
   @spec list() :: [module()]

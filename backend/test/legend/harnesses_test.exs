@@ -1,7 +1,7 @@
 defmodule Legend.HarnessesTest do
   use ExUnit.Case, async: false
 
-  alias Legend.Runtime.CommandSpec
+  alias Legend.Core.Runtime.CommandSpec
 
   setup do
     original = Application.get_env(:legend, :harness_commands, [])
@@ -10,7 +10,7 @@ defmodule Legend.HarnessesTest do
   end
 
   test "claude_code definition and default command" do
-    assert %Legend.Harness.Definition{id: "claude_code", kind: :terminal} =
+    assert %Legend.Core.Harness.Definition{id: "claude_code", kind: :terminal} =
              Legend.Harnesses.ClaudeCode.definition()
 
     assert %CommandSpec{cmd: "claude", args: [], io: :pty, env: env} =
@@ -20,7 +20,7 @@ defmodule Legend.HarnessesTest do
   end
 
   test "hermes definition and default command" do
-    assert %Legend.Harness.Definition{id: "hermes", kind: :terminal} =
+    assert %Legend.Core.Harness.Definition{id: "hermes", kind: :terminal} =
              Legend.Harnesses.Hermes.definition()
 
     assert %CommandSpec{cmd: "hermes", args: []} = Legend.Harnesses.Hermes.build_command(%{})
@@ -39,7 +39,7 @@ defmodule Legend.HarnessesTest do
   end
 
   test "both built-ins are registered" do
-    ids = Legend.Harness.Registry.list() |> Enum.map(& &1.id) |> Enum.sort()
+    ids = Legend.Core.Harness.Registry.list() |> Enum.map(& &1.id) |> Enum.sort()
     assert ids == ["claude_code", "hermes"]
   end
 end

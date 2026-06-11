@@ -1,10 +1,10 @@
-defmodule Legend.Harness.Registry do
+defmodule Legend.Core.Harness.Registry do
   @moduledoc """
   Looks up harness modules from `config :legend, :harnesses`. Ids are compared
   as strings — user input never becomes an atom here.
   """
 
-  alias Legend.Harness.Definition
+  alias Legend.Core.Harness.Definition
 
   @spec list() :: [Definition.t()]
   def list, do: Enum.map(modules(), & &1.definition())

@@ -2,13 +2,13 @@ defmodule Legend.Runtimes.LocalPty do
   @moduledoc """
   Runs an agent CLI under a true PTY on the machine the backend runs on,
   via erlexec. A small relay process receives erlexec's stdout/DOWN messages
-  and forwards them to the owner in the `Legend.Runtime` message contract;
+  and forwards them to the owner in the `Legend.Core.Runtime` message contract;
   write/resize/stop go straight to the OS process via its os_pid.
   """
 
-  @behaviour Legend.Runtime
+  @behaviour Legend.Core.Runtime
 
-  alias Legend.Runtime.CommandSpec
+  alias Legend.Core.Runtime.CommandSpec
 
   @start_timeout 5_000
 
