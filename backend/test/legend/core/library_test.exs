@@ -62,6 +62,10 @@ defmodule Legend.Core.LibraryTest do
     assert Library.primer() =~ "skills/"
   end
 
+  test "default_root honors the test override knob" do
+    assert Library.default_root() =~ "test-library-default"
+  end
+
   test "null bytes surface as :badarg, not a crash" do
     assert {:error, :badarg} = Library.read(<<?a, 0, ?b>>)
     assert {:error, :badarg} = Library.write(<<?a, 0, ?b>>, "x")

@@ -5,6 +5,9 @@ defmodule Legend.Core.Library do
   chokepoint — every path is validated against the root before touching the
   configured storage adapter. Containment is lexical (Path.expand); the
   symlink-escape caveat is accepted for the single-user local PoC.
+
+  Root resolution: `LIBRARY_PATH` env override > saved setting
+  (`Legend.Core.Settings`) > OS default.
   """
 
   @subdirs ~w(knowledge skills artifacts)
@@ -17,15 +20,33 @@ defmodule Legend.Core.Library do
     "artifacts" => "# Artifacts\n\nOutputs worth keeping: generated code, analyses, templates.\n"
   }
 
-  def root do
-    case Application.get_env(:legend, :library_path) do
-      nil ->
-        :user_data |> :filename.basedir("legend") |> Path.join("library")
-
-      path ->
-        path
-    end
+  @doc "OS-default library root; overridable in test via config :legend, :library_default_root."
+  def default_root do
+    Application.get_env(:legend, :library_default_root) ||
+      :user_data |> :filename.basedir("legend") |> Path.join("library")
   end
+
+  @doc "Effective root: LIBRARY_PATH env override > saved setting > OS default."
+  def root do
+    env_root() || setting_root() || default_root()
+  end
+
+  @doc "Effective root plus where it came from, for the settings API/UI."
+  def root_info do
+    source =
+      cond do
+        env_root() -> :env
+        setting_root() -> :setting
+        true -> :default
+      end
+
+    %{effective: root(), source: source, default: default_root(), value: setting_root()}
+  end
+
+  # Set only from the LIBRARY_PATH env var (config/runtime.exs) — the ops override.
+  defp env_root, do: Application.get_env(:legend, :library_path)
+
+  defp setting_root, do: Legend.Core.Settings.get_setting("library_path")
 
   def primer do
     """
@@ -37,19 +58,20 @@ defmodule Legend.Core.Library do
     """
   end
 
-  def ensure_seeded! do
-    File.mkdir_p!(root())
+  def ensure_seeded!(root_path \\ nil) do
+    target = root_path || root()
+    File.mkdir_p!(target)
 
     for dir <- @subdirs do
-      File.mkdir_p!(Path.join(root(), dir))
-      readme = Path.join([root(), dir, "README.md"])
+      File.mkdir_p!(Path.join(target, dir))
+      readme = Path.join([target, dir, "README.md"])
       unless File.exists?(readme), do: File.write!(readme, @readme[dir])
     end
 
     :ok
   rescue
     e in File.Error ->
-      reraise "library root #{inspect(root())} is unusable: #{Exception.message(e)}",
+      reraise "library root #{inspect(root_path || root())} is unusable: #{Exception.message(e)}",
               __STACKTRACE__
   end
 
