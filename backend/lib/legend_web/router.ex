@@ -19,6 +19,8 @@ defmodule LegendWeb.Router do
     get "/settings/library-path", SettingsController, :show_library_path
     put "/settings/library-path", SettingsController, :update_library_path
     delete "/settings/library-path", SettingsController, :delete_library_path
+
+    post "/mcp", MCPController, :handle
   end
 
   scope "/api" do
