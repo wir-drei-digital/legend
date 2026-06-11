@@ -1,13 +1,13 @@
 defmodule Legend.Harnesses.Hermes do
   @moduledoc "Terminal harness for the Hermes agent CLI."
 
-  @behaviour Legend.Harness
-  @behaviour Legend.Harness.Terminal
+  @behaviour Legend.Core.Harness
+  @behaviour Legend.Core.Harness.Terminal
 
-  alias Legend.Harness.Definition
-  alias Legend.Runtime.CommandSpec
+  alias Legend.Core.Harness.Definition
+  alias Legend.Core.Runtime.CommandSpec
 
-  @impl Legend.Harness
+  @impl Legend.Core.Harness
   def definition do
     %Definition{
       id: "hermes",
@@ -17,17 +17,28 @@ defmodule Legend.Harnesses.Hermes do
     }
   end
 
-  @impl Legend.Harness.Terminal
+  @impl Legend.Core.Harness.Terminal
   def build_command(opts) do
     [cmd | args] = configured_command(:hermes, "hermes")
 
     %CommandSpec{
       cmd: cmd,
-      args: args,
+      args: args ++ primer_args(opts),
       env: Map.merge(%{"TERM" => "xterm-256color"}, opts[:env] || %{}),
       io: :pty
     }
   end
+
+  # Hermes' CLI primer mechanism is unknown; deliver only when the operator
+  # configures a flag template (HARNESS_HERMES_PRIMER_FLAG), per the contract.
+  defp primer_args(%{library: %{primer: primer}}) when is_binary(primer) and primer != "" do
+    case Application.get_env(:legend, :harness_commands, [])[:hermes_primer_flag] do
+      flag when is_binary(flag) and flag != "" -> [flag, primer]
+      _ -> []
+    end
+  end
+
+  defp primer_args(_opts), do: []
 
   defp configured_command(key, default) do
     :legend

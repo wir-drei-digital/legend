@@ -1,7 +1,7 @@
 defmodule Legend.HarnessesTest do
   use ExUnit.Case, async: false
 
-  alias Legend.Runtime.CommandSpec
+  alias Legend.Core.Runtime.CommandSpec
 
   setup do
     original = Application.get_env(:legend, :harness_commands, [])
@@ -10,7 +10,7 @@ defmodule Legend.HarnessesTest do
   end
 
   test "claude_code definition and default command" do
-    assert %Legend.Harness.Definition{id: "claude_code", kind: :terminal} =
+    assert %Legend.Core.Harness.Definition{id: "claude_code", kind: :terminal} =
              Legend.Harnesses.ClaudeCode.definition()
 
     assert %CommandSpec{cmd: "claude", args: [], io: :pty, env: env} =
@@ -20,7 +20,7 @@ defmodule Legend.HarnessesTest do
   end
 
   test "hermes definition and default command" do
-    assert %Legend.Harness.Definition{id: "hermes", kind: :terminal} =
+    assert %Legend.Core.Harness.Definition{id: "hermes", kind: :terminal} =
              Legend.Harnesses.Hermes.definition()
 
     assert %CommandSpec{cmd: "hermes", args: []} = Legend.Harnesses.Hermes.build_command(%{})
@@ -39,7 +39,38 @@ defmodule Legend.HarnessesTest do
   end
 
   test "both built-ins are registered" do
-    ids = Legend.Harness.Registry.list() |> Enum.map(& &1.id) |> Enum.sort()
+    ids = Legend.Core.Harness.Registry.list() |> Enum.map(& &1.id) |> Enum.sort()
     assert ids == ["claude_code", "hermes"]
+  end
+
+  describe "library primer delivery" do
+    @library %{path: "/lib/root", primer: "Use the library."}
+
+    test "claude_code appends --append-system-prompt when library opts present" do
+      assert %CommandSpec{args: args} =
+               Legend.Harnesses.ClaudeCode.build_command(%{library: @library})
+
+      assert ["--append-system-prompt", "Use the library."] = Enum.take(args, -2)
+    end
+
+    test "claude_code emits no primer args without library opts" do
+      assert %CommandSpec{args: []} = Legend.Harnesses.ClaudeCode.build_command(%{})
+    end
+
+    test "hermes delivers the primer only when a flag template is configured" do
+      assert %CommandSpec{args: []} = Legend.Harnesses.Hermes.build_command(%{library: @library})
+
+      Application.put_env(
+        :legend,
+        :harness_commands,
+        hermes: "hermes",
+        hermes_primer_flag: "--system-prompt"
+      )
+
+      assert %CommandSpec{args: args} =
+               Legend.Harnesses.Hermes.build_command(%{library: @library})
+
+      assert ["--system-prompt", "Use the library."] = Enum.take(args, -2)
+    end
   end
 end

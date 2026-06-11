@@ -1,7 +1,7 @@
 defmodule Legend.Runtimes.LocalPtyTest do
   use ExUnit.Case, async: false
 
-  alias Legend.Runtime.CommandSpec
+  alias Legend.Core.Runtime.CommandSpec
   alias Legend.Runtimes.LocalPty
 
   test "id" do

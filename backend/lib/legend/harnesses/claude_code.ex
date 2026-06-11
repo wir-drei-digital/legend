@@ -1,13 +1,13 @@
 defmodule Legend.Harnesses.ClaudeCode do
   @moduledoc "Terminal harness for Anthropic's Claude Code CLI."
 
-  @behaviour Legend.Harness
-  @behaviour Legend.Harness.Terminal
+  @behaviour Legend.Core.Harness
+  @behaviour Legend.Core.Harness.Terminal
 
-  alias Legend.Harness.Definition
-  alias Legend.Runtime.CommandSpec
+  alias Legend.Core.Harness.Definition
+  alias Legend.Core.Runtime.CommandSpec
 
-  @impl Legend.Harness
+  @impl Legend.Core.Harness
   def definition do
     %Definition{
       id: "claude_code",
@@ -17,17 +17,23 @@ defmodule Legend.Harnesses.ClaudeCode do
     }
   end
 
-  @impl Legend.Harness.Terminal
+  @impl Legend.Core.Harness.Terminal
   def build_command(opts) do
     [cmd | args] = configured_command(:claude_code, "claude")
 
     %CommandSpec{
       cmd: cmd,
-      args: args,
+      args: args ++ primer_args(opts),
       env: Map.merge(%{"TERM" => "xterm-256color"}, opts[:env] || %{}),
       io: :pty
     }
   end
+
+  defp primer_args(%{library: %{primer: primer}}) when is_binary(primer) and primer != "" do
+    ["--append-system-prompt", primer]
+  end
+
+  defp primer_args(_opts), do: []
 
   defp configured_command(key, default) do
     :legend
