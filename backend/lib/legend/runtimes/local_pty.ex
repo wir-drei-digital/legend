@@ -37,7 +37,11 @@ defmodule Legend.Runtimes.LocalPty do
           {^ref, {:ok, os_pid}} -> {:ok, %{os_pid: os_pid, relay: relay}}
           {^ref, {:error, reason}} -> {:error, "failed to start #{spec.cmd}: #{inspect(reason)}"}
         after
-          @start_timeout -> {:error, "timed out starting #{spec.cmd}"}
+          @start_timeout ->
+            Process.unlink(relay)
+            # Killing the relay makes erlexec reap the OS process it owns.
+            Process.exit(relay, :kill)
+            {:error, "timed out starting #{spec.cmd}"}
         end
     end
   end
@@ -105,7 +109,6 @@ defmodule Legend.Runtimes.LocalPty do
 
   defp decode_exit(:normal), do: 0
   defp decode_exit({:exit_status, status}), do: decode_status(status)
-  defp decode_exit({:status, status}), do: decode_status(status)
   defp decode_exit(_other), do: nil
 
   defp decode_status(status) do
@@ -116,6 +119,9 @@ defmodule Legend.Runtimes.LocalPty do
   end
 
   defp ensure_exec_started do
+    # The :erlexec app supervises the :exec server itself at boot, so this
+    # normally hits :already_started. Note: erlexec tuning must therefore go
+    # through `config :erlexec, ...`, not :exec.start/1 options.
     case :exec.start([]) do
       {:ok, _pid} -> :ok
       {:error, {:already_started, _pid}} -> :ok
