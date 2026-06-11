@@ -40,7 +40,7 @@ runs on.
 All sessions share a library (knowledge, skills, artifacts) at
 `~/Library/Application Support/legend/library` by default (`LIBRARY_PATH` in
 `backend/.env` overrides). Agents are pointed at it via `$LEGEND_LIBRARY` and
-a primer; browse and edit it in the app under Library.
+a primer; browse and edit it in the app under Library, and change its location under Settings.
 
 ## Development
 
