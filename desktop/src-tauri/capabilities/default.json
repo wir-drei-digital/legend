@@ -5,6 +5,7 @@
 	"windows": ["main"],
 	"permissions": [
 		"core:default",
+		"core:window:allow-start-dragging",
 		{
 			"identifier": "shell:allow-execute",
 			"allow": [{ "name": "binaries/legend-server", "sidecar": true }]

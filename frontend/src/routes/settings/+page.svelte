@@ -20,7 +20,9 @@
 
 	function apply(next: LibraryPathInfo) {
 		info = next;
-		path = next.value ?? '';
+		// One field shows the truth: the effective path (the default when no
+		// custom path is set).
+		path = next.effective;
 		confirmingReset = false;
 	}
 
@@ -69,38 +71,23 @@
 		<h2 class="text-sm font-medium">Library</h2>
 
 		{#if info}
-			<div class="flex items-center gap-2 text-sm">
-				<span class="text-muted-foreground">Current path:</span>
-				<code class="rounded bg-muted px-1.5 py-0.5">{info.effective}</code>
-				<span class="rounded-full border px-2 py-0.5 text-xs text-muted-foreground">
-					{info.source === 'env'
-						? 'set by LIBRARY_PATH'
-						: info.source === 'setting'
-							? 'custom'
-							: 'default'}
-				</span>
-			</div>
-
 			{#if envLocked}
 				<p class="text-sm text-muted-foreground">
-					The path is set by the <code>LIBRARY_PATH</code> environment variable and can't be
-					edited here. Unset it in <code>backend/.env</code> to manage it from this page.
+					The library path is set by the <code>LIBRARY_PATH</code> environment variable to
+					<code>{info.effective}</code> and can't be edited here. Unset it in
+					<code>backend/.env</code> to manage it from this page.
 				</p>
 			{:else}
 				<div class="flex flex-col gap-2">
 					<Label for="library-path">Library path</Label>
-					<Input id="library-path" bind:value={path} placeholder={info.default} />
-					<p class="text-xs text-muted-foreground">
-						Default: <code>{info.default}</code>. Changing the path seeds a fresh library there —
-						existing files stay where they are, and running sessions keep the old path.
-					</p>
+					<Input id="library-path" bind:value={path} />
 				</div>
 
 				<div class="flex gap-2">
 					<Button
 						size="sm"
 						onclick={save}
-						disabled={!path.trim() || path.trim() === (info.value ?? '')}
+						disabled={!path.trim() || path.trim() === info.effective}
 					>
 						Save
 					</Button>
