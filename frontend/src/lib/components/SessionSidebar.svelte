@@ -38,4 +38,17 @@
 			{/if}
 		{/each}
 	</nav>
+
+	<nav class="flex shrink-0 gap-1 border-t pt-2 text-sm">
+		<a
+			href="/"
+			class="flex-1 rounded-md px-2 py-1.5 text-center hover:bg-accent
+				{page.url.pathname.startsWith('/library') ? '' : 'bg-accent'}">Sessions</a
+		>
+		<a
+			href="/library"
+			class="flex-1 rounded-md px-2 py-1.5 text-center hover:bg-accent
+				{page.url.pathname.startsWith('/library') ? 'bg-accent' : ''}">Library</a
+		>
+	</nav>
 </aside>
