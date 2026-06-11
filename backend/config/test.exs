@@ -27,3 +27,10 @@ config :phoenix, :plug_init_mode, :runtime
 # Sort query params output of verified routes for robust url comparisons
 config :phoenix,
   sort_verified_routes_query_params: true
+
+# Sessions in tests run on the in-memory TestRuntime ("test"), listed first so
+# fetch("test") short-circuits; LocalPty stays registered for its own tests.
+config :legend, :runtimes, [Legend.TestRuntime, Legend.Runtimes.LocalPty]
+
+# The janitor's boot pass conflicts with the SQL sandbox; tests call it directly.
+config :legend, run_session_janitor: false

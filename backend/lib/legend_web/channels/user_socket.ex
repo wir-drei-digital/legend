@@ -20,6 +20,8 @@ defmodule LegendWeb.UserSocket do
   # for further details.
 
   channel "chat:*", LegendWeb.ChatChannel
+  channel "session:*", LegendWeb.SessionChannel
+  channel "sessions:lobby", LegendWeb.SessionsLobbyChannel
 
   # Socket params are passed from the client and can
   # be used to verify and authenticate a user. After

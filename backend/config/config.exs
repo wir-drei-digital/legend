@@ -57,8 +57,12 @@ config :spark,
 
 config :legend,
   ecto_repos: [Legend.Repo],
-  ash_domains: [],
+  ash_domains: [Legend.Agents],
   generators: [timestamp_type: :utc_datetime]
+
+config :legend,
+  harnesses: [Legend.Harnesses.ClaudeCode, Legend.Harnesses.Hermes],
+  runtimes: [Legend.Runtimes.LocalPty]
 
 # Configure the endpoint
 config :legend, LegendWeb.Endpoint,
