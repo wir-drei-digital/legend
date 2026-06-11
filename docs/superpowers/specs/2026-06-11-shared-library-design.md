@@ -13,7 +13,28 @@ Agents can't build on each other's work without common storage: a script Claude 
 1. One global library on disk that every session can reach via its normal file tools, with `knowledge/`, `skills/`, `artifacts/` conventions seeded and self-documented.
 2. Agents learn the library exists without per-user wiring: env var injected by the platform, primer delivered by the harness.
 3. A `/library` UI: browse the tree, view/edit/create/delete text files.
-4. Storage behind an adapter seam (`Legend.Library.Storage`) so a cloud/synced backend later is a new module, not a rework.
+4. Storage behind an adapter seam (`Legend.Core.Library.Storage`) so a cloud/synced backend later is a new module, not a rework.
+5. Restructure `backend/lib/legend` so core logic and adapters are visibly separate (see Code structure) — executed first, before the library lands in the new layout.
+
+## Code structure (restructure, part of this cycle)
+
+Core logic moves under a `Legend.Core` namespace; implementations/adapters stay top-level siblings, one directory per plugin axis:
+
+```
+backend/lib/legend/
+  core/
+    agents.ex + agents/      Legend.Core.Agents (Ash domain), .Session, .SessionServer,
+                             .Supervisor, .Janitor, .Notifications, .Scrollback, .Validations.*
+    harness.ex + harness/    Legend.Core.Harness (+ .Definition), .Terminal, .Registry
+    runtime.ex + runtime/    Legend.Core.Runtime, .CommandSpec, .Registry
+    library.ex + library/    Legend.Core.Library (chokepoint), .Storage (behaviour)
+  harnesses/                 Legend.Harnesses.ClaudeCode, Legend.Harnesses.Hermes
+  runtimes/                  Legend.Runtimes.LocalPty
+  storage/                   Legend.Storage.LocalDisk
+  application.ex / repo.ex / release.ex   (unchanged names)
+```
+
+Full module renames (path matches module everywhere): `Legend.Agents` → `Legend.Core.Agents` etc.; `Legend.TestRuntime` → `Legend.Runtimes.Test` (test/support) for symmetry. `LegendWeb` is untouched structurally; its references update. Config updates: `ash_domains: [Legend.Core.Agents]`, registries reference the renamed modules. External contracts (JSON:API routes, channel topics, DB tables, snapshots) are unaffected by module names; the refactor must produce no new migration (verified with codegen --check) and a green suite.
 
 ## Non-goals (recorded as extension architecture)
 
@@ -30,24 +51,24 @@ UI (/library)            agents (file tools)
       │                          │
 GET/PUT/DELETE /api/library/*    │  direct FS access via $LEGEND_LIBRARY
       │                          │
-Legend.Library  ──────────────────  (containment chokepoint: safe_path/1)
+Legend.Core.Library  ─────────────  (containment chokepoint: safe_path/1)
       │
-Legend.Library.Storage (behaviour)      ← adapter seam
+Legend.Core.Library.Storage (behaviour)      ← adapter seam
       │
-LocalDisk (PoC)      [later: S3/synced adapter + runtime materialization]
+Legend.Storage.LocalDisk (PoC)   [later: S3/synced adapter + runtime materialization]
 ```
 
 Two access paths by design: the HTTP API serves the UI; agents touch the filesystem directly (that's the point — normal file tools, no SDK). Both converge on the same tree.
 
-### `Legend.Library` (chokepoint)
+### `Legend.Core.Library` (chokepoint)
 
 - `root/0` — resolves the library root: `LIBRARY_PATH` from `.env` (dotenvy) when set, else the OS user-data dir (`:filename.basedir(:user_data, "legend")` + `/library` — on macOS `~/Library/Application Support/legend/library`). Dev backend and desktop sidecar therefore share one library per machine, deliberately. Test env configures an isolated tmp directory.
 - `ensure_seeded/0` — idempotent boot step (supervised Task, after the repo, before the endpoint): creates root, `knowledge/`, `skills/`, `artifacts/`, each with a `README.md` stating its convention. Fails loudly at boot with the offending path if the root is unusable.
 - `list_tree/0`, `read/1`, `write/2`, `delete/1` — every path argument passes `safe_path/1` first: expand relative to root, reject anything resolving outside it (`../`, absolute paths, `a/../../b`). Lexical containment; the symlink-escape caveat is accepted and documented for the single-user local PoC.
-- `primer/0` — the one canonical primer text: the library exists at `$LEGEND_LIBRARY`, its layout, "read before reinventing, write back what's reusable," pointer to the READMEs.
+- `primer/0` — the one canonical primer text (lives in `Legend.Core.Library`): the library exists at `$LEGEND_LIBRARY`, its layout, "read before reinventing, write back what's reusable," pointer to the READMEs.
 - Containment is enforced server-side only; the UI is not trusted.
 
-### `Legend.Library.Storage` (adapter seam)
+### `Legend.Core.Library.Storage` (adapter seam)
 
 Behaviour over **relative** paths (the chokepoint owns absolutization and containment):
 
@@ -56,7 +77,7 @@ Behaviour over **relative** paths (the chokepoint owns absolutization and contai
 - `write(root, rel_path, content)` → `:ok` | `{:error, reason}` (creates parent dirs)
 - `delete(root, rel_path)` → `:ok` | `{:error, reason}` (files only)
 
-Selected by `config :legend, :library_storage, Legend.Library.Storage.LocalDisk` — a single configured module (exactly one backend active), unlike the list registries for harnesses/runtimes. `LocalDisk` is the PoC adapter; a cloud adapter later implements the same callbacks, plus runtime-side materialization (below).
+Selected by `config :legend, :library_storage, Legend.Storage.LocalDisk` — a single configured module (exactly one backend active), unlike the list registries for harnesses/runtimes. `LocalDisk` is the PoC adapter; a cloud adapter later implements the same callbacks, plus runtime-side materialization (below).
 
 ## Session integration
 
@@ -104,7 +125,8 @@ Containment violations and invalid paths → 400. Body size: Plug defaults (~8 M
 
 ## Testing
 
-- `Legend.Library` unit tests: containment (`../`, absolute, `a/../../b`), read/write/delete round-trips, idempotent seeding, binary-read rejection.
+- Restructure verification: full suite green after the rename, `phx.routes` unchanged, no new migration generated (codegen check).
+- `Legend.Core.Library` unit tests: containment (`../`, absolute, `a/../../b`), read/write/delete round-trips, idempotent seeding, binary-read rejection.
 - Controller tests over a tmp library root, including traversal rejection and parent-dir-creating writes.
 - Harness tests: ClaudeCode emits `--append-system-prompt <primer>` when library opts present, nothing when absent; Hermes honors the flag template and stays silent without it.
 - SessionServer (via TestRuntime): captured CommandSpec env contains `LEGEND_LIBRARY`; `build_command` received library opts.
@@ -115,6 +137,7 @@ Containment violations and invalid paths → 400. Body size: Plug defaults (~8 M
 
 | Decision | Rationale |
 |---|---|
+| `Legend.Core.*` namespace for core, top-level dirs for adapters | Core-vs-plugin split visible in the tree; path matches module name (full rename, not dirs-only) |
 | Filesystem is the only source of truth (no DB index) | Zero index/disk drift; agents grep with their own tools; search/metadata is a later project |
 | Storage behind a behaviour, single configured module | Cloud adapter is a drop-in later; exactly one backend active (unlike harness/runtime list registries) |
 | Env var injected by platform, primer delivered by harness | Env needs no harness cooperation; context injection is inherently CLI-specific and belongs in the plugin contract |
