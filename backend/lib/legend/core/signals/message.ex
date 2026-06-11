@@ -39,6 +39,7 @@ defmodule Legend.Core.Signals.Message do
     create :send do
       accept [:from_session_id, :to_session_id, :kind, :payload, :read_at]
       validate {SessionExists, attribute: :to_session_id}
+      change Legend.Core.Signals.Changes.Broadcast
     end
 
     # The human-facing JSON:API action: sender is always the human (nil),
@@ -46,6 +47,7 @@ defmodule Legend.Core.Signals.Message do
     create :send_as_human do
       accept [:to_session_id, :payload]
       validate {SessionExists, attribute: :to_session_id}
+      change Legend.Core.Signals.Changes.Broadcast
     end
 
     update :mark_read do
