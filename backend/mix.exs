@@ -79,6 +79,7 @@ defmodule Legend.MixProject do
       {:bandit, "~> 1.5"},
       {:dotenvy, "~> 1.0"},
       {:corsica, "~> 2.1"},
+      {:erlexec, "~> 2.3"},
       {:burrito, "~> 1.0", runtime: false}
     ]
   end
