@@ -57,13 +57,14 @@ config :spark,
 
 config :legend,
   ecto_repos: [Legend.Repo],
-  ash_domains: [Legend.Core.Agents, Legend.Core.Settings],
+  ash_domains: [Legend.Core.Agents, Legend.Core.Settings, Legend.Core.Signals],
   generators: [timestamp_type: :utc_datetime]
 
 config :legend,
   harnesses: [Legend.Harnesses.ClaudeCode, Legend.Harnesses.Hermes],
   runtimes: [Legend.Runtimes.LocalPty],
-  library_storage: Legend.Storage.LocalDisk
+  library_storage: Legend.Storage.LocalDisk,
+  max_running_sessions: 10
 
 # Configure the endpoint
 config :legend, LegendWeb.Endpoint,
