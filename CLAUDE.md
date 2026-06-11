@@ -61,4 +61,5 @@ Release builds must go through `backend/scripts/build-release.sh [legend|legend_
 - `static_paths/0` in `lib/legend_web.ex` whitelists what Plug.Static serves — new top-level files in the SPA build output must be added there (`index.html` is intentionally absent; the SPA controller owns it).
 - `backend/priv/static/{_app,index.html,robots.txt}` are build artifacts (gitignored); `just build` copies them in.
 - `.env` files are gitignored in both apps; `.env.example` files are the documented templates.
-- Design/plan docs for the scaffold live in `docs/superpowers/specs/` and `docs/superpowers/plans/`.
+- Design/plan docs live in `docs/superpowers/specs/` and `docs/superpowers/plans/`.
+- `docs/VISION.md` is the overarching product vision (Legend = orchestrator platform for AI agents) — check new feature work against its alignment test.
