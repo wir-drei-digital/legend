@@ -32,6 +32,11 @@ cp frontend/.env.example frontend/.env
 - `backend/.env` — loaded by [dotenvy](https://hexdocs.pm/dotenvy) in `config/runtime.exs`; real environment variables override `.env` values. See the comments in `backend/.env.example` for each variable.
 - `frontend/.env` — native Vite/SvelteKit env handling; client-visible variables use the `PUBLIC_` prefix. Blank values mean "same origin", which is correct for dev and web deploys.
 
+Agent harness commands are configurable in `backend/.env` (`HARNESS_CLAUDE_CMD`,
+`HARNESS_HERMES_CMD`) — set these if `claude`/`hermes` aren't on your PATH or
+need flags. Sessions spawn these CLIs under a PTY on the machine the backend
+runs on.
+
 ## Development
 
 ```bash
