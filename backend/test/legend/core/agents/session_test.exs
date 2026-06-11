@@ -64,4 +64,44 @@ defmodule Legend.Core.Agents.SessionTest do
     assert :ok = Agents.destroy_session!(session)
     assert {:error, %Ash.Error.Invalid{}} = Agents.get_session(session.id)
   end
+
+  describe "messaging fields" do
+    setup do
+      on_exit(fn ->
+        for {_, pid, _, _} <-
+              DynamicSupervisor.which_children(Legend.Core.Agents.SessionSupervisor) do
+          DynamicSupervisor.terminate_child(Legend.Core.Agents.SessionSupervisor, pid)
+        end
+      end)
+    end
+
+    test "start accepts spawned_by_session_id and instructions" do
+      parent =
+        Agents.start_session!(%{harness_id: "claude_code", runtime_id: "test", cwd: "/tmp"})
+
+      child =
+        Agents.start_session!(%{
+          harness_id: "hermes",
+          runtime_id: "test",
+          cwd: "/tmp",
+          spawned_by_session_id: parent.id,
+          instructions: "summarize the README"
+        })
+
+      assert child.spawned_by_session_id == parent.id
+      assert child.instructions == "summarize the README"
+    end
+
+    test "every session gets a unique mcp_token and is fetchable by it" do
+      a = Agents.start_session!(%{harness_id: "claude_code", runtime_id: "test", cwd: "/tmp"})
+      b = Agents.start_session!(%{harness_id: "claude_code", runtime_id: "test", cwd: "/tmp"})
+
+      assert is_binary(a.mcp_token) and byte_size(a.mcp_token) >= 24
+      assert a.mcp_token != b.mcp_token
+
+      assert {:ok, found} = Agents.get_session_by_token(a.mcp_token)
+      assert found.id == a.id
+      assert {:error, _} = Agents.get_session_by_token("nope")
+    end
+  end
 end
