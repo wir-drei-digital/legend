@@ -29,7 +29,9 @@ if System.get_env("PHX_SERVER") do
 end
 
 if config_env() == :dev do
-  config :legend, LegendWeb.Endpoint, http: [port: env!("PORT", :integer, 4000)]
+  # 4100 (not Phoenix's usual 4000) so legend can run alongside other Phoenix
+  # apps in dev; the Vite proxy target in frontend/vite.config.ts must match.
+  config :legend, LegendWeb.Endpoint, http: [port: env!("PORT", :integer, 4100)]
 end
 
 # Allow .env to point the database somewhere else in any env except test

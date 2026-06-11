@@ -45,7 +45,7 @@ a primer; browse and edit it in the app under Library.
 ## Development
 
 ```bash
-just dev            # Phoenix :4000 + Vite :5173 → open http://localhost:5173
+just dev            # Phoenix :4100 + Vite :5173 → open http://localhost:5173
 just dev-desktop    # Phoenix + Tauri window (Tauri runs the Vite dev server)
 just test           # mix test + svelte-check
 ```
