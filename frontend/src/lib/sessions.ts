@@ -8,6 +8,7 @@ export interface Session {
 	harness_id: string;
 	runtime_id: string;
 	cwd: string | null;
+	spawned_by_session_id: string | null;
 	status: SessionStatus;
 	exit_code: number | null;
 	error: string | null;
