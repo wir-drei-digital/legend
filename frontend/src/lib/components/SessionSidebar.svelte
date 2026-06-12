@@ -43,9 +43,16 @@
 		<a
 			href="/"
 			class="flex-1 rounded-md px-2 py-1.5 text-center hover:bg-accent
-				{!page.url.pathname.startsWith('/library') && !page.url.pathname.startsWith('/settings')
+				{!page.url.pathname.startsWith('/library') &&
+				!page.url.pathname.startsWith('/messages') &&
+				!page.url.pathname.startsWith('/settings')
 				? 'bg-accent'
 				: ''}">Sessions</a
+		>
+		<a
+			href="/messages"
+			class="flex-1 rounded-md px-2 py-1.5 text-center hover:bg-accent
+				{page.url.pathname.startsWith('/messages') ? 'bg-accent' : ''}">Messages</a
 		>
 		<a
 			href="/library"
