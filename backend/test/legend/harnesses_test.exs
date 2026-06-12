@@ -73,4 +73,57 @@ defmodule Legend.HarnessesTest do
       assert ["--system-prompt", "Use the library."] = Enum.take(args, -2)
     end
   end
+
+  describe "messaging wiring" do
+    @opts %{
+      library: %{path: "/lib", primer: "LIB PRIMER"},
+      mcp: %{url: "http://localhost:4100/api/mcp", token: "tok123"},
+      messaging: %{primer: "MSG PRIMER", instructions: nil}
+    }
+
+    test "claude_code registers the MCP server and allows its tools" do
+      spec = Legend.Harnesses.ClaudeCode.build_command(@opts)
+
+      mcp_index = Enum.find_index(spec.args, &(&1 == "--mcp-config"))
+      assert mcp_index
+      config = Jason.decode!(Enum.at(spec.args, mcp_index + 1))
+      assert config["mcpServers"]["legend"]["url"] == "http://localhost:4100/api/mcp"
+      assert config["mcpServers"]["legend"]["headers"]["Authorization"] == "Bearer tok123"
+
+      allowed_index = Enum.find_index(spec.args, &(&1 == "--allowed-tools"))
+      assert Enum.at(spec.args, allowed_index + 1) == "mcp__legend"
+    end
+
+    test "claude_code joins library and messaging primers in one system prompt" do
+      spec = Legend.Harnesses.ClaudeCode.build_command(@opts)
+      index = Enum.find_index(spec.args, &(&1 == "--append-system-prompt"))
+      prompt = Enum.at(spec.args, index + 1)
+      assert prompt =~ "LIB PRIMER"
+      assert prompt =~ "MSG PRIMER"
+    end
+
+    test "claude_code passes instructions as the trailing positional prompt" do
+      opts = put_in(@opts, [:messaging, :instructions], "do the thing")
+      spec = Legend.Harnesses.ClaudeCode.build_command(opts)
+      assert List.last(spec.args) == "do the thing"
+
+      # Without instructions there is no trailing prompt.
+      spec = Legend.Harnesses.ClaudeCode.build_command(@opts)
+      refute List.last(spec.args) == "do the thing"
+    end
+
+    test "hermes passes instructions positionally and ignores mcp opts (env-only fallback)" do
+      opts = put_in(@opts, [:messaging, :instructions], "take over")
+      spec = Legend.Harnesses.Hermes.build_command(opts)
+      assert List.last(spec.args) == "take over"
+      refute "--mcp-config" in spec.args
+    end
+
+    test "default nudge line names the sender and read_messages" do
+      line = Legend.Core.Harness.Terminal.nudge_line(Legend.Harnesses.ClaudeCode, 2, "hermes")
+      assert line =~ "2 unread"
+      assert line =~ "hermes"
+      assert line =~ "read_messages"
+    end
+  end
 end

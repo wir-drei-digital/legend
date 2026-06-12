@@ -5,6 +5,7 @@ defmodule Legend.Harnesses.ClaudeCode do
   @behaviour Legend.Core.Harness.Terminal
 
   alias Legend.Core.Harness.Definition
+  alias Legend.Core.Harness.Terminal
   alias Legend.Core.Runtime.CommandSpec
 
   @impl Legend.Core.Harness
@@ -23,17 +24,40 @@ defmodule Legend.Harnesses.ClaudeCode do
 
     %CommandSpec{
       cmd: cmd,
-      args: args ++ primer_args(opts),
+      args: args ++ primer_args(opts) ++ mcp_args(opts) ++ instruction_args(opts),
       env: Map.merge(%{"TERM" => "xterm-256color"}, opts[:env] || %{}),
       io: :pty
     }
   end
 
-  defp primer_args(%{library: %{primer: primer}}) when is_binary(primer) and primer != "" do
-    ["--append-system-prompt", primer]
+  defp primer_args(opts) do
+    case Terminal.primers(opts) do
+      [] -> []
+      primers -> ["--append-system-prompt", Enum.join(primers, "\n\n")]
+    end
   end
 
-  defp primer_args(_opts), do: []
+  defp mcp_args(%{mcp: %{url: url, token: token}}) do
+    config =
+      Jason.encode!(%{
+        mcpServers: %{
+          legend: %{type: "http", url: url, headers: %{Authorization: "Bearer #{token}"}}
+        }
+      })
+
+    # "mcp__legend" is a server-level allow rule: every tool from this server.
+    ["--mcp-config", config, "--allowed-tools", "mcp__legend"]
+  end
+
+  defp mcp_args(_opts), do: []
+
+  # Trailing positional arg = initial prompt in Claude Code's interactive mode.
+  defp instruction_args(opts) do
+    case Terminal.instructions(opts) do
+      nil -> []
+      text -> [text]
+    end
+  end
 
   defp configured_command(key, default) do
     :legend
