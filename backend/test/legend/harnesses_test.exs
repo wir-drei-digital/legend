@@ -191,4 +191,39 @@ defmodule Legend.HarnessesTest do
       refute "--resume" in resumed.args
     end
   end
+
+  describe "setup seam" do
+    test "setup_for/1 on a harness without the callbacks is not_applicable" do
+      assert %Legend.Core.Harness.Setup{status: :not_applicable} =
+               Legend.Core.Harness.setup_for(Legend.Harnesses.ClaudeCode)
+    end
+
+    test "setup_for/1 on a harness exporting setup/0 calls through" do
+      defmodule WithSetup do
+        @behaviour Legend.Core.Harness
+
+        @impl Legend.Core.Harness
+        def definition,
+          do: %Legend.Core.Harness.Definition{
+            id: "with_setup",
+            name: "With Setup",
+            kind: :terminal
+          }
+
+        @impl Legend.Core.Harness
+        def setup,
+          do: %Legend.Core.Harness.Setup{status: :missing, summary: "do the thing"}
+      end
+
+      assert %Legend.Core.Harness.Setup{status: :missing, summary: "do the thing"} =
+               Legend.Core.Harness.setup_for(WithSetup)
+    end
+
+    test "registry entries pair modules with definitions" do
+      entries = Legend.Core.Harness.Registry.entries()
+
+      assert {Legend.Harnesses.ClaudeCode, %Legend.Core.Harness.Definition{id: "claude_code"}} =
+               Enum.find(entries, fn {mod, _} -> mod == Legend.Harnesses.ClaudeCode end)
+    end
+  end
 end

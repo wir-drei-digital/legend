@@ -79,6 +79,8 @@ defmodule Legend.MixProject do
       {:bandit, "~> 1.5"},
       {:dotenvy, "~> 1.0"},
       {:corsica, "~> 2.1"},
+      {:yaml_elixir, "~> 2.11"},
+      {:ymlr, "~> 5.0"},
       {:erlexec, "~> 2.3"},
       {:burrito, "~> 1.0", runtime: false}
     ]

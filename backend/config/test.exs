@@ -44,3 +44,7 @@ config :legend, library_default_root: Path.expand("../tmp/test-library-default",
 
 # Fast nudge debounce so messaging tests don't sleep.
 config :legend, nudge_debounce_ms: 25
+
+# Tests must never read or write the real ~/.hermes. Controller tests that
+# need a real dir override this per-test with Application.put_env/3.
+config :legend, hermes_home: "/nonexistent/hermes-home-test"

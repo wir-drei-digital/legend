@@ -10,6 +10,7 @@ defmodule LegendWeb.Router do
 
     get "/health", HealthController, :show
     get "/harnesses", HarnessController, :index
+    post "/harnesses/:id/setup", HarnessController, :apply_setup
 
     get "/library/tree", LibraryController, :tree
     get "/library/file", LibraryController, :show

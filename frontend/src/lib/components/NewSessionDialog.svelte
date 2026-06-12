@@ -5,7 +5,14 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
-	import { createSession, listHarnesses, type Harness } from '$lib/sessions';
+	import {
+		applyHarnessSetup,
+		createSession,
+		dismissSetup,
+		isSetupDismissed,
+		listHarnesses,
+		type Harness
+	} from '$lib/sessions';
 
 	let open = $state(false);
 	let harnesses = $state<Harness[]>([]);
@@ -17,12 +24,62 @@
 
 	const selectedHarness = $derived(harnesses.find((h) => h.id === harnessId));
 
+	let dismissed = $state<Record<string, boolean>>({});
+	let applyingSetup = $state(false);
+	let setupError = $state('');
+	let setupApplied = $state('');
+
+	const setupNeeded = $derived(
+		!!selectedHarness &&
+			selectedHarness.setup.status === 'missing' &&
+			!dismissed[selectedHarness.id]
+	);
+
+	// Selection change invalidates any setup messages from the previous harness.
+	$effect(() => {
+		harnessId;
+		setupError = '';
+		setupApplied = '';
+	});
+
+	async function applySetup() {
+		if (!selectedHarness || applyingSetup) return;
+		const harness = selectedHarness;
+		applyingSetup = true;
+		setupError = '';
+		try {
+			await applyHarnessSetup(harness.id);
+			harnesses = await listHarnesses();
+			const updated = harnesses.find((h) => h.id === harness.id);
+			if (updated?.setup.status === 'ok') {
+				setupApplied = updated.setup.restart_hint
+					? `Applied — restart existing ${harness.name} sessions to pick this up.`
+					: 'Applied.';
+			} else {
+				setupError = updated?.setup.detail ?? updated?.setup.summary ?? 'setup did not complete';
+			}
+		} catch (e) {
+			setupError = e instanceof Error ? e.message : 'setup failed';
+		} finally {
+			applyingSetup = false;
+		}
+	}
+
+	function dismiss() {
+		if (!selectedHarness) return;
+		dismissSetup(selectedHarness.id);
+		dismissed = { ...dismissed, [selectedHarness.id]: true };
+	}
+
 	async function openDialog() {
 		error = '';
 		open = true;
 		try {
 			harnesses = await listHarnesses();
 			harnessId = harnesses[0]?.id ?? '';
+			setupApplied = '';
+			setupError = '';
+			dismissed = Object.fromEntries(harnesses.map((h) => [h.id, isSetupDismissed(h.id)]));
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'failed to load harnesses';
 		}
@@ -73,6 +130,23 @@
 					</Select.Content>
 				</Select.Root>
 			</div>
+
+			{#if setupNeeded && selectedHarness}
+				<div class="flex flex-col gap-2 rounded-md border bg-muted/40 p-3 text-sm">
+					<p>{selectedHarness.name}: {selectedHarness.setup.summary}</p>
+					{#if setupError}
+						<p class="text-destructive">{setupError}</p>
+					{/if}
+					<div class="flex gap-2">
+						<Button size="sm" onclick={applySetup} disabled={applyingSetup}>
+							{applyingSetup ? 'Applying…' : 'Apply'}
+						</Button>
+						<Button size="sm" variant="outline" onclick={dismiss}>Dismiss</Button>
+					</div>
+				</div>
+			{:else if setupApplied}
+				<p class="text-sm text-emerald-600">{setupApplied}</p>
+			{/if}
 
 			<div class="flex flex-col gap-2">
 				<Label for="name">Name (optional)</Label>
