@@ -140,4 +140,55 @@ defmodule Legend.HarnessesTest do
       assert line =~ "read_messages"
     end
   end
+
+  describe "resume wiring" do
+    @resume_opts %{
+      library: %{path: "/lib", primer: ""},
+      messaging: %{primer: "", instructions: "do the thing"},
+      session_id: "11111111-2222-3333-4444-555555555555"
+    }
+
+    test "claude_code is resumable, hermes is not" do
+      assert Legend.Harnesses.ClaudeCode.definition().resumable == true
+      assert Legend.Harnesses.Hermes.definition().resumable == false
+    end
+
+    test "claude_code pins the conversation id on fresh launch" do
+      spec = Legend.Harnesses.ClaudeCode.build_command(Map.put(@resume_opts, :mode, :fresh))
+      index = Enum.find_index(spec.args, &(&1 == "--session-id"))
+      assert index
+      assert Enum.at(spec.args, index + 1) == "11111111-2222-3333-4444-555555555555"
+      # Instructions still delivered on fresh launch.
+      assert List.last(spec.args) == "do the thing"
+    end
+
+    test "claude_code mode defaults to fresh when absent" do
+      spec = Legend.Harnesses.ClaudeCode.build_command(@resume_opts)
+      assert "--session-id" in spec.args
+      refute "--resume" in spec.args
+    end
+
+    test "claude_code resumes the conversation and omits instructions" do
+      spec = Legend.Harnesses.ClaudeCode.build_command(Map.put(@resume_opts, :mode, :resume))
+      index = Enum.find_index(spec.args, &(&1 == "--resume"))
+      assert index
+      assert Enum.at(spec.args, index + 1) == "11111111-2222-3333-4444-555555555555"
+      refute "--session-id" in spec.args
+      # The conversation already contains the instructions — never re-send.
+      refute "do the thing" in spec.args
+    end
+
+    test "claude_code without a session_id emits no session flags" do
+      spec = Legend.Harnesses.ClaudeCode.build_command(Map.delete(@resume_opts, :session_id))
+      refute "--session-id" in spec.args
+      refute "--resume" in spec.args
+    end
+
+    test "hermes ignores mode (resume degrades to fresh)" do
+      fresh = Legend.Harnesses.Hermes.build_command(Map.put(@resume_opts, :mode, :fresh))
+      resumed = Legend.Harnesses.Hermes.build_command(Map.put(@resume_opts, :mode, :resume))
+      assert fresh.args == resumed.args
+      refute "--resume" in resumed.args
+    end
+  end
 end

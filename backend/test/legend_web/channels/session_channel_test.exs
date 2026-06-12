@@ -67,9 +67,9 @@ defmodule LegendWeb.SessionChannelTest do
     Legend.Core.Agents.Janitor.run()
 
     {reply, _socket} = join!(session)
-    assert reply.status == "failed"
+    assert reply.status == "interrupted"
     assert reply.buffer == ""
-    assert reply.error == "backend restarted"
+    assert reply.error == nil
   end
 
   test "joining an unknown session is rejected" do

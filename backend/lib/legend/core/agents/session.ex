@@ -97,6 +97,57 @@ defmodule Legend.Core.Agents.Session do
       change set_attribute(:ended_at, &DateTime.utc_now/0)
     end
 
+    # Boot janitor: the process died with the previous backend run; the record
+    # stays resumable.
+    update :interrupt do
+      require_atomic? false
+      change set_attribute(:status, :interrupted)
+      change set_attribute(:ended_at, &DateTime.utc_now/0)
+    end
+
+    # Manual resume (also from :exited — continue a finished conversation).
+    # Same record/process lockstep pattern as :start; SessionServer marks the
+    # record :running (or :failed) from its own process, outside this txn.
+    update :resume do
+      require_atomic? false
+
+      validate Legend.Core.Agents.Validations.ResumableStatus
+
+      change set_attribute(:status, :starting)
+      change set_attribute(:exit_code, nil)
+      change set_attribute(:error, nil)
+      change set_attribute(:ended_at, nil)
+
+      # The old server may still be alive (an :exited server keeps scrollback
+      # until deleted) — stop it so the restart can re-register under the same
+      # id. Runs after validation: a rejected resume never kills anything.
+      change before_action(fn changeset, _context ->
+               Legend.Core.Agents.SessionServer.ensure_stopped(changeset.data.id)
+               changeset
+             end)
+
+      change after_transaction(fn
+               _changeset, {:ok, session}, _context ->
+                 case Legend.Core.Agents.SessionServer.start_session(session, :resume) do
+                   {:ok, _pid} ->
+                     {:ok, Legend.Core.Agents.get_session!(session.id)}
+
+                   :ignore ->
+                     {:ok, Legend.Core.Agents.get_session!(session.id)}
+
+                   {:error, {:already_started, _pid}} ->
+                     # Lost a benign race with another resume — the session is live.
+                     {:ok, Legend.Core.Agents.get_session!(session.id)}
+
+                   {:error, reason} ->
+                     {:ok, Legend.Core.Agents.fail_session!(session, %{error: inspect(reason)})}
+                 end
+
+               _changeset, {:error, _} = error, _context ->
+                 error
+             end)
+    end
+
     destroy :destroy do
       primary? true
       require_atomic? false
@@ -129,7 +180,7 @@ defmodule Legend.Core.Agents.Session do
       allow_nil?: false,
       default: :starting,
       public?: true,
-      constraints: [one_of: [:starting, :running, :exited, :failed]]
+      constraints: [one_of: [:starting, :running, :exited, :failed, :interrupted]]
 
     attribute :exit_code, :integer, public?: true
     attribute :error, :string, public?: true

@@ -7,13 +7,14 @@ defmodule Legend.Core.Harness do
 
   defmodule Definition do
     @enforce_keys [:id, :name, :kind]
-    defstruct [:id, :name, :kind, description: ""]
+    defstruct [:id, :name, :kind, description: "", resumable: false]
 
     @type t :: %__MODULE__{
             id: String.t(),
             name: String.t(),
             description: String.t(),
-            kind: :terminal | :acp | :native
+            kind: :terminal | :acp | :native,
+            resumable: boolean()
           }
   end
 
