@@ -4,7 +4,13 @@ defmodule LegendWeb.HarnessController do
   def index(conn, _params) do
     data =
       for d <- Legend.Core.Harness.Registry.list() do
-        %{id: d.id, name: d.name, description: d.description, kind: d.kind}
+        %{
+          id: d.id,
+          name: d.name,
+          description: d.description,
+          kind: d.kind,
+          resumable: d.resumable
+        }
       end
 
     json(conn, %{data: data})

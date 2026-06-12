@@ -14,7 +14,8 @@ defmodule Legend.Harnesses.ClaudeCode do
       id: "claude_code",
       name: "Claude Code",
       description: "Anthropic's agentic coding CLI",
-      kind: :terminal
+      kind: :terminal,
+      resumable: true
     }
   end
 
@@ -24,7 +25,9 @@ defmodule Legend.Harnesses.ClaudeCode do
 
     %CommandSpec{
       cmd: cmd,
-      args: args ++ primer_args(opts) ++ mcp_args(opts) ++ instruction_args(opts),
+      args:
+        args ++
+          primer_args(opts) ++ mcp_args(opts) ++ session_args(opts) ++ instruction_args(opts),
       env: Map.merge(%{"TERM" => "xterm-256color"}, opts[:env] || %{}),
       io: :pty
     }
@@ -50,6 +53,15 @@ defmodule Legend.Harnesses.ClaudeCode do
   end
 
   defp mcp_args(_opts), do: []
+
+  # Our session id IS the agent's conversation id: pinned at fresh launch,
+  # reopened on resume (per the Terminal resume contract).
+  defp session_args(%{session_id: id, mode: :resume}) when is_binary(id), do: ["--resume", id]
+  defp session_args(%{session_id: id}) when is_binary(id), do: ["--session-id", id]
+  defp session_args(_opts), do: []
+
+  # The resumed conversation already contains the instructions — never re-send.
+  defp instruction_args(%{mode: :resume}), do: []
 
   # Trailing positional arg = initial prompt in Claude Code's interactive mode.
   defp instruction_args(opts) do

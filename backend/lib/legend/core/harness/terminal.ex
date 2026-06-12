@@ -21,6 +21,14 @@ defmodule Legend.Core.Harness.Terminal do
   `messaging.instructions` is delivered as the CLI's initial prompt. None of
   these are ever PTY-injected; the only runtime injection is the one-line
   nudge, whose format a harness may override via the optional `nudge_line/2`.
+
+  ## Resume contract
+
+  When opts contain `:session_id`, a resumable harness SHOULD pin the agent's
+  conversation id to it at fresh launch and reopen that conversation when
+  `mode: :resume` (omitting `messaging.instructions` — the conversation already
+  contains them). Harnesses without a resume mechanism ignore `:mode`; resume
+  degrades to a fresh process. Declare support via `Definition.resumable`.
   """
 
   @type library :: %{path: String.t(), primer: String.t()}
@@ -30,7 +38,9 @@ defmodule Legend.Core.Harness.Terminal do
           optional(:env) => %{String.t() => String.t()},
           optional(:library) => library(),
           optional(:mcp) => mcp(),
-          optional(:messaging) => messaging()
+          optional(:messaging) => messaging(),
+          optional(:mode) => :fresh | :resume,
+          optional(:session_id) => String.t()
         }
 
   @callback build_command(opts()) :: Legend.Core.Runtime.CommandSpec.t()
