@@ -47,10 +47,10 @@
 		{/each}
 	</nav>
 
-	<nav class="flex shrink-0 gap-1 border-t pt-2 text-sm">
+	<nav class="flex shrink-0 flex-col gap-1 border-t pt-2 text-sm">
 		<a
 			href="/"
-			class="flex-1 rounded-md px-2 py-1.5 text-center hover:bg-accent
+			class="rounded-md px-2 py-1.5 hover:bg-accent
 				{!page.url.pathname.startsWith('/library') &&
 				!page.url.pathname.startsWith('/messages') &&
 				!page.url.pathname.startsWith('/settings')
@@ -59,17 +59,17 @@
 		>
 		<a
 			href="/messages"
-			class="flex-1 rounded-md px-2 py-1.5 text-center hover:bg-accent
+			class="rounded-md px-2 py-1.5 hover:bg-accent
 				{page.url.pathname.startsWith('/messages') ? 'bg-accent' : ''}">Messages</a
 		>
 		<a
 			href="/library"
-			class="flex-1 rounded-md px-2 py-1.5 text-center hover:bg-accent
+			class="rounded-md px-2 py-1.5 hover:bg-accent
 				{page.url.pathname.startsWith('/library') ? 'bg-accent' : ''}">Library</a
 		>
 		<a
 			href="/settings"
-			class="flex-1 rounded-md px-2 py-1.5 text-center hover:bg-accent
+			class="rounded-md px-2 py-1.5 hover:bg-accent
 				{page.url.pathname.startsWith('/settings') ? 'bg-accent' : ''}">Settings</a
 		>
 	</nav>
