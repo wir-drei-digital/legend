@@ -16,7 +16,8 @@
 		starting: 'bg-amber-500',
 		running: 'bg-emerald-500',
 		exited: 'bg-zinc-400',
-		failed: 'bg-red-500'
+		failed: 'bg-red-500',
+		interrupted: 'bg-sky-500'
 	};
 </script>
 

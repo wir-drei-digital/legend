@@ -1,6 +1,6 @@
 import { apiBase } from './api';
 
-export type SessionStatus = 'starting' | 'running' | 'exited' | 'failed';
+export type SessionStatus = 'starting' | 'running' | 'exited' | 'failed' | 'interrupted';
 
 export interface Session {
 	id: string;
@@ -19,6 +19,7 @@ export interface Harness {
 	name: string;
 	description: string;
 	kind: 'terminal' | 'acp' | 'native';
+	resumable: boolean;
 }
 
 const JSONAPI = 'application/vnd.api+json';
@@ -66,6 +67,15 @@ export async function createSession(attrs: {
 	});
 	if (!res.ok) throw new Error(await errorMessage(res, 'creating session failed'));
 	return toSession((await res.json()).data);
+}
+
+export async function resumeSession(id: string): Promise<void> {
+	const res = await fetch(`${apiBase}/api/sessions/${id}/resume`, {
+		method: 'PATCH',
+		headers: { 'Content-Type': JSONAPI, Accept: JSONAPI },
+		body: JSON.stringify({ data: { type: 'session', id, attributes: {} } })
+	});
+	if (!res.ok) throw new Error(await errorMessage(res, 'resuming session failed'));
 }
 
 export async function deleteSession(id: string): Promise<void> {
