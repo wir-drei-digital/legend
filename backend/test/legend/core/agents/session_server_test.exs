@@ -7,8 +7,6 @@ defmodule Legend.Core.Agents.SessionServerTest do
   @valid %{harness_id: "claude_code", runtime_id: "test", cwd: "/tmp"}
 
   setup do
-    Legend.Runtimes.Test.subscribe()
-
     on_exit(fn ->
       for {_, pid, _, _} <- DynamicSupervisor.which_children(Legend.Core.Agents.SessionSupervisor) do
         DynamicSupervisor.terminate_child(Legend.Core.Agents.SessionSupervisor, pid)
@@ -16,10 +14,12 @@ defmodule Legend.Core.Agents.SessionServerTest do
     end)
 
     session = Agents.start_session!(@valid)
-    # Forward-compat with Task 7: once the create action starts the server
-    # itself, kill that instance so boot!/1 below can start its own cleanly.
-    # Before Task 7 this is a no-op.
+    # The create action starts the server itself; kill that instance so boot!/1
+    # below can start its own cleanly. Subscribe only AFTER the auto-started
+    # server is gone, so its (fresh) runtime :start never lands in the test
+    # mailbox and pollutes assert_receive (it would mask :resume in particular).
     SessionServer.ensure_stopped(session.id)
+    Legend.Runtimes.Test.subscribe()
     %{session: session}
   end
 
@@ -224,6 +224,55 @@ defmodule Legend.Core.Agents.SessionServerTest do
         &(&1.kind == :system and &1.payload =~ "exited with code 0")
       )
     end)
+  end
+
+  test "fresh start passes session_id and fresh mode to the harness", %{session: session} do
+    boot!(session)
+    assert_receive {:test_runtime, :start, spec, _opts}
+
+    index = Enum.find_index(spec.args, &(&1 == "--session-id"))
+    assert index
+    assert Enum.at(spec.args, index + 1) == session.id
+    refute "--resume" in spec.args
+  end
+
+  test "resume start passes resume mode to the harness", %{session: session} do
+    {:ok, _pid} = SessionServer.start_session(session, :resume)
+    assert_receive {:test_runtime, :start, spec, _opts}
+
+    index = Enum.find_index(spec.args, &(&1 == "--resume"))
+    assert index
+    assert Enum.at(spec.args, index + 1) == session.id
+    refute "--session-id" in spec.args
+  end
+
+  test "unread messages at start fire a catch-up nudge", %{session: session} do
+    sender =
+      Agents.start_session!(%{
+        harness_id: "hermes",
+        runtime_id: "test",
+        cwd: "/tmp",
+        name: "queued"
+      })
+
+    # Message lands while the target session has no live server (it was
+    # ensure_stopped in setup) — simulating downtime.
+    Legend.Core.Signals.send_message!(%{
+      from_session_id: sender.id,
+      to_session_id: session.id,
+      payload: "sent while you were away"
+    })
+
+    boot!(session)
+    assert_receive {:test_runtime, :write, line}, 500
+    assert line =~ "1 unread message(s)"
+    assert line =~ "queued"
+  end
+
+  test "no catch-up nudge when the inbox is empty", %{session: session} do
+    boot!(session)
+    assert_receive {:test_runtime, :start, _spec, _opts}
+    refute_receive {:test_runtime, :write, _}, 200
   end
 
   defp eventually(fun, attempts \\ 50) do

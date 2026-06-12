@@ -19,12 +19,15 @@ defmodule Legend.Core.Agents.SessionServer do
 
   ## Client API
 
-  def start_session(%Agents.Session{} = session) do
-    DynamicSupervisor.start_child(Legend.Core.Agents.SessionSupervisor, {__MODULE__, session})
+  def start_session(%Agents.Session{} = session, mode \\ :fresh) do
+    DynamicSupervisor.start_child(
+      Legend.Core.Agents.SessionSupervisor,
+      {__MODULE__, {session, mode}}
+    )
   end
 
-  def start_link(session) do
-    GenServer.start_link(__MODULE__, session, name: via(session.id))
+  def start_link({session, mode}) do
+    GenServer.start_link(__MODULE__, {session, mode}, name: via(session.id))
   end
 
   @doc """
@@ -78,12 +81,12 @@ defmodule Legend.Core.Agents.SessionServer do
   ## Server
 
   @impl true
-  def init(session) do
+  def init({session, mode}) do
     Process.flag(:trap_exit, true)
 
     with {:ok, harness} <- fetch_registered(Legend.Core.Harness.Registry, session.harness_id),
          {:ok, runtime} <- fetch_registered(Legend.Core.Runtime.Registry, session.runtime_id),
-         spec = harness.build_command(build_opts(session)),
+         spec = harness.build_command(build_opts(session, mode)),
          spec = %{spec | env: Map.merge(spec.env, platform_env(session))},
          {:ok, handle} <- runtime.start(spec, %{owner: self(), cwd: session.cwd}) do
       try do
@@ -91,6 +94,13 @@ defmodule Legend.Core.Agents.SessionServer do
         broadcast(session.id, {:session_status, :running})
         Notifications.sessions_changed()
         Phoenix.PubSub.subscribe(Legend.PubSub, Signals.Notifications.inbox_topic(session.id))
+
+        # Catch-up: messages that arrived while this session had no live server
+        # (downtime, or sent during :starting) are sitting unread — re-feed them
+        # through the normal debounced-nudge path so the agent gets one knock.
+        for message <- Signals.unread_messages!(session.id) do
+          send(self(), {:new_message, Signals.Notifications.summary(message)})
+        end
 
         {:ok,
          %{
@@ -135,13 +145,15 @@ defmodule Legend.Core.Agents.SessionServer do
     end
   end
 
-  defp build_opts(session) do
+  defp build_opts(session, mode) do
     base = %{
       library: %{path: Legend.Core.Library.root(), primer: Legend.Core.Library.primer()},
       messaging: %{
         primer: Signals.messaging_primer(session),
         instructions: session.instructions
-      }
+      },
+      mode: mode,
+      session_id: session.id
     }
 
     case session.mcp_token do
