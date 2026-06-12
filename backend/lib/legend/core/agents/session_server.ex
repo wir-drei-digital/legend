@@ -12,6 +12,10 @@ defmodule Legend.Core.Agents.SessionServer do
   alias Legend.Core.Agents
   alias Legend.Core.Agents.Notifications
   alias Legend.Core.Agents.Scrollback
+  alias Legend.Core.Harness.Terminal
+  alias Legend.Core.Signals
+
+  @nudge_debounce_ms Application.compile_env(:legend, :nudge_debounce_ms, 2_000)
 
   ## Client API
 
@@ -79,25 +83,27 @@ defmodule Legend.Core.Agents.SessionServer do
 
     with {:ok, harness} <- fetch_registered(Legend.Core.Harness.Registry, session.harness_id),
          {:ok, runtime} <- fetch_registered(Legend.Core.Runtime.Registry, session.runtime_id),
-         spec =
-           harness.build_command(%{
-             library: %{path: Legend.Core.Library.root(), primer: Legend.Core.Library.primer()}
-           }),
-         spec = %{spec | env: Map.put(spec.env, "LEGEND_LIBRARY", Legend.Core.Library.root())},
+         spec = harness.build_command(build_opts(session)),
+         spec = %{spec | env: Map.merge(spec.env, platform_env(session))},
          {:ok, handle} <- runtime.start(spec, %{owner: self(), cwd: session.cwd}) do
       try do
         session = Agents.mark_session_running!(session)
         broadcast(session.id, {:session_status, :running})
         Notifications.sessions_changed()
+        Phoenix.PubSub.subscribe(Legend.PubSub, Signals.Notifications.inbox_topic(session.id))
 
         {:ok,
          %{
            session: session,
+           harness: harness,
            runtime: runtime,
            handle: handle,
            scrollback: Scrollback.new(),
            offset: 0,
-           exited?: false
+           exited?: false,
+           nudge_count: 0,
+           nudge_froms: MapSet.new(),
+           nudge_timer: nil
          }}
       rescue
         e ->
@@ -128,6 +134,34 @@ defmodule Legend.Core.Agents.SessionServer do
       :error -> {:error, "not registered: #{id}"}
     end
   end
+
+  defp build_opts(session) do
+    base = %{
+      library: %{path: Legend.Core.Library.root(), primer: Legend.Core.Library.primer()},
+      messaging: %{
+        primer: Signals.messaging_primer(session),
+        instructions: session.instructions
+      }
+    }
+
+    case session.mcp_token do
+      nil -> base
+      token -> Map.put(base, :mcp, %{url: mcp_url(), token: token})
+    end
+  end
+
+  # The web endpoint knows the reachable base URL in every mode (dev :4100,
+  # web/sidecar :4807, test :4002).
+  defp mcp_url, do: LegendWeb.Endpoint.url() <> "/api/mcp"
+
+  defp platform_env(session) do
+    %{"LEGEND_LIBRARY" => Legend.Core.Library.root(), "LEGEND_SESSION_ID" => session.id}
+    |> maybe_put("LEGEND_MCP_URL", session.mcp_token && mcp_url())
+    |> maybe_put("LEGEND_SESSION_TOKEN", session.mcp_token)
+  end
+
+  defp maybe_put(map, _key, nil), do: map
+  defp maybe_put(map, key, value), do: Map.put(map, key, value)
 
   @impl true
   def handle_call(:attach, _from, state) do
@@ -174,10 +208,35 @@ defmodule Legend.Core.Agents.SessionServer do
      }}
   end
 
+  def handle_info({:new_message, _summary}, %{exited?: true} = state), do: {:noreply, state}
+
+  def handle_info({:new_message, summary}, state) do
+    timer = state.nudge_timer || Process.send_after(self(), :nudge_flush, @nudge_debounce_ms)
+
+    {:noreply,
+     %{
+       state
+       | nudge_count: state.nudge_count + 1,
+         nudge_froms: MapSet.put(state.nudge_froms, summary.from_label),
+         nudge_timer: timer
+     }}
+  end
+
+  def handle_info(:nudge_flush, %{exited?: true} = state), do: {:noreply, reset_nudge(state)}
+  def handle_info(:nudge_flush, %{nudge_count: 0} = state), do: {:noreply, reset_nudge(state)}
+
+  def handle_info(:nudge_flush, state) do
+    from = state.nudge_froms |> MapSet.to_list() |> Enum.sort() |> Enum.join(", ")
+    line = Terminal.nudge_line(state.harness, state.nudge_count, from)
+    state.runtime.write(state.handle, line <> "\r")
+    {:noreply, reset_nudge(state)}
+  end
+
   def handle_info({:runtime_exit, _code}, %{exited?: true} = state), do: {:noreply, state}
 
   def handle_info({:runtime_exit, code}, state) do
     session = Agents.finish_session!(state.session, %{exit_code: code})
+    notify_spawner_of_exit(session, code)
     broadcast(session.id, {:session_exit, code})
     Notifications.sessions_changed()
     {:noreply, %{state | session: session, exited?: true}}
@@ -200,6 +259,25 @@ defmodule Legend.Core.Agents.SessionServer do
   end
 
   def terminate(_reason, _state), do: :ok
+
+  defp reset_nudge(state) do
+    %{state | nudge_count: 0, nudge_froms: MapSet.new(), nudge_timer: nil}
+  end
+
+  defp notify_spawner_of_exit(%{spawned_by_session_id: nil}, _code), do: :ok
+
+  defp notify_spawner_of_exit(session, code) do
+    # Best effort: a failed system message must not break exit handling.
+    Signals.send_message(%{
+      from_session_id: session.id,
+      to_session_id: session.spawned_by_session_id,
+      kind: :system,
+      payload:
+        "Session #{session.name || session.harness_id} (#{session.id}) exited with code #{inspect(code)}."
+    })
+
+    :ok
+  end
 
   defp broadcast(id, msg) do
     Phoenix.PubSub.broadcast(Legend.PubSub, "session:#{id}", msg)

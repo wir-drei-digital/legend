@@ -41,3 +41,6 @@ config :legend, library_path: Path.expand("../tmp/test-library", __DIR__)
 
 # Keep the library's *default* root out of the real OS user-data dir in tests.
 config :legend, library_default_root: Path.expand("../tmp/test-library-default", __DIR__)
+
+# Fast nudge debounce so messaging tests don't sleep.
+config :legend, nudge_debounce_ms: 25
