@@ -92,6 +92,23 @@ defmodule LegendWeb.SessionChannelTest do
     assert_push "changed", %{}
   end
 
+  # The messaging feature added a second channel (signals:timeline) that the
+  # sidebar joins on the same socket as the lobby. Guard that joining it does
+  # not interfere with the lobby's create→"changed" notification — the contract
+  # the session list relies on to show newly created sessions live.
+  test "lobby still notifies when signals:timeline shares the socket" do
+    socket = socket(LegendWeb.UserSocket)
+
+    {:ok, _reply, _socket} =
+      subscribe_and_join(socket, LegendWeb.SignalsChannel, "signals:timeline")
+
+    {:ok, _reply, _socket} =
+      subscribe_and_join(socket, LegendWeb.SessionsLobbyChannel, "sessions:lobby")
+
+    Agents.start_session!(@valid)
+    assert_push "changed", %{}
+  end
+
   defp await_buffer(id, expected, attempts \\ 50) do
     case SessionServer.attach(id) do
       {:ok, %{buffer: ^expected}} = ok ->
