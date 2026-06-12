@@ -28,7 +28,7 @@ Legend is an orchestrator whose capabilities arrive as plugins. Extension points
 
 | Seam | Contract | Implemented | Reserved |
 |---|---|---|---|
-| **Harness** — *which agent* | `Legend.Core.Harness` (`definition/0`, kind enum) + `Legend.Core.Harness.Terminal` (`build_command/1` over `library`/`mcp`/`messaging` opts; optional `nudge_line/2`) | `:terminal`: ClaudeCode, Hermes | `:acp` (JSON-RPC subprocess, rich UI), `:native` (in-BEAM, e.g. Jido) |
+| **Harness** — *which agent* | `Legend.Core.Harness` (`definition/0`, kind enum, `resumable`) + `Legend.Core.Harness.Terminal` (`build_command/1` over `library`/`mcp`/`messaging`/`mode` opts; optional `nudge_line/2`) | `:terminal`: ClaudeCode, Hermes | `:acp` (JSON-RPC subprocess, rich UI), `:native` (in-BEAM, e.g. Jido) |
 | **Runtime** — *where it executes* | `Legend.Core.Runtime` (`start/write/resize/stop` + `{:runtime_output,_}`/`{:runtime_exit,_}` owner messages) | `LocalPty` (erlexec, true PTY) | Docker / Fly / hosted sandbox / reverse tunnel |
 | **Library storage** — *where shared files live* | `Legend.Core.Library.Storage` (`list_tree/read/write/delete`, relative paths) | `LocalDisk` | S3/synced adapter + runtime-side materialization |
 
@@ -45,7 +45,7 @@ A session composes one harness with one runtime. The record (`Legend.Core.Agents
 - **Scrollback + offset protocol:** the server owns a bounded ring buffer (~256 KB, never drops the newest chunk) and broadcasts `{:session_output, chunk_offset, data}` with a monotonic byte offset. Channels subscribe *before* snapshotting and drop chunks below the snapshot offset — provably loss- and duplication-free reattach.
 - **Channel surface:** `session:<id>` (join = status + base64 scrollback replay; in: input/resize/stop; out: output/exit/status), `sessions:lobby` ("changed" → clients refetch). Terminal bytes are base64 in JSON frames.
 - **Exit ≠ deletion:** after the CLI exits the server stays alive in `:exited` so scrollback remains viewable until the session is deleted.
-- **Sessions die with the backend** (accepted): a boot janitor marks orphaned `:starting/:running` records as failed so the UI never shows phantoms.
+- **Restart = suspend/resume, not death.** Agent processes still die with the backend (local PTYs are children of the BEAM), but the boot janitor marks orphans **`:interrupted`**, and a manual `:resume` action (allowed from `:interrupted` and `:exited`; never automatic — the human conducts) relaunches a fresh process into the *same conversation*: the `Terminal` contract's `mode: :fresh | :resume` maps to Claude Code's `--session-id <legend-id>` / `--resume <legend-id>` (our session id *is* the agent's conversation id; instructions omitted on resume). Non-resumable harnesses degrade to a fresh restart in the same cwd (`Definition.resumable` lets the UI say Resume vs Restart). Accepted: in-flight work dies at restart (the conversation resumes, not the interrupted turn) and pre-restart scrollback is gone (the agent redraws). On any (re)start, an unread inbox fires a catch-up nudge — the signal bus buffers across the outage.
 - Frontend reconnect: phoenix.js re-fires join hooks on rejoin — the scrollback snapshot is written exactly once (guard in `Terminal.svelte`).
 
 ## Shared library
@@ -99,6 +99,7 @@ Recorded in the specs so today's contracts don't need rework:
 - **Native harnesses** (`:native`) → in-BEAM agents (Jido candidate), no subprocess.
 - **Cloud runtimes** → same `Runtime` behaviour; library materialization (mount/sync) is the runtime's job; `$LEGEND_LIBRARY` stays the location-transparent contract.
 - **Rooms / group chat:** the built signal bus is pairwise; rooms add membership + a shared timeline as a grouping layer on top (`room:<id>` topics, envelope gains `room_id`). Humans stay first-class members. Into agents, only the delivery adapter varies: native → direct, ACP → prompt request, terminal → the existing nudge. Out of agents: native > ACP > the existing MCP tools > human relay.
+- **Fully detached sessions (true survival):** today's resume model is suspend/resume — in-flight work dies at restart. The upgrade is a detacher owning the PTY *outside* the BEAM (tmux `legend-<id>` sessions for dev; a bundled dtach/abduco for the self-contained desktop, with scrollback self-persisted to disk so detachers stay interchangeable), letting agents keep working while the backend is down; the boot pass then *reattaches* instead of marking interrupted. ACP harnesses answer the same "can this session come back?" question with `session/load` (a pipe-holding relay would be their true-survival analog). `:interrupted` + `:resume` remain the fallback when the detached session is gone.
 - **Federation:** local + cloud instances; the local instance pairs outbound (reverse tunnel) and registers its sessions; auth arrives here at the latest.
 
 ## Spec index (full reasoning per feature)
@@ -107,4 +108,5 @@ Recorded in the specs so today's contracts don't need rework:
 - `docs/superpowers/specs/2026-06-11-shared-library-design.md` — library, storage seam, env/primer split, containment
 - `docs/superpowers/specs/2026-06-12-settings-design.md` — settings store, root precedence, boot reordering
 - `docs/superpowers/specs/2026-06-12-agent-messaging-design.md` — signal bus, MCP tools/endpoint, delegation/handoff, nudge delivery
+- `docs/superpowers/specs/2026-06-12-session-resume-design.md` — interrupted status, resume action, suspend/resume vs detacher
 - `docs/superpowers/specs/2026-06-10-legend-scaffold-design.md` — original stack/scaffold decisions
