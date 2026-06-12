@@ -9,12 +9,54 @@
 		resetLibraryPath,
 		type LibraryPathInfo
 	} from '$lib/settings';
+	import { applyHarnessSetup, listHarnesses, type Harness } from '$lib/sessions';
 
 	let info = $state<LibraryPathInfo | null>(null);
 	let path = $state('');
 	let error = $state('');
 	let saved = $state(false);
 	let confirmingReset = $state(false);
+
+	let harnesses = $state<Harness[]>([]);
+	let harnessError = $state('');
+	let applyingId = $state('');
+	let appliedMsg = $state<Record<string, string>>({});
+
+	const withSetup = $derived(harnesses.filter((h) => h.setup.status !== 'not_applicable'));
+
+	async function loadHarnesses() {
+		harnessError = '';
+		try {
+			harnesses = await listHarnesses();
+		} catch (e) {
+			harnessError = e instanceof Error ? e.message : 'failed to load harnesses';
+		}
+	}
+
+	async function applyFor(harness: Harness) {
+		if (applyingId) return;
+		applyingId = harness.id;
+		harnessError = '';
+		try {
+			await applyHarnessSetup(harness.id);
+			await loadHarnesses();
+			const updated = harnesses.find((h) => h.id === harness.id);
+			if (updated?.setup.status === 'ok') {
+				appliedMsg = {
+					...appliedMsg,
+					[harness.id]: updated.setup.restart_hint
+						? `Applied — restart existing ${harness.name} sessions to pick this up.`
+						: 'Applied.'
+				};
+			} else {
+				harnessError = updated?.setup.detail ?? updated?.setup.summary ?? 'setup did not complete';
+			}
+		} catch (e) {
+			harnessError = e instanceof Error ? e.message : 'setup failed';
+		} finally {
+			applyingId = '';
+		}
+	}
 
 	const envLocked = $derived(info?.source === 'env');
 
@@ -61,7 +103,10 @@
 		}
 	}
 
-	onMount(() => void load());
+	onMount(() => {
+		void load();
+		void loadHarnesses();
+	});
 </script>
 
 <div class="mx-auto flex max-w-2xl flex-col gap-6 p-8">
@@ -115,4 +160,51 @@
 			<p class="text-sm text-destructive">{error}</p>
 		{/if}
 	</section>
+
+	{#if withSetup.length > 0 || harnessError}
+		<section class="flex flex-col gap-3">
+			<h2 class="text-sm font-medium">Harness integrations</h2>
+
+			{#each withSetup as harness (harness.id)}
+				<div class="flex flex-col gap-2 rounded-md border p-3">
+					<div class="flex items-center gap-2">
+						<span class="text-sm font-medium">{harness.name}</span>
+						{#if harness.setup.status === 'ok'}
+							<span class="text-sm text-emerald-600">✓ configured</span>
+						{:else if harness.setup.status === 'missing'}
+							<span class="text-sm text-muted-foreground">not configured</span>
+						{:else}
+							<span class="text-sm text-destructive">configuration error</span>
+						{/if}
+					</div>
+
+					<p class="text-sm text-muted-foreground">{harness.setup.summary}</p>
+
+					{#if harness.setup.status === 'missing'}
+						<div>
+							<Button
+								size="sm"
+								onclick={() => applyFor(harness)}
+								disabled={applyingId === harness.id}
+							>
+								{applyingId === harness.id ? 'Applying…' : 'Apply'}
+							</Button>
+						</div>
+					{/if}
+
+					{#if harness.setup.status === 'error' && harness.setup.detail}
+						<pre class="overflow-x-auto rounded bg-muted p-2 text-xs">{harness.setup.detail}</pre>
+					{/if}
+
+					{#if appliedMsg[harness.id]}
+						<p class="text-sm text-emerald-600">{appliedMsg[harness.id]}</p>
+					{/if}
+				</div>
+			{/each}
+
+			{#if harnessError}
+				<p class="text-sm text-destructive">{harnessError}</p>
+			{/if}
+		</section>
+	{/if}
 </div>
