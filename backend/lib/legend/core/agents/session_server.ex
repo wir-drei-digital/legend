@@ -16,6 +16,7 @@ defmodule Legend.Core.Agents.SessionServer do
   alias Legend.Core.Signals
 
   @nudge_debounce_ms Application.compile_env(:legend, :nudge_debounce_ms, 2_000)
+  @nudge_submit_delay_ms Application.compile_env(:legend, :nudge_submit_delay_ms, 150)
 
   ## Client API
 
@@ -240,8 +241,18 @@ defmodule Legend.Core.Agents.SessionServer do
   def handle_info(:nudge_flush, state) do
     from = state.nudge_froms |> MapSet.to_list() |> Enum.sort() |> Enum.join(", ")
     line = Terminal.nudge_line(state.harness, state.nudge_count, from)
-    state.runtime.write(state.handle, line <> "\r")
+    state.runtime.write(state.handle, line)
+    # The CR must arrive as a separate, later keypress: ink-based TUIs (Claude
+    # Code) treat text+CR in one chunk as a paste — inserted, never submitted.
+    Process.send_after(self(), :nudge_submit, @nudge_submit_delay_ms)
     {:noreply, reset_nudge(state)}
+  end
+
+  def handle_info(:nudge_submit, %{exited?: true} = state), do: {:noreply, state}
+
+  def handle_info(:nudge_submit, state) do
+    state.runtime.write(state.handle, "\r")
+    {:noreply, state}
   end
 
   def handle_info({:runtime_exit, _code}, %{exited?: true} = state), do: {:noreply, state}

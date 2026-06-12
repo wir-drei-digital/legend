@@ -190,9 +190,13 @@ defmodule Legend.Core.Agents.SessionServerTest do
     assert line =~ "2 unread message(s)"
     assert line =~ "researcher"
     assert line =~ "read_messages"
-    assert String.ends_with?(line, "\r")
+    refute String.ends_with?(line, "\r")
 
-    # Debounce: both messages coalesced into a single write.
+    # The submit CR arrives as a separate, delayed keypress — ink TUIs (Claude
+    # Code) treat text+CR in a single chunk as a paste and never submit it.
+    assert_receive {:test_runtime, :write, "\r"}, 500
+
+    # Debounce: both messages coalesced into a single nudge.
     refute_receive {:test_runtime, :write, _}, 200
   end
 

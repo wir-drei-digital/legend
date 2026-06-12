@@ -52,7 +52,14 @@
 		const chan = getSocket().channel(`session:${sessionId}`);
 		channel = chan;
 
-		term.onData((data) => chan.push('input', { data }));
+		// Replaying scrollback makes xterm.js answer any device/color queries
+		// (e.g. Hermes' OSC 11 background probe) buried in it — answers the app
+		// stopped waiting for long ago. Mute input during the replay write so
+		// they never reach the PTY as keystrokes.
+		let replaying = false;
+		term.onData((data) => {
+			if (!replaying) chan.push('input', { data });
+		});
 		term.onResize(({ cols, rows }) => chan.push('resize', { cols, rows }));
 
 		chan.on('output', ({ data }: { data: string }) => term.write(b64ToBytes(data)));
@@ -68,7 +75,10 @@
 			.receive('ok', (reply: JoinReply) => {
 				// phoenix re-fires this hook on every socket rejoin: re-sync status
 				// and size each time, but write the scrollback snapshot only once.
-				if (!joined && reply.buffer) term.write(b64ToBytes(reply.buffer));
+				if (!joined && reply.buffer) {
+					replaying = true;
+					term.write(b64ToBytes(reply.buffer), () => (replaying = false));
+				}
 				joined = true;
 				onstatus?.(reply.status, reply.exit_code, reply.error);
 				chan.push('resize', { cols: term.cols, rows: term.rows });

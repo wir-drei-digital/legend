@@ -42,8 +42,9 @@ config :legend, library_path: Path.expand("../tmp/test-library", __DIR__)
 # Keep the library's *default* root out of the real OS user-data dir in tests.
 config :legend, library_default_root: Path.expand("../tmp/test-library-default", __DIR__)
 
-# Fast nudge debounce so messaging tests don't sleep.
+# Fast nudge debounce/submit so messaging tests don't sleep.
 config :legend, nudge_debounce_ms: 25
+config :legend, nudge_submit_delay_ms: 5
 
 # Tests must never read or write the real ~/.hermes. Controller tests that
 # need a real dir override this per-test with Application.put_env/3.
