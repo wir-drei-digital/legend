@@ -10,6 +10,8 @@ defmodule Legend.Core.Agents.Session do
     data_layer: AshSqlite.DataLayer,
     extensions: [AshJsonApi.Resource]
 
+  import Ash.Resource.Validation.Builtins
+
   alias Legend.Core.Agents.Validations.KnownRegistryId
 
   sqlite do
@@ -39,6 +41,17 @@ defmodule Legend.Core.Agents.Session do
 
       validate {KnownRegistryId, attribute: :harness_id, registry: Legend.Core.Harness.Registry}
       validate {KnownRegistryId, attribute: :runtime_id, registry: Legend.Core.Runtime.Registry}
+
+      # name flows into the PTY nudge label and renders in the UI / read_messages
+      # output — reject control chars (the PTY-injection vector) and cap length.
+      validate match(:name, ~r/\A[^[:cntrl:]]*\z/u) do
+        message "must not contain control characters"
+        where present(:name)
+      end
+
+      validate string_length(:name, max: 120) do
+        where present(:name)
+      end
 
       # after_transaction (not after_action): SessionServer.start_session/1
       # writes to the DB from the server process, which must run OUTSIDE the

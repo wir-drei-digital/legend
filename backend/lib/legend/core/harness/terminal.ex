@@ -39,12 +39,25 @@ defmodule Legend.Core.Harness.Terminal do
 
   @doc "Resolves the nudge line via the harness override or the default."
   def nudge_line(harness, count, from) do
+    from = sanitize_label(from)
+
     if function_exported?(harness, :nudge_line, 2) do
       harness.nudge_line(count, from)
     else
       default_nudge_line(count, from)
     end
   end
+
+  # The label flows from an agent-controllable session name into PTY stdin —
+  # strip control chars (CR/LF/ESC/etc.) so it can't inject keystrokes or ANSI
+  # sequences into the recipient's terminal, and bound its length.
+  defp sanitize_label(from) when is_binary(from) do
+    from
+    |> String.replace(~r/[[:cntrl:]]/u, "")
+    |> String.slice(0, 80)
+  end
+
+  defp sanitize_label(_), do: "unknown"
 
   @doc false
   def default_nudge_line(count, from) do

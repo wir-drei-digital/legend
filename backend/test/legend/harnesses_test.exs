@@ -125,5 +125,19 @@ defmodule Legend.HarnessesTest do
       assert line =~ "hermes"
       assert line =~ "read_messages"
     end
+
+    test "nudge_line strips control chars from the sender label" do
+      line =
+        Legend.Core.Harness.Terminal.nudge_line(
+          Legend.Harnesses.ClaudeCode,
+          1,
+          "evil\rrm -rf ~\r\e[2J"
+        )
+
+      refute line =~ "\r"
+      refute line =~ "\e"
+      refute line =~ "\n"
+      assert line =~ "read_messages"
+    end
   end
 end

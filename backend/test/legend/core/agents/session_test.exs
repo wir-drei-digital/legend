@@ -104,6 +104,26 @@ defmodule Legend.Core.Agents.SessionTest do
       assert {:error, _} = Agents.get_session_by_token("nope")
     end
 
+    test "start rejects a name with control characters" do
+      assert {:error, %Ash.Error.Invalid{}} =
+               Agents.start_session(%{
+                 harness_id: "claude_code",
+                 runtime_id: "test",
+                 cwd: "/tmp",
+                 name: "evil\rinjected"
+               })
+    end
+
+    test "start rejects an over-long name" do
+      assert {:error, %Ash.Error.Invalid{}} =
+               Agents.start_session(%{
+                 harness_id: "claude_code",
+                 runtime_id: "test",
+                 cwd: "/tmp",
+                 name: String.duplicate("x", 200)
+               })
+    end
+
     test "mcp_token cannot be forged through :start" do
       # mcp_token is not an accepted input on the :start action, so Ash rejects
       # the forged key outright (NoSuchInput) rather than silently dropping it.
