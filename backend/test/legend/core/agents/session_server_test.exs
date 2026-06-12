@@ -150,6 +150,82 @@ defmodule Legend.Core.Agents.SessionServerTest do
     assert "--append-system-prompt" in spec.args
   end
 
+  test "sessions get MCP env vars and harness opts", %{session: session} do
+    boot!(session)
+    assert_receive {:test_runtime, :start, spec, _opts}
+
+    assert spec.env["LEGEND_SESSION_ID"] == session.id
+    assert spec.env["LEGEND_SESSION_TOKEN"] == session.mcp_token
+    assert String.ends_with?(spec.env["LEGEND_MCP_URL"], "/api/mcp")
+    # claude_code turns the mcp opts into --mcp-config args — proof build_command got them.
+    assert "--mcp-config" in spec.args
+  end
+
+  test "an inbox message produces one debounced nudge write", %{session: session} do
+    boot!(session)
+    assert_receive {:test_runtime, :start, _spec, _opts}
+
+    sender =
+      Agents.start_session!(%{
+        harness_id: "hermes",
+        runtime_id: "test",
+        cwd: "/tmp",
+        name: "researcher"
+      })
+
+    Legend.Core.Signals.send_message!(%{
+      from_session_id: sender.id,
+      to_session_id: session.id,
+      payload: "one"
+    })
+
+    Legend.Core.Signals.send_message!(%{
+      from_session_id: sender.id,
+      to_session_id: session.id,
+      payload: "two"
+    })
+
+    assert_receive {:test_runtime, :write, line}, 500
+    assert line =~ "2 unread message(s)"
+    assert line =~ "researcher"
+    assert line =~ "read_messages"
+    assert String.ends_with?(line, "\r")
+
+    # Debounce: both messages coalesced into a single write.
+    refute_receive {:test_runtime, :write, _}, 200
+  end
+
+  test "no nudge after exit", %{session: session} do
+    pid = boot!(session)
+    assert_receive {:test_runtime, :start, _spec, _opts}
+    send(pid, {:runtime_exit, 0})
+    eventually(fn -> Agents.get_session!(session.id).status == :exited end)
+
+    Legend.Core.Signals.send_message!(%{to_session_id: session.id, payload: "anyone home?"})
+    refute_receive {:test_runtime, :write, _}, 200
+  end
+
+  test "exit posts a system message to the spawner", %{session: session} do
+    child =
+      Agents.start_session!(%{
+        harness_id: "hermes",
+        runtime_id: "test",
+        cwd: "/tmp",
+        spawned_by_session_id: session.id
+      })
+
+    SessionServer.ensure_stopped(child.id)
+    pid = boot!(child)
+    send(pid, {:runtime_exit, 0})
+
+    eventually(fn ->
+      Enum.any?(
+        Legend.Core.Signals.unread_messages!(session.id),
+        &(&1.kind == :system and &1.payload =~ "exited with code 0")
+      )
+    end)
+  end
+
   defp eventually(fun, attempts \\ 50) do
     cond do
       fun.() ->

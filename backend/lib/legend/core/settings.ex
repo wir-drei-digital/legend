@@ -5,7 +5,9 @@ defmodule Legend.Core.Settings do
   controllers. Well-known keys: "library_path".
   """
 
-  use Ash.Domain, otp_app: :legend
+  # Every domain in :ash_domains must carry the AshJsonApi.Domain extension so
+  # LegendWeb.AshJsonApiRouter can probe it for routes; we expose none (no json_api block).
+  use Ash.Domain, otp_app: :legend, extensions: [AshJsonApi.Domain]
 
   resources do
     resource Legend.Core.Settings.Setting do

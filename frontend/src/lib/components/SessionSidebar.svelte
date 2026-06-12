@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import NewSessionDialog from '$lib/components/NewSessionDialog.svelte';
+	import { messagesStore } from '$lib/stores/messages.svelte';
 	import { sessionsStore } from '$lib/stores/sessions.svelte';
 	import type { SessionStatus } from '$lib/sessions';
 
@@ -8,6 +9,7 @@
 	// lifetime, so no teardown is needed if the sidebar ever remounts.
 	$effect(() => {
 		sessionsStore.connect();
+		messagesStore.connect();
 	});
 
 	const dotClass: Record<SessionStatus, string> = {
@@ -30,6 +32,11 @@
 			>
 				<span title={session.status} class="size-2 shrink-0 rounded-full {dotClass[session.status]}"></span>
 				<span class="truncate">{session.name || session.harness_id}</span>
+				{#if messagesStore.unreadCount(session.id) > 0}
+					<span class="shrink-0 rounded-full bg-amber-500 px-1.5 text-xs text-white">
+						{messagesStore.unreadCount(session.id)}
+					</span>
+				{/if}
 				<span class="ml-auto shrink-0 text-xs text-muted-foreground">{session.harness_id}</span>
 			</a>
 		{:else}
@@ -43,9 +50,16 @@
 		<a
 			href="/"
 			class="flex-1 rounded-md px-2 py-1.5 text-center hover:bg-accent
-				{!page.url.pathname.startsWith('/library') && !page.url.pathname.startsWith('/settings')
+				{!page.url.pathname.startsWith('/library') &&
+				!page.url.pathname.startsWith('/messages') &&
+				!page.url.pathname.startsWith('/settings')
 				? 'bg-accent'
 				: ''}">Sessions</a
+		>
+		<a
+			href="/messages"
+			class="flex-1 rounded-md px-2 py-1.5 text-center hover:bg-accent
+				{page.url.pathname.startsWith('/messages') ? 'bg-accent' : ''}">Messages</a
 		>
 		<a
 			href="/library"

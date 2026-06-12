@@ -51,6 +51,21 @@ defmodule LegendWeb.SessionApiTest do
              json_response(conn, 200)
   end
 
+  test "GET /api/sessions never exposes mcp_token", %{conn: conn} do
+    session =
+      Legend.Core.Agents.start_session!(%{
+        harness_id: "claude_code",
+        runtime_id: "test",
+        cwd: "/tmp"
+      })
+
+    conn = get(conn, "/api/sessions")
+    body = response(conn, 200)
+
+    refute body =~ "mcp_token"
+    refute body =~ session.mcp_token
+  end
+
   test "DELETE /api/sessions/:id destroys", %{conn: conn} do
     session =
       Legend.Core.Agents.start_session!(%{harness_id: "hermes", runtime_id: "test", cwd: "/tmp"})

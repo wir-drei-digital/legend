@@ -10,6 +10,8 @@ defmodule Legend.Core.Agents.Session do
     data_layer: AshSqlite.DataLayer,
     extensions: [AshJsonApi.Resource]
 
+  import Ash.Resource.Validation.Builtins
+
   alias Legend.Core.Agents.Validations.KnownRegistryId
 
   sqlite do
@@ -28,11 +30,28 @@ defmodule Legend.Core.Agents.Session do
       prepare build(sort: [inserted_at: :desc])
     end
 
+    read :by_token do
+      argument :token, :string, allow_nil?: false, sensitive?: true
+      get? true
+      filter expr(mcp_token == ^arg(:token))
+    end
+
     create :start do
-      accept [:name, :harness_id, :runtime_id, :cwd]
+      accept [:name, :harness_id, :runtime_id, :cwd, :spawned_by_session_id, :instructions]
 
       validate {KnownRegistryId, attribute: :harness_id, registry: Legend.Core.Harness.Registry}
       validate {KnownRegistryId, attribute: :runtime_id, registry: Legend.Core.Runtime.Registry}
+
+      # name flows into the PTY nudge label and renders in the UI / read_messages
+      # output — reject control chars (the PTY-injection vector) and cap length.
+      validate match(:name, ~r/\A[^[:cntrl:]]*\z/u) do
+        message "must not contain control characters"
+        where present(:name)
+      end
+
+      validate string_length(:name, max: 120) do
+        where present(:name)
+      end
 
       # after_transaction (not after_action): SessionServer.start_session/1
       # writes to the DB from the server process, which must run OUTSIDE the
@@ -117,9 +136,24 @@ defmodule Legend.Core.Agents.Session do
     attribute :started_at, :utc_datetime, public?: true
     attribute :ended_at, :utc_datetime, public?: true
 
+    # Delegation lineage: the session that called start_agent/handoff to create this one.
+    attribute :spawned_by_session_id, :uuid, public?: true
+
+    # Launch task delivered as the CLI's initial prompt (spawned sessions only).
+    attribute :instructions, :string, public?: true, constraints: [max_length: 65_536]
+
+    # Bearer token mapping MCP calls to this session. Nullable only for
+    # pre-feature rows (dead after restart anyway); never exposed via JSON:API.
+    attribute :mcp_token, :string,
+      sensitive?: true,
+      default: &Legend.Core.Agents.Session.generate_token/0
+
     timestamps public?: true
   end
 
   @doc false
   def default_cwd, do: System.user_home!()
+
+  @doc false
+  def generate_token, do: :crypto.strong_rand_bytes(24) |> Base.url_encode64(padding: false)
 end

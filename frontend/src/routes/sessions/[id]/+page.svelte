@@ -1,11 +1,16 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
+	import MessagesPanel from '$lib/components/MessagesPanel.svelte';
 	import Terminal from '$lib/components/Terminal.svelte';
 	import { Button } from '$lib/components/ui/button';
+	import { messagesStore } from '$lib/stores/messages.svelte';
 	import { deleteSession, type SessionStatus } from '$lib/sessions';
 
 	const sessionId = $derived(page.params.id!);
+
+	let showMessages = $state(false);
+	const unread = $derived(messagesStore.unreadCount(sessionId));
 
 	let status = $state<SessionStatus | null>(null);
 	let exitCode = $state<number | null>(null);
@@ -43,6 +48,9 @@
 			<span class="truncate text-sm text-destructive">{error}</span>
 		{/if}
 		<div class="ml-auto flex gap-2">
+			<Button variant="outline" size="sm" onclick={() => (showMessages = !showMessages)}>
+				Messages{#if unread > 0}&nbsp;({unread}){/if}
+			</Button>
 			{#if status === 'running' || status === 'starting'}
 				<Button variant="outline" size="sm" onclick={() => terminal?.requestStop()}>Stop</Button>
 			{:else}
@@ -51,9 +59,14 @@
 		</div>
 	</div>
 
-	<div class="min-h-0 flex-1">
-		{#key sessionId}
-			<Terminal bind:this={terminal} {sessionId} onstatus={handleStatus} />
-		{/key}
+	<div class="flex min-h-0 flex-1">
+		<div class="min-h-0 min-w-0 flex-1">
+			{#key sessionId}
+				<Terminal bind:this={terminal} {sessionId} onstatus={handleStatus} />
+			{/key}
+		</div>
+		{#if showMessages}
+			<MessagesPanel {sessionId} />
+		{/if}
 	</div>
 </div>
