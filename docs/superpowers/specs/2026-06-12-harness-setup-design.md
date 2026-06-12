@@ -51,7 +51,7 @@ The Hermes harness module delegates its `setup/0` / `apply_setup/0` to this sibl
 
 The existing harnesses fetch carries `setup` along; both surfaces render the same fields.
 
-- **New-session form:** when the selected harness's `setup.status === 'missing'` and the per-harness dismissal flag is unset, show an inline notice — *"{harness.name}: {setup.summary}"* — with **Apply** and **Dismiss** buttons (in-UI buttons only; `window.confirm` is a no-op in Tauri). Apply → POST → refresh harnesses → if `restart_hint`, show "restart existing {name} sessions to pick this up". Dismiss → persists `harness_setup_dismissed:<harness_id> = "true"` via the existing settings API; the prompt never nags again for that harness.
+- **New-session form:** when the selected harness's `setup.status === 'missing'` and the per-harness dismissal flag is unset, show an inline notice — *"{harness.name}: {setup.summary}"* — with **Apply** and **Dismiss** buttons (in-UI buttons only; `window.confirm` is a no-op in Tauri). Apply → POST → refresh harnesses → if `restart_hint`, show "restart existing {name} sessions to pick this up". Dismiss → persists `legend:harness-setup-dismissed:<harness_id>` in `localStorage` (plan-time amendment: the settings API deliberately has no generic key-value CRUD, and a nag-dismissal is per-UI preference, not server state — the settings card remains the durable affordance); the prompt never nags again for that harness in that browser/app.
 - **`/settings` — "Harness integrations" section:** lists every harness whose `setup.status ≠ 'not_applicable'` with status badge; **Apply** button on `missing` (available regardless of dismissal — the permanent home for the affordance); on `error`, render `detail` as a copyable manual-fix snippet.
 
 ## Error handling
@@ -78,5 +78,5 @@ The existing harnesses fetch carries `setup` along; both surfaces render the sam
 | Optional callbacks (like `nudge_line`) | Harnesses without setup needs stay two-callback simple |
 | YAML round-trip (user choice) | Handles any file shape; comment/order loss matches Hermes' own tooling; `.legend-backup` + atomic write as escape hatch |
 | Consent = the button click | Never write a `$HOME` file Legend doesn't own without an explicit action |
-| Per-harness dismissal in Settings | Prompt must not nag; settings card remains the permanent affordance |
+| Per-harness dismissal in `localStorage` | Prompt must not nag; it's UI preference (no generic settings CRUD exists, by design); settings card remains the permanent affordance |
 | One setup unit per harness | YAGNI — no multi-step/parameterized setup framework |
