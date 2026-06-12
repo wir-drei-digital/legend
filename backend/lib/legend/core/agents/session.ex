@@ -118,6 +118,14 @@ defmodule Legend.Core.Agents.Session do
       change set_attribute(:error, nil)
       change set_attribute(:ended_at, nil)
 
+      # The old server may still be alive (an :exited server keeps scrollback
+      # until deleted) — stop it so the restart can re-register under the same
+      # id. Runs after validation: a rejected resume never kills anything.
+      change before_action(fn changeset, _context ->
+               Legend.Core.Agents.SessionServer.ensure_stopped(changeset.data.id)
+               changeset
+             end)
+
       change after_transaction(fn
                _changeset, {:ok, session}, _context ->
                  case Legend.Core.Agents.SessionServer.start_session(session, :resume) do
@@ -125,6 +133,10 @@ defmodule Legend.Core.Agents.Session do
                      {:ok, Legend.Core.Agents.get_session!(session.id)}
 
                    :ignore ->
+                     {:ok, Legend.Core.Agents.get_session!(session.id)}
+
+                   {:error, {:already_started, _pid}} ->
+                     # Lost a benign race with another resume — the session is live.
                      {:ok, Legend.Core.Agents.get_session!(session.id)}
 
                    {:error, reason} ->

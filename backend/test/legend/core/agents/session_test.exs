@@ -165,9 +165,6 @@ defmodule Legend.Core.Agents.SessionTest do
       send(pid, {:runtime_exit, 0})
 
       eventually(fn -> Agents.get_session!(session.id).status == :exited end)
-      # The exited server stays alive holding scrollback — stop it so resume
-      # can register a fresh one under the same id.
-      Legend.Core.Agents.SessionServer.ensure_stopped(session.id)
 
       resumed = Agents.resume_session!(Agents.get_session!(session.id))
       assert resumed.status == :running
@@ -179,6 +176,17 @@ defmodule Legend.Core.Agents.SessionTest do
         Agents.start_session!(%{harness_id: "claude_code", runtime_id: "test", cwd: "/tmp"})
 
       assert {:error, %Ash.Error.Invalid{}} = Agents.resume_session(session)
+    end
+
+    test "a rejected resume never stops the live server" do
+      session =
+        Agents.start_session!(%{harness_id: "claude_code", runtime_id: "test", cwd: "/tmp"})
+
+      pid = Legend.Core.Agents.SessionServer.whereis(session.id)
+
+      assert {:error, %Ash.Error.Invalid{}} = Agents.resume_session(session)
+      assert Process.alive?(pid)
+      assert Legend.Core.Agents.SessionServer.whereis(session.id) == pid
     end
 
     defp eventually(fun, attempts \\ 50) do
