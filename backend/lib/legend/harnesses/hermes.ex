@@ -32,8 +32,16 @@ defmodule Legend.Harnesses.Hermes do
 
   # Hermes' CLI primer mechanism is unknown; deliver only when the operator
   # configures a flag template (HARNESS_HERMES_PRIMER_FLAG), per the contract.
-  # MCP registration likewise rides the env-var fallback (LEGEND_MCP_URL /
-  # LEGEND_SESSION_TOKEN) rather than CLI flags.
+  # Hermes has no per-launch MCP flag either — registration is a one-time
+  # operator entry in ~/.hermes/config.yaml that Hermes resolves from the
+  # process env Legend injects (see ARCHITECTURE.md "Per-harness MCP
+  # registration"):
+  #
+  #   mcp_servers:
+  #     legend:
+  #       url: ${LEGEND_MCP_URL}
+  #       headers:
+  #         Authorization: Bearer ${LEGEND_SESSION_TOKEN}
   defp primer_args(opts) do
     primers = Terminal.primers(opts)
 
