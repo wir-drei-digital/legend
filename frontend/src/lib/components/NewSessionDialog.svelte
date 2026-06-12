@@ -35,6 +35,13 @@
 			!dismissed[selectedHarness.id]
 	);
 
+	// Selection change invalidates any setup messages from the previous harness.
+	$effect(() => {
+		harnessId;
+		setupError = '';
+		setupApplied = '';
+	});
+
 	async function applySetup() {
 		if (!selectedHarness || applyingSetup) return;
 		const harness = selectedHarness;
@@ -43,9 +50,14 @@
 		try {
 			await applyHarnessSetup(harness.id);
 			harnesses = await listHarnesses();
-			setupApplied = harness.setup.restart_hint
-				? `Applied — restart existing ${harness.name} sessions to pick this up.`
-				: 'Applied.';
+			const updated = harnesses.find((h) => h.id === harness.id);
+			if (updated?.setup.status === 'ok') {
+				setupApplied = updated.setup.restart_hint
+					? `Applied — restart existing ${harness.name} sessions to pick this up.`
+					: 'Applied.';
+			} else {
+				setupError = updated?.setup.detail ?? updated?.setup.summary ?? 'setup did not complete';
+			}
 		} catch (e) {
 			setupError = e instanceof Error ? e.message : 'setup failed';
 		} finally {
