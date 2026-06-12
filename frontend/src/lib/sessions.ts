@@ -14,12 +14,20 @@ export interface Session {
 	error: string | null;
 }
 
+export interface HarnessSetup {
+	status: 'ok' | 'missing' | 'error' | 'not_applicable';
+	summary: string;
+	detail: string | null;
+	restart_hint: boolean;
+}
+
 export interface Harness {
 	id: string;
 	name: string;
 	description: string;
 	kind: 'terminal' | 'acp' | 'native';
 	resumable: boolean;
+	setup: HarnessSetup;
 }
 
 const JSONAPI = 'application/vnd.api+json';
@@ -84,4 +92,37 @@ export async function deleteSession(id: string): Promise<void> {
 		headers: { Accept: JSONAPI }
 	});
 	if (!res.ok && res.status !== 204) throw new Error(await errorMessage(res, 'deleting session failed'));
+}
+
+export async function applyHarnessSetup(id: string): Promise<HarnessSetup> {
+	const res = await fetch(`${apiBase}/api/harnesses/${id}/setup`, { method: 'POST' });
+	if (!res.ok) {
+		let detail = `${res.status}`;
+		try {
+			detail = (await res.json()).error ?? detail;
+		} catch {
+			// keep status code
+		}
+		throw new Error(`harness setup failed: ${detail}`);
+	}
+	return (await res.json()).data;
+}
+
+// Nag-dismissal is per-UI preference, not server state (spec amendment).
+const dismissKey = (id: string) => `legend:harness-setup-dismissed:${id}`;
+
+export function isSetupDismissed(id: string): boolean {
+	try {
+		return localStorage.getItem(dismissKey(id)) === 'true';
+	} catch {
+		return false;
+	}
+}
+
+export function dismissSetup(id: string): void {
+	try {
+		localStorage.setItem(dismissKey(id), 'true');
+	} catch {
+		// localStorage unavailable — the settings card remains the affordance
+	}
 }
