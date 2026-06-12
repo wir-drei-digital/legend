@@ -9,6 +9,9 @@ defmodule Legend.Core.Harness.Registry do
   @spec list() :: [Definition.t()]
   def list, do: Enum.map(modules(), & &1.definition())
 
+  @spec entries() :: [{module(), Definition.t()}]
+  def entries, do: Enum.map(modules(), &{&1, &1.definition()})
+
   @spec fetch(String.t()) :: {:ok, module()} | :error
   def fetch(id) when is_binary(id) do
     Enum.find_value(modules(), :error, fn mod ->
