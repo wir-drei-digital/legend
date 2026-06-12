@@ -28,7 +28,7 @@ Legend is an orchestrator whose capabilities arrive as plugins. Extension points
 
 | Seam | Contract | Implemented | Reserved |
 |---|---|---|---|
-| **Harness** — *which agent* | `Legend.Core.Harness` (`definition/0`, kind enum) + `Legend.Core.Harness.Terminal` (`build_command/1`) | `:terminal`: ClaudeCode, Hermes | `:acp` (JSON-RPC subprocess, rich UI), `:native` (in-BEAM, e.g. Jido) |
+| **Harness** — *which agent* | `Legend.Core.Harness` (`definition/0`, kind enum) + `Legend.Core.Harness.Terminal` (`build_command/1` over `library`/`mcp`/`messaging` opts; optional `nudge_line/2`) | `:terminal`: ClaudeCode, Hermes | `:acp` (JSON-RPC subprocess, rich UI), `:native` (in-BEAM, e.g. Jido) |
 | **Runtime** — *where it executes* | `Legend.Core.Runtime` (`start/write/resize/stop` + `{:runtime_output,_}`/`{:runtime_exit,_}` owner messages) | `LocalPty` (erlexec, true PTY) | Docker / Fly / hosted sandbox / reverse tunnel |
 | **Library storage** — *where shared files live* | `Legend.Core.Library.Storage` (`list_tree/read/write/delete`, relative paths) | `LocalDisk` | S3/synced adapter + runtime-side materialization |
 
@@ -57,14 +57,25 @@ One global tree (`knowledge/`, `skills/`, `artifacts/`, self-documented by seede
 - Filesystem is the only source of truth (no DB index); search/metadata is a future project.
 - Accepted caveats (single-user loopback PoC): symlink escape, FS error atoms in API error bodies. Both must be revisited before any network-exposed deployment.
 
+## Agent messaging & delegation (the signal bus)
+
+Agents message each other, delegate, and hand off through Legend-provided MCP tools — the first realized slice of the vision's agent-to-agent story (`Legend.Core.Signals`).
+
+- **Pairwise, no rooms (deliberate).** Every `Message` has exactly one recipient; a session's inbox is simply its unread rows (`read_at IS NULL`); `from_session_id: nil` is the human. Rooms/membership arrive later as a grouping layer — the envelope gains a `room_id` then; nothing here is thrown away. The human conducts on the *same bus* (`send_as_human` accepts only target + payload — sender/kind/read-state unforgeable) via the `/messages` timeline UI.
+- **MCP endpoint, hand-rolled:** `POST /api/mcp` (first router scope) speaks the five JSON-RPC methods agents need — no MCP library by decision (the surface is tiny; `hermes_mcp` would also collide naming-wise with the Hermes harness). **The per-session bearer token (`Session.mcp_token`) is the caller's identity** — agents never assert who they are. Tool errors return as `isError` results with Ash internals stripped (never echo payloads/stack traces into an agent's context).
+- **Five tools** (`Legend.Core.Signals.Tools`): `send_message` (`"requester"` resolves the spawner), `read_messages` (drain inbox), `start_agent` (delegate — spawns with `spawned_by_session_id` lineage + `instructions` as the CLI's initial prompt; the child auto-reports its exit to the spawner as a `:system` message), `handoff` (advisory baton — existing session, or a harness id to spawn with the summary as launch context), `list_agents`. `max_running_sessions` (default 10) bounds runaway delegation chains (check-then-spawn TOCTOU accepted).
+- **Notify + pull delivery.** A message *into* a running terminal agent is one debounced nudge line written to its PTY ("N unread message(s) from X — call read_messages"); bodies never transit the TUI. This is the **only runtime PTY injection in the system**, and the label is sanitized (control chars stripped) at the `Terminal.nudge_line/3` chokepoint because session names are agent-controllable — anything new reaching `runtime.write/2` needs the same treatment. Scrollback parsing for output stays rejected. ACP/native harnesses later swap only this delivery adapter; the inbox semantics don't change.
+- **Persist-then-broadcast:** message creation broadcasts on `inbox:<session_id>` (drives the nudge) and the global `signals` topic (drives the `signals:timeline` channel + unread badges); recipients never need to be alive at send time. Audit records created pre-read (e.g. handoff delivered at launch) hit the timeline but skip the inbox.
+
 ## Settings
 
 `Legend.Core.Settings`: SQLite key-value, **not** on the JSON:API — settings with side effects (the library path seeds its tree on change) get dedicated plain controllers (`/api/settings/*`) with bespoke validation. `get_setting` fails loud on anything but NotFound (a broken settings store must not silently fall back to defaults).
 
 ## Web layer rules
 
-- **Router order is load-bearing:** first `/api` scope (health, harnesses, library, settings) → `forward "/" → AshJsonApiRouter` (swallows the rest of `/api`) → SPA catch-all. New plain endpoints go in the first scope, never after the forward.
-- Ash JSON:API serves resource CRUD (sessions); plain controllers serve everything with bespoke semantics. Plain endpoints use a uniform `{"error": msg}` envelope.
+- **Router order is load-bearing:** first `/api` scope (health, harnesses, library, settings, mcp) → `forward "/" → AshJsonApiRouter` (swallows the rest of `/api`) → SPA catch-all. New plain endpoints go in the first scope, never after the forward.
+- Ash JSON:API serves resource CRUD (sessions, messages); plain controllers serve everything with bespoke semantics. Plain endpoints use a uniform `{"error": msg}` envelope.
+- **Every domain in `ash_domains` must use the `AshJsonApi.Domain` extension, even with zero routes** — the router probes each domain's `json_api_match_route/2` in order, and one domain without it 500s every route owned by a *later* domain (this shipped once via Settings).
 - Channels ride one unauthenticated `UserSocket` — acceptable only under the loopback single-user posture; **auth is mandatory before federation/any remote exposure** (recorded in the specs).
 
 ## Data & boot
@@ -87,7 +98,7 @@ Recorded in the specs so today's contracts don't need rework:
 - **ACP harnesses** (`:acp` + `io: :pipes`) → rich structured UI for Claude Code/Gemini CLI.
 - **Native harnesses** (`:native`) → in-BEAM agents (Jido candidate), no subprocess.
 - **Cloud runtimes** → same `Runtime` behaviour; library materialization (mount/sync) is the runtime's job; `$LEGEND_LIBRARY` stays the location-transparent contract.
-- **Agent-to-agent:** signal envelopes on `room:<id>` PubSub topics; humans are first-class members. Into agents: native → direct, ACP → prompt request, terminal → harness-formatted injection. Out of agents: native > ACP > Legend-provided MCP tools > human relay. Scrollback parsing is rejected.
+- **Rooms / group chat:** the built signal bus is pairwise; rooms add membership + a shared timeline as a grouping layer on top (`room:<id>` topics, envelope gains `room_id`). Humans stay first-class members. Into agents, only the delivery adapter varies: native → direct, ACP → prompt request, terminal → the existing nudge. Out of agents: native > ACP > the existing MCP tools > human relay.
 - **Federation:** local + cloud instances; the local instance pairs outbound (reverse tunnel) and registers its sessions; auth arrives here at the latest.
 
 ## Spec index (full reasoning per feature)
@@ -95,4 +106,5 @@ Recorded in the specs so today's contracts don't need rework:
 - `docs/superpowers/specs/2026-06-11-agent-sessions-poc-design.md` — sessions, harness/runtime seams, kinds, communication model
 - `docs/superpowers/specs/2026-06-11-shared-library-design.md` — library, storage seam, env/primer split, containment
 - `docs/superpowers/specs/2026-06-12-settings-design.md` — settings store, root precedence, boot reordering
+- `docs/superpowers/specs/2026-06-12-agent-messaging-design.md` — signal bus, MCP tools/endpoint, delegation/handoff, nudge delivery
 - `docs/superpowers/specs/2026-06-10-legend-scaffold-design.md` — original stack/scaffold decisions
