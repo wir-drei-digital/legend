@@ -7,6 +7,7 @@ defmodule Legend.Harnesses.Hermes do
   alias Legend.Core.Harness.Definition
   alias Legend.Core.Harness.Terminal
   alias Legend.Core.Runtime.CommandSpec
+  alias Legend.Harnesses.Hermes.McpSetup
 
   @impl Legend.Core.Harness
   def definition do
@@ -17,6 +18,12 @@ defmodule Legend.Harnesses.Hermes do
       kind: :terminal
     }
   end
+
+  @impl Legend.Core.Harness
+  def setup, do: McpSetup.setup()
+
+  @impl Legend.Core.Harness
+  def apply_setup, do: McpSetup.apply_setup()
 
   @impl Legend.Core.Harness.Terminal
   def build_command(opts) do
