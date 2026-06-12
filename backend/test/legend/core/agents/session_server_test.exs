@@ -107,7 +107,7 @@ defmodule Legend.Core.Agents.SessionServerTest do
     assert :ok = SessionServer.ensure_stopped(session.id)
   end
 
-  test "janitor marks orphaned running sessions as failed", %{session: session} do
+  test "janitor marks orphaned running sessions as interrupted", %{session: session} do
     pid = boot!(session)
     assert Agents.get_session!(session.id).status == :running
 
@@ -118,8 +118,9 @@ defmodule Legend.Core.Agents.SessionServerTest do
     Legend.Core.Agents.Janitor.run()
 
     record = Agents.get_session!(session.id)
-    assert record.status == :failed
-    assert record.error == "backend restarted"
+    assert record.status == :interrupted
+    assert record.error == nil
+    assert record.ended_at
   end
 
   test "attach mid-stream returns the snapshot and live chunks continue at its offset", %{

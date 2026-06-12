@@ -12,6 +12,7 @@ defmodule Legend.Core.Agents do
         index :list
         get :read
         post :start
+        patch :resume, route: "/:id/resume"
         delete :destroy
       end
     end
@@ -26,6 +27,8 @@ defmodule Legend.Core.Agents do
       define :mark_session_running, action: :mark_running
       define :finish_session, action: :finish
       define :fail_session, action: :fail
+      define :interrupt_session, action: :interrupt
+      define :resume_session, action: :resume
       define :destroy_session, action: :destroy
     end
   end

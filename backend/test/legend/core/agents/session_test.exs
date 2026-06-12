@@ -137,4 +137,62 @@ defmodule Legend.Core.Agents.SessionTest do
       end
     end
   end
+
+  describe "resume" do
+    test "resume from :interrupted restarts the process and clears the run fields" do
+      session =
+        Agents.start_session!(%{harness_id: "claude_code", runtime_id: "test", cwd: "/tmp"})
+
+      Legend.Core.Agents.SessionServer.ensure_stopped(session.id)
+      session = Agents.interrupt_session!(Agents.get_session!(session.id))
+      assert session.status == :interrupted
+      assert session.ended_at
+
+      resumed = Agents.resume_session!(session)
+
+      assert resumed.status == :running
+      assert resumed.ended_at == nil
+      assert resumed.error == nil
+      assert resumed.exit_code == nil
+      assert Legend.Core.Agents.SessionServer.whereis(resumed.id)
+    end
+
+    test "resume from :exited works (continue a finished conversation)" do
+      session =
+        Agents.start_session!(%{harness_id: "claude_code", runtime_id: "test", cwd: "/tmp"})
+
+      pid = Legend.Core.Agents.SessionServer.whereis(session.id)
+      send(pid, {:runtime_exit, 0})
+
+      eventually(fn -> Agents.get_session!(session.id).status == :exited end)
+      # The exited server stays alive holding scrollback — stop it so resume
+      # can register a fresh one under the same id.
+      Legend.Core.Agents.SessionServer.ensure_stopped(session.id)
+
+      resumed = Agents.resume_session!(Agents.get_session!(session.id))
+      assert resumed.status == :running
+      assert resumed.exit_code == nil
+    end
+
+    test "resume is rejected while running" do
+      session =
+        Agents.start_session!(%{harness_id: "claude_code", runtime_id: "test", cwd: "/tmp"})
+
+      assert {:error, %Ash.Error.Invalid{}} = Agents.resume_session(session)
+    end
+
+    defp eventually(fun, attempts \\ 50) do
+      cond do
+        fun.() ->
+          :ok
+
+        attempts == 0 ->
+          flunk("condition never became true")
+
+        true ->
+          Process.sleep(20)
+          eventually(fun, attempts - 1)
+      end
+    end
+  end
 end

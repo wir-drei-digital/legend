@@ -74,4 +74,48 @@ defmodule LegendWeb.SessionApiTest do
     assert response(conn, 200)
     assert {:error, _} = Legend.Core.Agents.get_session(session.id)
   end
+
+  test "PATCH /api/sessions/:id/resume resumes an interrupted session", %{conn: conn} do
+    session =
+      Legend.Core.Agents.start_session!(%{
+        harness_id: "claude_code",
+        runtime_id: "test",
+        cwd: "/tmp"
+      })
+
+    Legend.Core.Agents.SessionServer.ensure_stopped(session.id)
+    Legend.Core.Agents.interrupt_session!(Legend.Core.Agents.get_session!(session.id))
+
+    response =
+      conn
+      |> put_req_header("content-type", "application/vnd.api+json")
+      |> put_req_header("accept", "application/vnd.api+json")
+      |> patch(
+        "/api/sessions/#{session.id}/resume",
+        Jason.encode!(%{data: %{type: "session", id: session.id, attributes: %{}}})
+      )
+      |> json_response(200)
+
+    assert response["data"]["attributes"]["status"] == "running"
+  end
+
+  test "PATCH /api/sessions/:id/resume on a running session is rejected", %{conn: conn} do
+    session =
+      Legend.Core.Agents.start_session!(%{
+        harness_id: "claude_code",
+        runtime_id: "test",
+        cwd: "/tmp"
+      })
+
+    conn =
+      conn
+      |> put_req_header("content-type", "application/vnd.api+json")
+      |> put_req_header("accept", "application/vnd.api+json")
+      |> patch(
+        "/api/sessions/#{session.id}/resume",
+        Jason.encode!(%{data: %{type: "session", id: session.id, attributes: %{}}})
+      )
+
+    assert conn.status == 400
+  end
 end
