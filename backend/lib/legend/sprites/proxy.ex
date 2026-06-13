@@ -115,6 +115,11 @@ defmodule Legend.Sprites.Proxy do
     end
   end
 
+  # Carrier WebSocket closed (decoded close frame signals via self-message).
+  def handle_info(:carrier_closed, state) do
+    {:stop, :normal, state}
+  end
+
   # Before the websocket is set up — silently drop unknown messages.
   def handle_info(_message, state), do: {:noreply, state}
 
@@ -320,7 +325,12 @@ defmodule Legend.Sprites.Proxy do
 
   defp dispatch_frame({:ping, _}, state), do: state
   defp dispatch_frame({:pong, _}, state), do: state
-  defp dispatch_frame({:close, _, _}, state), do: state
+
+  defp dispatch_frame({:close, _, _}, state) do
+    Logger.info("[Sprites.Proxy] decoded WS close frame — stopping")
+    send(self(), :carrier_closed)
+    state
+  end
 
   defp token, do: Application.get_env(:legend, :sprites_token)
 end
