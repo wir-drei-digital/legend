@@ -144,3 +144,4 @@ The tunnel returns a loopback `base_url`. Spec 2 injects it as the agent's backe
 | Static (Rust/musl) bridge binary | Dependency-free across arbitrary sprite images; reuses the existing Rust toolchain rather than adding Go |
 | Tunnel returns a dynamic loopback `base_url` | Supersedes a static `LEGEND_PUBLIC_URL` knob; the agent always talks to `127.0.0.1:<bridge>` and thinks the backend is local |
 | Spec split (tunnel first, runtime second) | The tunnel is the novel, riskiest piece and is independently verifiable with no runtime work; everything in Spec 2 depends on it |
+| v1 flow control = bounded mpsc/mailbox backpressure, not WINDOW crediting | MCP/library are short request/response (no SSE); the WINDOW frame type exists in the codec but crediting is deferred until streaming/SSE MCP arrives |
