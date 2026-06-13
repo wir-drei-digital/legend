@@ -86,7 +86,7 @@ Both listeners are **loopback-only** — nothing in the sprite is exposed beyond
 
 ### `Legend.Tunnels.SpriteProxy` — the provider
 
-`open/1`: ensure the bridge is present and running in the sprite → open the proxy WSS to `127.0.0.1:9000` → start the backend-side mux process → return `%{base_url: "http://127.0.0.1:7777", handle: pid}`. The mux process accepts streams, dials `LegendWeb.Endpoint` loopback, splices, and **reconnects the carrier** on drop (sprite hibernation/network blips) with backoff. `close/1` tears down the mux and the carrier; the bridge process dies with the sprite.
+`open/1`: ensure the bridge is present and running in the sprite → open the proxy WSS to `127.0.0.1:9000` → start the backend-side mux process → return `%{base_url: "http://127.0.0.1:7777", handle: pid}`. The mux process accepts streams, dials `LegendWeb.Endpoint` loopback, and splices. **Implementation status:** initial-connect retry with backoff *is* implemented (so the just-launched bridge has time to bind the control port); **mid-session carrier reconnect-on-drop is deferred** to the live bring-up — the bridge already accepts sequential carrier connections, so reconnect is a backend-side addition (e.g. `Server` monitors the carrier and re-`open`s). `close/1` tears down the mux and the carrier; the bridge process dies with the sprite.
 
 Lifecycle ownership: in Spec 2 the `SessionServer`/runtime calls `open/1` once the sprite is up (before the agent needs MCP) and `close/1` on session stop. In this spec a test harness drives `open`/`close` directly.
 
@@ -103,7 +103,7 @@ The tunnel returns a loopback `base_url`. Spec 2 injects it as the agent's backe
 
 ## Scope
 
-**In this spec:** the `Tunnel` seam; `Legend.Sprites` minimal client (create/exec/fs/proxy-WSS); the `legend-bridge` binary; the backend mux + splice; the `SpriteProxy` provider with reconnect; config; and an **isolated end-to-end verification** that needs none of the runtime work.
+**In this spec:** the `Tunnel` seam; `Legend.Sprites` minimal client (create/exec/fs/proxy-WSS); the `legend-bridge` binary; the backend mux + splice; the `SpriteProxy` provider (initial-connect retry; **mid-session reconnect-on-drop deferred** — see status above); config; and an **isolated end-to-end verification** that needs none of the runtime work.
 
 **Deferred to Spec 2:** the `Runtime` behaviour implementation (PTY over WSS exec, `attach` for reattach, `capabilities`, `teardown`); the harness `provision/0` install contract; runtime-aware `:path` vs `:api` library injection and the `mcp_url`/library-url rewrite; the new MCP **library tools**; `SessionServer` wiring and the `:provisioning` status; the UI; and the app-level sprite lifecycle (1:1 session↔sprite, hibernate, destroy-on-delete).
 
@@ -145,3 +145,4 @@ The tunnel returns a loopback `base_url`. Spec 2 injects it as the agent's backe
 | Tunnel returns a dynamic loopback `base_url` | Supersedes a static `LEGEND_PUBLIC_URL` knob; the agent always talks to `127.0.0.1:<bridge>` and thinks the backend is local |
 | Spec split (tunnel first, runtime second) | The tunnel is the novel, riskiest piece and is independently verifiable with no runtime work; everything in Spec 2 depends on it |
 | v1 flow control = bounded mpsc/mailbox backpressure, not WINDOW crediting | MCP/library are short request/response (no SSE); the WINDOW frame type exists in the codec but crediting is deferred until streaming/SSE MCP arrives |
+| v1 implements initial-connect retry; mid-session carrier reconnect-on-drop deferred | Reconnect can only be exercised against a live sprite; the bridge already accepts sequential carriers, so it's a backend-side addition (`Server` monitors the carrier and re-`open`s) done during live bring-up |
