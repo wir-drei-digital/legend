@@ -27,9 +27,15 @@ defmodule Legend.Tunnels.SpriteProxy do
 
   @impl true
   def close(%{carrier: carrier, server: server}) do
-    Process.exit(server, :normal)
-    Proxy.close(carrier)
+    stop(server)
+    stop(carrier)
     :ok
+  end
+
+  defp stop(pid) do
+    if Process.alive?(pid), do: GenServer.stop(pid, :normal, 1_000)
+  catch
+    :exit, _ -> :ok
   end
 
   defp read_bridge do
