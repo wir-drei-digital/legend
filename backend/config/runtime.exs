@@ -17,6 +17,8 @@ config :legend, :harness_commands,
   hermes: env!("HARNESS_HERMES_CMD", :string, "hermes"),
   hermes_primer_flag: env!("HARNESS_HERMES_PRIMER_FLAG", :string, nil)
 
+config :legend, :sprites_token, env!("SPRITES_TOKEN", :string, nil)
+
 # Shared library root. Default: OS user-data dir (~/Library/Application
 # Support/legend/library on macOS) — dev and the desktop sidecar share it.
 case env!("LIBRARY_PATH", :string, nil) do

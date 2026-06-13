@@ -63,6 +63,7 @@ config :legend,
 config :legend,
   harnesses: [Legend.Harnesses.ClaudeCode, Legend.Harnesses.Hermes],
   runtimes: [Legend.Runtimes.LocalPty],
+  tunnels: [Legend.Tunnels.SpriteProxy],
   library_storage: Legend.Storage.LocalDisk,
   max_running_sessions: 10
 
