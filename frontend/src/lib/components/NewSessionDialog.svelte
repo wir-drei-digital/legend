@@ -11,18 +11,23 @@
 		dismissSetup,
 		isSetupDismissed,
 		listHarnesses,
-		type Harness
+		listRuntimes,
+		type Harness,
+		type Runtime
 	} from '$lib/sessions';
 
 	let open = $state(false);
 	let harnesses = $state<Harness[]>([]);
 	let harnessId = $state('');
+	let runtimes = $state<Runtime[]>([]);
+	let runtimeId = $state('');
 	let name = $state('');
 	let cwd = $state('');
 	let error = $state('');
 	let creating = $state(false);
 
 	const selectedHarness = $derived(harnesses.find((h) => h.id === harnessId));
+	const selectedRuntime = $derived(runtimes.find((r) => r.id === runtimeId));
 
 	let dismissed = $state<Record<string, boolean>>({});
 	let applyingSetup = $state(false);
@@ -65,6 +70,10 @@
 		}
 	}
 
+	function runtimeLabel(id: string): string {
+		return id.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+	}
+
 	function dismiss() {
 		if (!selectedHarness) return;
 		dismissSetup(selectedHarness.id);
@@ -80,6 +89,8 @@
 			setupApplied = '';
 			setupError = '';
 			dismissed = Object.fromEntries(harnesses.map((h) => [h.id, isSetupDismissed(h.id)]));
+			runtimes = await listRuntimes();
+			runtimeId = runtimes.find((r) => r.id === 'local_pty')?.id ?? runtimes[0]?.id ?? '';
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'failed to load harnesses';
 		}
@@ -92,6 +103,7 @@
 		try {
 			const session = await createSession({
 				harness_id: harnessId,
+				...(runtimeId ? { runtime_id: runtimeId } : {}),
 				...(name.trim() ? { name: name.trim() } : {}),
 				...(cwd.trim() ? { cwd: cwd.trim() } : {})
 			});
@@ -131,6 +143,20 @@
 				</Select.Root>
 			</div>
 
+			<div class="flex flex-col gap-2">
+				<Label for="runtime">Runtime</Label>
+				<Select.Root type="single" bind:value={runtimeId}>
+					<Select.Trigger id="runtime" class="w-full">
+						{selectedRuntime ? runtimeLabel(selectedRuntime.id) : 'Pick a runtime'}
+					</Select.Trigger>
+					<Select.Content>
+						{#each runtimes as runtime (runtime.id)}
+							<Select.Item value={runtime.id} label={runtimeLabel(runtime.id)} />
+						{/each}
+					</Select.Content>
+				</Select.Root>
+			</div>
+
 			{#if setupNeeded && selectedHarness}
 				<div class="flex flex-col gap-2 rounded-md border bg-muted/40 p-3 text-sm">
 					<p>{selectedHarness.name}: {selectedHarness.setup.summary}</p>
@@ -155,7 +181,13 @@
 
 			<div class="flex flex-col gap-2">
 				<Label for="cwd">Working directory</Label>
-				<Input id="cwd" bind:value={cwd} placeholder="defaults to your home directory" />
+				<Input
+					id="cwd"
+					bind:value={cwd}
+					placeholder={selectedRuntime && selectedRuntime.id !== 'local_pty'
+						? 'sprite working directory (e.g. /root)'
+						: 'defaults to your home directory'}
+				/>
 			</div>
 
 			{#if error}

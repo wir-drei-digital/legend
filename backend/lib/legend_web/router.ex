@@ -12,6 +12,8 @@ defmodule LegendWeb.Router do
     get "/harnesses", HarnessController, :index
     post "/harnesses/:id/setup", HarnessController, :apply_setup
 
+    get "/runtimes", RuntimeController, :index
+
     get "/library/tree", LibraryController, :tree
     get "/library/file", LibraryController, :show
     put "/library/file", LibraryController, :update

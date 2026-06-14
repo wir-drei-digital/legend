@@ -87,11 +87,13 @@ defmodule Legend.Core.Agents.SessionServer do
 
     with {:ok, harness} <- fetch_registered(Legend.Core.Harness.Registry, session.harness_id),
          {:ok, runtime} <- fetch_registered(Legend.Core.Runtime.Registry, session.runtime_id),
-         spec = harness.build_command(build_opts(session, mode)),
-         spec = %{spec | env: Map.merge(spec.env, platform_env(session))},
-         {:ok, handle} <- runtime.start(spec, %{owner: self(), cwd: session.cwd}) do
+         caps = Legend.Core.Runtime.capabilities(runtime),
+         :ok <- maybe_provision(session, harness, runtime, caps),
+         spec = harness.build_command(build_opts(session, mode, caps)),
+         spec = %{spec | env: Map.merge(spec.env, platform_env(session, caps))},
+         {:ok, handle, ref} <- start_or_attach(runtime, spec, session, mode) do
       try do
-        session = Agents.mark_session_running!(session)
+        session = Agents.mark_session_running!(session, %{runtime_ref: ref})
         broadcast(session.id, {:session_status, :running})
         Notifications.sessions_changed()
         Phoenix.PubSub.subscribe(Legend.PubSub, Signals.Notifications.inbox_topic(session.id))
@@ -146,7 +148,74 @@ defmodule Legend.Core.Agents.SessionServer do
     end
   end
 
-  defp build_opts(session, mode) do
+  # Provisioning runs BEFORE the PTY exists, so exec targets the runtime via a
+  # lightweight handle carrying the session id. The Sprites runtime ensures the
+  # sprite (idempotent, keyed by session id) so exec works pre-start; the Test
+  # runtime ignores the handle. Only reached when the runtime declares provisions?.
+  defp maybe_provision(session, harness, runtime, %{provisions?: true}) do
+    case Legend.Core.Harness.provision_for(harness) do
+      nil ->
+        {:error, "harness #{session.harness_id} has no installer for this runtime"}
+
+      %{detect: detect, install: install} ->
+        handle = %{session_id: session.id}
+
+        case runtime.exec(handle, detect) do
+          {:ok, %{status: 0}} ->
+            :ok
+
+          {:ok, _missing} ->
+            Agents.mark_session_provisioning!(session)
+            broadcast(session.id, {:session_status, :provisioning})
+            Notifications.sessions_changed()
+
+            case runtime.exec(handle, install) do
+              {:ok, %{status: 0}} -> :ok
+              {:ok, %{stdout: out, status: s}} -> {:error, "install failed (#{s}): #{out}"}
+              {:error, reason} -> {:error, "install failed: #{reason}"}
+            end
+
+          {:error, reason} ->
+            {:error, "provision detect failed: #{reason}"}
+        end
+    end
+  end
+
+  defp maybe_provision(_session, _harness, _runtime, _caps), do: :ok
+
+  defp start_or_attach(runtime, spec, session, :resume) do
+    if function_exported?(runtime, :attach, 2) and not is_nil(session.runtime_ref) do
+      case runtime.attach(session.runtime_ref, start_opts(session)) do
+        {:ok, handle} -> {:ok, handle, session.runtime_ref}
+        {:error, _} -> do_start(runtime, spec, session)
+      end
+    else
+      do_start(runtime, spec, session)
+    end
+  end
+
+  defp start_or_attach(runtime, spec, session, _fresh), do: do_start(runtime, spec, session)
+
+  defp do_start(runtime, spec, session) do
+    case runtime.start(spec, start_opts(session)) do
+      {:ok, handle} -> {:ok, handle, runtime_ref_from(handle)}
+      {:error, _} = err -> err
+    end
+  end
+
+  # start/attach opts. session_id lets a cloud runtime (sprites) key its sandbox;
+  # LocalPty/Test ignore it.
+  defp start_opts(session), do: %{owner: self(), cwd: session.cwd, session_id: session.id}
+
+  # The handle a runtime returns may carry its reattach ref (sprites: %{sprite, exec_id});
+  # LocalPty/Test return handles without one -> nil ref persisted.
+  defp runtime_ref_from(%{sprite: s, exec_id: e}), do: %{"sprite" => s, "exec_id" => e}
+  defp runtime_ref_from(_), do: nil
+
+  # :api runtimes (sprites) get NO library/messaging wiring in 2a — Spec 2b adds the tunnel.
+  defp build_opts(session, mode, %{library: :api}), do: %{mode: mode, session_id: session.id}
+
+  defp build_opts(session, mode, %{library: :path}) do
     base = %{
       library: %{path: Legend.Core.Library.root(), primer: Legend.Core.Library.primer()},
       messaging: %{
@@ -167,7 +236,9 @@ defmodule Legend.Core.Agents.SessionServer do
   # web/sidecar :4807, test :4002).
   defp mcp_url, do: LegendWeb.Endpoint.url() <> "/api/mcp"
 
-  defp platform_env(session) do
+  defp platform_env(_session, %{library: :api}), do: %{}
+
+  defp platform_env(session, %{library: :path}) do
     %{"LEGEND_LIBRARY" => Legend.Core.Library.root(), "LEGEND_SESSION_ID" => session.id}
     |> maybe_put("LEGEND_MCP_URL", session.mcp_token && mcp_url())
     |> maybe_put("LEGEND_SESSION_TOKEN", session.mcp_token)

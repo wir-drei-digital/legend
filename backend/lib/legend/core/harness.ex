@@ -44,7 +44,13 @@ defmodule Legend.Core.Harness do
   @callback definition() :: Definition.t()
   @callback setup() :: Setup.t()
   @callback apply_setup() :: :ok | {:error, String.t()}
-  @optional_callbacks setup: 0, apply_setup: 0
+  @callback provision() ::
+              %{
+                detect: Legend.Core.Runtime.CommandSpec.t(),
+                install: Legend.Core.Runtime.CommandSpec.t()
+              }
+              | nil
+  @optional_callbacks setup: 0, apply_setup: 0, provision: 0
 
   @doc "The harness's setup state; harnesses without the callback are not_applicable."
   @spec setup_for(module()) :: Setup.t()
@@ -53,6 +59,21 @@ defmodule Legend.Core.Harness do
       module.setup()
     else
       %Setup{}
+    end
+  end
+
+  @doc "The harness's provision spec, or nil if it has no installer."
+  @spec provision_for(module()) ::
+          %{
+            detect: Legend.Core.Runtime.CommandSpec.t(),
+            install: Legend.Core.Runtime.CommandSpec.t()
+          }
+          | nil
+  def provision_for(module) do
+    if Code.ensure_loaded?(module) and function_exported?(module, :provision, 0) do
+      module.provision()
+    else
+      nil
     end
   end
 end

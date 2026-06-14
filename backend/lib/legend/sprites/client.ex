@@ -1,7 +1,10 @@
 defmodule Legend.Sprites.Client do
   @moduledoc """
-  sprites.dev REST client. UNVERIFIED — exec/write_file/chmod request shapes are
-  best-guess from public docs; confirm against the live API before relying on them.
+  sprites.dev REST client. `create_sprite`/`get_sprite`/`delete_sprite` are
+  live-verified (2026-06-14, used by `Legend.Runtimes.Sprites`). `exec`/`write_file`/
+  `chmod` request shapes are UNVERIFIED best-guesses from public docs — note the
+  Sprites runtime runs commands over the WSS exec (`Legend.Sprites.Exec`), NOT this
+  REST `exec`, which returns the raw binary stream protocol rather than JSON.
   Bearer auth from `config :legend, :sprites_token`.
   """
 

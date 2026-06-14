@@ -24,6 +24,7 @@ defmodule Legend.Core.Agents do
       define :list_sessions, action: :list
       define :get_session, action: :read, get_by: [:id]
       define :get_session_by_token, action: :by_token, args: [:token]
+      define :mark_session_provisioning, action: :mark_provisioning
       define :mark_session_running, action: :mark_running
       define :finish_session, action: :finish
       define :fail_session, action: :fail
