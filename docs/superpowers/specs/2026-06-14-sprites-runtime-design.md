@@ -15,7 +15,7 @@ This spec uses **only the control plane** — create/exec/PTY against `api.sprit
 
 ## Scope
 
-**In 2a:** the `Runtime` behaviour extensions; `Legend.Runtimes.Sprites` (create/wake, PTY over WSS exec, `exec` for provisioning, `attach` for reattach-to-live, hibernate, `teardown`); the harness `provision/0` install contract + a Claude Code installer; the `SessionServer` launch flow (`:provisioning` status, capability-aware env) and reattach-on-resume; sprite-per-session lifecycle incl. teardown-on-delete; the new-session UI surfacing (runtime already selectable — sprite-side `cwd`, provisioning indicator, clean incompat failure).
+**In 2a:** the `Runtime` behaviour extensions; `Legend.Runtimes.Sprites` (create/wake, PTY over WSS exec, `exec` for provisioning, `attach` for reattach-to-live, hibernate, `teardown`); the harness `provision/0` install contract + a Claude Code installer; the `SessionServer` launch flow (`:provisioning` status, capability-aware env) and reattach-on-resume; sprite-per-session lifecycle incl. teardown-on-delete; the new-session UI (a new `/api/runtimes` endpoint + runtime dropdown, sprite-side `cwd`, provisioning indicator, clean incompat failure).
 
 **Deferred to 2b:** the MCP **library tools**; runtime-aware `:path` vs `:api` library/messaging **injection**; wiring the Spec-1 tunnel into `SessionServer`; the library primer reframe. In 2a a `:api`-library runtime simply gets **no** library/MCP env injected (the localhost URLs LocalPty uses are unreachable from a sprite; wiring the tunnel is 2b's job).
 
@@ -93,7 +93,7 @@ Auth (B) needs no special handling here: it's just the human typing into the PTY
 
 ### 7. UI (minimal for 2a)
 
-The new-session dialog already has a runtime selector, so sprites appears automatically once registered. Additions:
+The new-session dialog currently has a **harness** selector but **no runtime selector** (runtime defaults to `local_pty` server-side), and there is no runtime-listing API. So 2a **adds** a `GET /api/runtimes` endpoint (mirroring `/api/harnesses`) and a runtime dropdown. Additions:
 
 - `cwd` for a sprite session is a **sprite-side path** (default to a workspace dir like `/root` or `~`), not the host directory picker — the field's helper/validation adapts when a non-`:path` runtime is selected.
 - A **`:provisioning`** status badge/line ("Installing Claude Code…") between `:starting` and `:running`.
