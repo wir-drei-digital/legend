@@ -64,11 +64,11 @@ defmodule LegendWeb.MCPControllerTest do
     assert response(conn, 202)
   end
 
-  test "tools/list returns the five tools", %{conn: conn} do
+  test "tools/list returns all tools (signals + library)", %{conn: conn} do
     response = json_response(rpc(conn, "tools/list"), 200)
     names = Enum.map(response["result"]["tools"], & &1["name"])
     assert "send_message" in names
-    assert length(names) == 5
+    assert length(names) == 9
   end
 
   test "tools/call dispatches with the token's session as caller", %{conn: conn, session: session} do
