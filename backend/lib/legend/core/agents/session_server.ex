@@ -89,8 +89,9 @@ defmodule Legend.Core.Agents.SessionServer do
          {:ok, runtime} <- fetch_registered(Legend.Core.Runtime.Registry, session.runtime_id),
          caps = Legend.Core.Runtime.capabilities(runtime),
          :ok <- maybe_provision(session, harness, runtime, caps),
-         spec = harness.build_command(build_opts(session, mode, caps)),
-         spec = %{spec | env: Map.merge(spec.env, platform_env(session, caps))},
+         {:ok, tunnel, base_url} <- maybe_open_tunnel(session, caps),
+         spec = harness.build_command(build_opts(session, mode, caps, base_url)),
+         spec = %{spec | env: Map.merge(spec.env, platform_env(session, caps, base_url))},
          {:ok, handle, ref} <- start_or_attach(runtime, spec, session, mode) do
       try do
         session = Agents.mark_session_running!(session, %{runtime_ref: ref})
@@ -111,6 +112,7 @@ defmodule Legend.Core.Agents.SessionServer do
            harness: harness,
            runtime: runtime,
            handle: handle,
+           tunnel: tunnel,
            scrollback: Scrollback.new(),
            offset: 0,
            exited?: false,
@@ -123,6 +125,7 @@ defmodule Legend.Core.Agents.SessionServer do
           # The record write failed (e.g. deleted concurrently) — don't leak
           # the just-started OS process, and best-effort mark the record.
           runtime.stop(handle)
+          maybe_close_tunnel(tunnel)
 
           try do
             Agents.fail_session!(session, %{error: Exception.message(e)})
@@ -183,6 +186,24 @@ defmodule Legend.Core.Agents.SessionServer do
 
   defp maybe_provision(_session, _harness, _runtime, _caps), do: :ok
 
+  defp maybe_open_tunnel(_session, %{tunnel: nil}), do: {:ok, nil, nil}
+
+  defp maybe_open_tunnel(session, %{tunnel: tid}) do
+    case Legend.Core.Tunnel.Registry.fetch(tid) do
+      {:ok, tunnel} ->
+        case tunnel.open(%{session_id: session.id}) do
+          {:ok, %{base_url: url, handle: h}} -> {:ok, {tunnel, h}, url}
+          {:error, reason} -> {:error, "tunnel open failed: #{reason}"}
+        end
+
+      :error ->
+        {:error, "tunnel not registered: #{tid}"}
+    end
+  end
+
+  defp maybe_close_tunnel(nil), do: :ok
+  defp maybe_close_tunnel({tunnel, handle}), do: tunnel.close(handle)
+
   defp start_or_attach(runtime, spec, session, :resume) do
     if function_exported?(runtime, :attach, 2) and not is_nil(session.runtime_ref) do
       case runtime.attach(session.runtime_ref, start_opts(session)) do
@@ -212,10 +233,18 @@ defmodule Legend.Core.Agents.SessionServer do
   defp runtime_ref_from(%{sprite: s, exec_id: e}), do: %{"sprite" => s, "exec_id" => e}
   defp runtime_ref_from(_), do: nil
 
-  # :api runtimes (sprites) get NO library/messaging wiring in 2a — Spec 2b adds the tunnel.
-  defp build_opts(session, mode, %{library: :api}), do: %{mode: mode, session_id: session.id}
+  # :api runtimes reach the library + signal bus over the tunnel (base_url loopback).
+  defp build_opts(session, mode, %{library: :api}, base_url) do
+    %{
+      mode: mode,
+      session_id: session.id,
+      library: %{primer: Legend.Core.Library.primer(:api)},
+      messaging: %{primer: Signals.messaging_primer(session), instructions: session.instructions}
+    }
+    |> put_mcp(session, base_url)
+  end
 
-  defp build_opts(session, mode, %{library: :path}) do
+  defp build_opts(session, mode, %{library: :path}, _base_url) do
     base = %{
       library: %{path: Legend.Core.Library.root(), primer: Legend.Core.Library.primer(:path)},
       messaging: %{
@@ -232,13 +261,23 @@ defmodule Legend.Core.Agents.SessionServer do
     end
   end
 
+  defp put_mcp(opts, %{mcp_token: nil}, _base_url), do: opts
+  defp put_mcp(opts, _session, nil), do: opts
+
+  defp put_mcp(opts, session, base_url),
+    do: Map.put(opts, :mcp, %{url: base_url <> "/api/mcp", token: session.mcp_token})
+
   # The web endpoint knows the reachable base URL in every mode (dev :4100,
   # web/sidecar :4807, test :4002).
   defp mcp_url, do: LegendWeb.Endpoint.url() <> "/api/mcp"
 
-  defp platform_env(_session, %{library: :api}), do: %{}
+  defp platform_env(session, %{library: :api}, base_url) do
+    %{"LEGEND_SESSION_ID" => session.id}
+    |> maybe_put("LEGEND_MCP_URL", session.mcp_token && base_url && base_url <> "/api/mcp")
+    |> maybe_put("LEGEND_SESSION_TOKEN", session.mcp_token)
+  end
 
-  defp platform_env(session, %{library: :path}) do
+  defp platform_env(session, %{library: :path}, _base_url) do
     %{"LEGEND_LIBRARY" => Legend.Core.Library.root(), "LEGEND_SESSION_ID" => session.id}
     |> maybe_put("LEGEND_MCP_URL", session.mcp_token && mcp_url())
     |> maybe_put("LEGEND_SESSION_TOKEN", session.mcp_token)
@@ -349,10 +388,14 @@ defmodule Legend.Core.Agents.SessionServer do
   @impl true
   def terminate(_reason, %{exited?: false} = state) do
     state.runtime.stop(state.handle)
+    maybe_close_tunnel(state.tunnel)
     :ok
   end
 
-  def terminate(_reason, _state), do: :ok
+  def terminate(_reason, state) do
+    maybe_close_tunnel(Map.get(state, :tunnel))
+    :ok
+  end
 
   defp reset_nudge(state) do
     %{state | nudge_count: 0, nudge_froms: MapSet.new(), nudge_timer: nil}
