@@ -111,16 +111,20 @@ defmodule Legend.Sprites.Exec do
         receive do
           {^ref, status, stdout} ->
             # The exec process stops itself after the exit frame; stop/1 is
-            # tolerant of the race where it has already terminated.
+            # tolerant of the race where it has already terminated. The collector
+            # has exited (it returns after reporting), so no cleanup needed.
             stop(pid)
             {:ok, %{stdout: stdout, status: status || 0}}
         after
           timeout ->
+            # No exit ever arrived: kill the still-blocked collector too.
             stop(pid)
+            Process.exit(collector, :kill)
             {:error, "sprites exec timed out after #{timeout}ms"}
         end
 
       {:error, reason} ->
+        Process.exit(collector, :kill)
         {:error, "sprites exec start failed: #{inspect(reason)}"}
     end
   end
@@ -306,7 +310,9 @@ defmodule Legend.Sprites.Exec do
 
   ## Synchronous init helpers (mirror Legend.Sprites.Proxy)
 
-  defp await_upgrade(_conn, _ref, _acc, 0), do: {:error, :upgrade_timeout}
+  # Error returns carry the conn so the caller's `else` can close it — init
+  # returning {:stop, _} skips terminate/2, so the conn would otherwise leak.
+  defp await_upgrade(conn, _ref, _acc, 0), do: {:error, conn, :upgrade_timeout}
 
   defp await_upgrade(conn, ref, acc, ticks) do
     receive do
@@ -325,8 +331,8 @@ defmodule Legend.Sprites.Exec do
               await_upgrade(conn, ref, acc, ticks - 1)
             end
 
-          {:error, _conn, reason, _} ->
-            {:error, reason}
+          {:error, conn, reason, _} ->
+            {:error, conn, reason}
 
           :unknown ->
             await_upgrade(conn, ref, acc, ticks - 1)
