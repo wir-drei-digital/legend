@@ -47,6 +47,14 @@ package-backend:
 desktop-bundle: package-backend
     cd desktop && bun tauri build
 
+# Cross-compile the in-sprite reverse-tunnel bridge (static x86_64 musl)
+build-bridge:
+    rustup target add x86_64-unknown-linux-musl
+    cd bridge && cargo zigbuild --release --target x86_64-unknown-linux-musl
+    mkdir -p backend/priv/tunnel
+    cp bridge/target/x86_64-unknown-linux-musl/release/legend-bridge backend/priv/tunnel/legend-bridge-x86_64-linux
+    @file backend/priv/tunnel/legend-bridge-x86_64-linux
+
 # Run all checks
 test:
     cd backend && mix test

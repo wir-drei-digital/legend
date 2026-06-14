@@ -1,29 +1,45 @@
 defmodule Legend.Tunnels.SpriteProxy.Server do
-  @moduledoc "De-mux side of the reverse tunnel: carrier frames <-> loopback TCP to the local endpoint."
+  @moduledoc """
+  De-mux side of the reverse tunnel. Owns the carrier: connects it, links to it
+  (trapping exits), reconnects with backoff when it drops (sprite hibernation),
+  and bridges carrier mux frames <-> loopback TCP to the local endpoint.
+
+  The `:connector` option (default `Legend.Sprites.Proxy.connect/3`) is the seam
+  that lets tests drive reconnection without a live sprite.
+  """
   use GenServer
   require Logger
   alias Legend.Core.Tunnel.Mux
   alias Legend.Core.Tunnel.Mux.Frame
 
-  def start_link(opts), do: GenServer.start_link(__MODULE__, opts)
+  # Reconnect attempts are unbounded (a hibernating sprite will wake), but the
+  # delay between them is capped so it never grows into minutes.
+  @max_reconnect_ms 30_000
 
-  @doc "Set the pid that receives outbound {:carrier_out, bin} frames (the carrier)."
-  def set_out(srv, pid), do: GenServer.cast(srv, {:set_out, pid})
+  def start_link(opts), do: GenServer.start_link(__MODULE__, opts)
 
   @impl true
   def init(opts) do
-    {:ok,
-     %{
-       target_port: Keyword.fetch!(opts, :target_port),
-       out: nil,
-       buffer: "",
-       streams: %{},
-       ids: %{}
-     }}
+    Process.flag(:trap_exit, true)
+
+    state = %{
+      target_port: Keyword.fetch!(opts, :target_port),
+      sprite: Keyword.fetch!(opts, :sprite),
+      control_port: Keyword.fetch!(opts, :control_port),
+      connector: Keyword.get(opts, :connector, &default_connect/3),
+      reconnect_base_ms: Keyword.get(opts, :reconnect_base_ms, 500),
+      out: nil,
+      attempt: 0,
+      buffer: "",
+      streams: %{},
+      ids: %{}
+    }
+
+    {:ok, state, {:continue, :connect}}
   end
 
   @impl true
-  def handle_cast({:set_out, pid}, state), do: {:noreply, %{state | out: pid}}
+  def handle_continue(:connect, state), do: {:noreply, connect_carrier(state)}
 
   @impl true
   def handle_info({:carrier_data, bin}, state) do
@@ -60,12 +76,53 @@ defmodule Legend.Tunnels.SpriteProxy.Server do
     end
   end
 
+  # The carrier (a linked process) died — reset in-flight streams and reconnect.
+  def handle_info({:EXIT, pid, _reason}, %{out: pid} = state) do
+    Enum.each(Map.keys(state.streams), &close_sock(state, &1))
+    state = %{state | out: nil, streams: %{}, ids: %{}, buffer: ""}
+    schedule_reconnect(state)
+    {:noreply, %{state | attempt: state.attempt + 1}}
+  end
+
+  def handle_info({:EXIT, _pid, _reason}, state), do: {:noreply, state}
+
+  def handle_info(:reconnect, state), do: {:noreply, connect_carrier(state)}
+
+  @impl true
+  def terminate(_reason, %{out: carrier}) when is_pid(carrier) do
+    # Tear the carrier down with the Server. :shutdown to the (non-trapping)
+    # carrier kills it immediately; its socket is closed by the OS.
+    if Process.alive?(carrier), do: Process.exit(carrier, :shutdown)
+    :ok
+  end
+
+  def terminate(_reason, _state), do: :ok
+
+  defp connect_carrier(state) do
+    case state.connector.(state.sprite, state.control_port, self()) do
+      {:ok, carrier} ->
+        # Link so the carrier's death surfaces as {:EXIT, …} (we trap), and so
+        # stopping this Server tears the carrier down too.
+        Process.link(carrier)
+        %{state | out: carrier, attempt: 0}
+
+      {:error, reason} ->
+        Logger.warning("[SpriteProxy.Server] carrier connect failed: #{inspect(reason)}")
+        schedule_reconnect(state)
+        %{state | attempt: state.attempt + 1}
+    end
+  end
+
+  defp schedule_reconnect(state) do
+    delay = min(state.reconnect_base_ms * (state.attempt + 1), @max_reconnect_ms)
+    Process.send_after(self(), :reconnect, delay)
+  end
+
+  defp default_connect(sprite, control_port, server),
+    do: Legend.Sprites.Proxy.connect(sprite, control_port, server)
+
   defp handle_frame(%Frame{type: :open, stream_id: id}, state) do
-    case :gen_tcp.connect(~c"127.0.0.1", state.target_port, [
-           :binary,
-           active: true,
-           packet: :raw
-         ]) do
+    case :gen_tcp.connect(~c"127.0.0.1", state.target_port, [:binary, active: true, packet: :raw]) do
       {:ok, sock} ->
         %{state | streams: Map.put(state.streams, id, sock), ids: Map.put(state.ids, sock, id)}
 
@@ -100,6 +157,13 @@ defmodule Legend.Tunnels.SpriteProxy.Server do
       sock ->
         :gen_tcp.close(sock)
         %{state | streams: Map.delete(state.streams, id), ids: Map.delete(state.ids, sock)}
+    end
+  end
+
+  defp close_sock(state, id) do
+    case Map.get(state.streams, id) do
+      nil -> :ok
+      sock -> :gen_tcp.close(sock)
     end
   end
 end

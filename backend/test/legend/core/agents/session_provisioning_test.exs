@@ -21,7 +21,7 @@ defmodule Legend.Core.Agents.SessionProvisioningTest do
   end
 
   test "a provisioning runtime runs detect, installs when missing, and reaches running" do
-    TestRuntime.set_capabilities(%{provisions?: true, library: :api, tunnel: "sprite_proxy"})
+    TestRuntime.set_capabilities(%{provisions?: true, library: :api, tunnel: nil})
     TestRuntime.set_detect({:ok, %{stdout: "", status: 1}})
 
     {:ok, session} =
@@ -35,7 +35,7 @@ defmodule Legend.Core.Agents.SessionProvisioningTest do
   end
 
   test "a provisioning runtime skips install when the harness is already present" do
-    TestRuntime.set_capabilities(%{provisions?: true, library: :api, tunnel: "sprite_proxy"})
+    TestRuntime.set_capabilities(%{provisions?: true, library: :api, tunnel: nil})
     TestRuntime.set_detect({:ok, %{stdout: "1.0", status: 0}})
 
     {:ok, session} =
@@ -51,7 +51,7 @@ defmodule Legend.Core.Agents.SessionProvisioningTest do
   end
 
   test "a provisioning runtime with a harness that has no installer fails the session" do
-    TestRuntime.set_capabilities(%{provisions?: true, library: :api, tunnel: "sprite_proxy"})
+    TestRuntime.set_capabilities(%{provisions?: true, library: :api, tunnel: nil})
 
     # Hermes declares no provision/0, so provisioning has nothing to install.
     {:ok, session} =
@@ -63,7 +63,7 @@ defmodule Legend.Core.Agents.SessionProvisioningTest do
   end
 
   test "an :api runtime gets NO library/mcp env injected in 2a" do
-    TestRuntime.set_capabilities(%{provisions?: false, library: :api, tunnel: "sprite_proxy"})
+    TestRuntime.set_capabilities(%{provisions?: false, library: :api, tunnel: nil})
 
     {:ok, _} = Agents.start_session(%{name: "a", harness_id: "claude_code", runtime_id: "test"})
 

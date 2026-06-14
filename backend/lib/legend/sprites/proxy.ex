@@ -158,7 +158,8 @@ defmodule Legend.Sprites.Proxy do
     path = "/v1/sprites/#{name}/proxy"
     headers = [{"Authorization", "Bearer #{tkn}"}]
 
-    with {:ok, conn} <- Mint.HTTP.connect(:https, @connect_host, @connect_port),
+    with {:ok, conn} <-
+           Mint.HTTP.connect(:https, @connect_host, @connect_port, protocols: [:http1]),
          {:ok, conn, ref} <- Mint.WebSocket.upgrade(:wss, conn, path, headers) do
       # Now wait synchronously for the HTTP upgrade response before continuing.
       # We do this by receiving directly so we can gate on the connected ack.

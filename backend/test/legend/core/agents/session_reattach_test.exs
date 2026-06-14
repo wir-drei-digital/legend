@@ -6,7 +6,7 @@ defmodule Legend.Core.Agents.SessionReattachTest do
 
   setup do
     TestRuntime.subscribe()
-    TestRuntime.set_capabilities(%{provisions?: false, library: :api, tunnel: "sprite_proxy"})
+    TestRuntime.set_capabilities(%{provisions?: false, library: :api, tunnel: nil})
 
     on_exit(fn ->
       Application.delete_env(:legend, :test_runtime_capabilities)

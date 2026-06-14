@@ -48,13 +48,25 @@ defmodule Legend.Core.Library do
 
   defp setting_root, do: Legend.Core.Settings.get_setting("library_path")
 
-  def primer do
+  def primer(mode \\ :path)
+
+  def primer(:path) do
     """
     A shared Legend library lives at $LEGEND_LIBRARY with knowledge/, skills/, and \
     artifacts/ directories (each has a README with its conventions). Before solving \
     a problem from scratch, check the library for existing knowledge or skills. When \
     you produce something reusable (a script, a how-to, a finding), save it there \
     with a descriptive kebab-case filename.
+    """
+  end
+
+  def primer(:api) do
+    """
+    A shared Legend library (knowledge/, skills/, artifacts/) is available through \
+    the library_list / library_read / library_write / library_delete MCP tools. \
+    Before solving a problem from scratch, library_list and library_read to check for \
+    existing knowledge or skills. When you produce something reusable, library_write \
+    it with a descriptive kebab-case path (e.g. artifacts/my-result.md).
     """
   end
 
