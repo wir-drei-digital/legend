@@ -88,4 +88,20 @@ defmodule Legend.Core.Agents.SessionTunnelTest do
     # The carrier died with the backend, so resume opens a fresh tunnel.
     assert_receive {:test_tunnel, :open, _}, 1000
   end
+
+  test "a runtime that fails to start closes the tunnel (no leak)" do
+    TestRuntime.set_capabilities(%{provisions?: false, library: :api, tunnel: "test_tunnel"})
+    # Make the harness emit cmd "fail", which the Test runtime rejects at start.
+    original = Application.get_env(:legend, :harness_commands, [])
+    Application.put_env(:legend, :harness_commands, claude_code: "fail")
+    on_exit(fn -> Application.put_env(:legend, :harness_commands, original) end)
+
+    {:ok, s} = Agents.start_session(%{name: "x", harness_id: "claude_code", runtime_id: "test"})
+
+    assert_receive {:test_tunnel, :open, _}, 1000
+    # The fix: the tunnel opened before start_or_attach, so a start failure must
+    # close it rather than leak the SpriteProxy.Server.
+    assert_receive {:test_tunnel, :close, _}, 1000
+    assert Agents.get_session!(s.id).status == :failed
+  end
 end
