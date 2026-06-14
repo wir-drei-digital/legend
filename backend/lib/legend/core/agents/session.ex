@@ -159,7 +159,9 @@ defmodule Legend.Core.Agents.Session do
       require_atomic? false
 
       change before_action(fn changeset, _context ->
-               Legend.Core.Agents.SessionServer.ensure_stopped(changeset.data.id)
+               session = changeset.data
+               Legend.Core.Agents.SessionServer.ensure_stopped(session.id)
+               maybe_teardown_runtime(session)
                changeset
              end)
 
@@ -217,4 +219,21 @@ defmodule Legend.Core.Agents.Session do
 
   @doc false
   def generate_token, do: :crypto.strong_rand_bytes(24) |> Base.url_encode64(padding: false)
+
+  @doc false
+  def maybe_teardown_runtime(%{runtime_id: rid, runtime_ref: ref}) when not is_nil(ref) do
+    with {:ok, runtime} <- Legend.Core.Runtime.Registry.fetch(rid),
+         true <- function_exported?(runtime, :teardown, 1) do
+      # Best effort: a teardown failure must not block record deletion.
+      try do
+        runtime.teardown(ref)
+      rescue
+        _ -> :ok
+      end
+    end
+
+    :ok
+  end
+
+  def maybe_teardown_runtime(_session), do: :ok
 end
