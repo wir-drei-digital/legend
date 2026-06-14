@@ -88,7 +88,9 @@ defmodule Legend.Core.Library.Tools do
   defp message(:not_text), do: "not a text file"
   defp message(:enoent), do: "no such file"
   defp message(reason) when is_atom(reason), do: "library error: #{reason}"
-  defp message(reason), do: "library error: #{inspect(reason)}"
+  # Non-atom reasons (e.g. a future adapter's %File.Error{path:}) must not leak
+  # an absolute path into an agent's context.
+  defp message(_reason), do: "library error"
 
   # LocalDisk entries: %{path: string, type: :dir | :file, size: integer, mtime: DateTime}
   defp format_tree(entries) do
