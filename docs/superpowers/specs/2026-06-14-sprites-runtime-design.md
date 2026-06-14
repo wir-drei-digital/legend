@@ -63,12 +63,14 @@ Built on the `Legend.Sprites.Client` from Spec 1 (extended with the interactive 
 
 **Default image + install-on-first-boot:** we rely on sprites' default image and install the CLI at first boot. The persistent filesystem means a sprite installs once; later wakes/reattaches skip it.
 
-### 4. Auth (option B — interactive, persisted)
+### 4. Auth (option B — interactive, persisted; baseline = `setup-token` paste)
 
-The agent authenticates **in the PTY, by the human, on first open**; credentials persist in the sprite's filesystem across hibernation. Legend stores **no** model credential. Two consequences, accepted:
+The agent authenticates **in the PTY, by the human, on first open**, and credentials persist in the sprite's filesystem (`~/.claude`) across hibernation — Legend stores **no** model credential. Naïve browser-OAuth is dead in a headless sprite: the callback listener is on the *sprite's* `localhost` but the browser redirect resolves on the *user's laptop* ([claude-code #42965](https://github.com/anthropics/claude-code/issues/42965)).
 
-- The in-PTY flow must be **non-browser** (Claude Code's browser-OAuth localhost callback is dead in a headless sprite). The realistic flow is the human entering a pre-minted token / API key. **Open question (pinned in plan):** whether first launch drops the human into a **shell** in the sprite (to `claude setup-token` / `export ANTHROPIC_API_KEY`) or whether `claude`'s own first-run accepts in-TTY credential entry — verified against Claude Code's actual behavior.
-- Agent-*spawned* cloud sessions are **out of scope** (no human to auth them); injected credentials (a harness-declared credential env) are a later addition that does not disturb B.
+- **2a baseline — `claude setup-token` (paste-code, headless-friendly):** the human runs token setup in the PTY; it prints a URL, the human opens it in their laptop browser, and pastes the resulting token back into the PTY (no localhost callback involved). The token is saved to `~/.claude` in the sprite and survives hibernation → one-time per sprite.
+- **Verify during live bring-up:** the callback OAuth was reportedly fixed in Claude Code ≥ 2.1.126; if native `claude` login actually works in a sprite PTY on the shipped version, prefer it (simpler for the user). Also pin the exact first-launch UX — whether the runtime drops the human into a **shell** (to run `claude setup-token`) or `claude`'s own first-run offers the paste path.
+- **Fast-follow (not in 2a) — forwarded OAuth for one-click native login:** Claude Code's callback port is fixed at `localhost:54545`, and Spec 1's `…/proxy` client can forward laptop `:54545` → sprite `:54545`, so a small callback-forwarder would let the normal browser login complete transparently. Deferred to keep 2a simple and **tunnel-free**; enabled later by the existing proxy primitive.
+- **Agent-*spawned* cloud sessions remain out of scope** (no human to complete first-run auth); harness-declared injected credentials (option A) are the later addition for those, and don't disturb B.
 
 ### 5. `SessionServer` launch + reattach flow
 
@@ -143,7 +145,7 @@ resume → SessionServer.init(mode: :resume)
 ## Open questions (resolved in planning, not left vague)
 
 - **Sprites WSS interactive-exec + attach protocol** — exact frames for stdin/stdout/resize and how to obtain + reattach an exec-session id. Probe live with `SPRITES_TOKEN` (now available) and pin in the plan; extends `Legend.Sprites.Client`.
-- **Claude Code installer + headless auth** — exact install command and whether first launch is `claude` directly or a shell (per §4). Verify against Claude Code docs/behavior.
+- **Claude Code installer + headless auth** — the exact install command; whether first launch drops into a shell or runs `claude` directly (per §4); whether native callback OAuth works on the shipped Claude Code (≥ 2.1.126) inside a sprite PTY (prefer it if so) or we use the `setup-token` paste baseline. Verify live with `SPRITES_TOKEN`.
 - **`cwd` default** for sprite sessions and the workspace path the agent starts in.
 - **`runtime_ref` shape** — persisted attribute carrying enough to reattach (sprite name is derivable from session id; the exec-session id is the part worth storing).
 
@@ -156,7 +158,7 @@ resume → SessionServer.init(mode: :resume)
 | Same `{:runtime_output}`/`{:runtime_exit}` contract for the WSS PTY | `SessionServer` stays transport-agnostic — a sprite PTY and a local PTY look identical to it |
 | Provisioning = harness `provision/0` (detect+install), like `setup/0` | The runtime is "just a place"; the harness knows how to make itself exist there. Agnostic and consistent with the existing setup seam |
 | Default image + install-on-first-boot | No image to maintain; sprite persistence makes install a one-time cost; matches the agnostic model |
-| Auth = interactive in PTY, persisted (option B) | Keeps "human completes auth, Legend stores nothing"; sprite persistence makes it one-time. Injected creds (A) deferred until agent-spawned cloud sessions need them |
+| Auth = interactive in PTY, persisted (option B); baseline `claude setup-token` paste | Keeps "human completes auth, Legend stores nothing"; sprite persistence makes it one-time. Native callback OAuth (fixed if Claude Code ≥ 2.1.126) preferred if it works live; forwarded-OAuth via the Spec-1 proxy is a fast-follow. Injected creds (A) deferred until agent-spawned cloud sessions need them |
 | Reattach-to-live on resume (`attach/2`) | Core to "always-on": reconnects to the agent that kept running; avoids orphaning or killing in-flight work. Scrollback-from-reattach-point accepted |
 | Capability-aware `SessionServer` env; `:api` gets no library/MCP in 2a | The seam where 2b plugs the tunnel in; keeps 2a honest (no broken localhost URLs in the sprite) |
 | `teardown` only on session delete; idle = hibernate | Session list is the management surface; hibernation is ~0 compute; delete is the single explicit cleanup |
