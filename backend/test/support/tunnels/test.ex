@@ -8,7 +8,12 @@ defmodule Legend.Tunnels.Test do
   @impl true
   def open(target) do
     notify({:test_tunnel, :open, target})
-    {:ok, %{base_url: "http://127.0.0.1:9999", handle: %{target: target}}}
+    # Tests may force a failure via :test_tunnel_open to exercise the fail path.
+    Application.get_env(
+      :legend,
+      :test_tunnel_open,
+      {:ok, %{base_url: "http://127.0.0.1:9999", handle: %{target: target}}}
+    )
   end
 
   @impl true

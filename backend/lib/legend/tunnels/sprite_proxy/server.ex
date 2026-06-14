@@ -12,6 +12,10 @@ defmodule Legend.Tunnels.SpriteProxy.Server do
   alias Legend.Core.Tunnel.Mux
   alias Legend.Core.Tunnel.Mux.Frame
 
+  # Reconnect attempts are unbounded (a hibernating sprite will wake), but the
+  # delay between them is capped so it never grows into minutes.
+  @max_reconnect_ms 30_000
+
   def start_link(opts), do: GenServer.start_link(__MODULE__, opts)
 
   @impl true
@@ -110,7 +114,8 @@ defmodule Legend.Tunnels.SpriteProxy.Server do
   end
 
   defp schedule_reconnect(state) do
-    Process.send_after(self(), :reconnect, state.reconnect_base_ms * (state.attempt + 1))
+    delay = min(state.reconnect_base_ms * (state.attempt + 1), @max_reconnect_ms)
+    Process.send_after(self(), :reconnect, delay)
   end
 
   defp default_connect(sprite, control_port, server),

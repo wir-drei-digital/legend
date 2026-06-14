@@ -89,55 +89,71 @@ defmodule Legend.Core.Agents.SessionServer do
          {:ok, runtime} <- fetch_registered(Legend.Core.Runtime.Registry, session.runtime_id),
          caps = Legend.Core.Runtime.capabilities(runtime),
          :ok <- maybe_provision(session, harness, runtime, caps),
-         {:ok, tunnel, base_url} <- maybe_open_tunnel(session, caps),
-         spec = harness.build_command(build_opts(session, mode, caps, base_url)),
-         spec = %{spec | env: Map.merge(spec.env, platform_env(session, caps, base_url))},
-         {:ok, handle, ref} <- start_or_attach(runtime, spec, session, mode) do
-      try do
-        session = Agents.mark_session_running!(session, %{runtime_ref: ref})
-        broadcast(session.id, {:session_status, :running})
-        Notifications.sessions_changed()
-        Phoenix.PubSub.subscribe(Legend.PubSub, Signals.Notifications.inbox_topic(session.id))
-
-        # Catch-up: messages that arrived while this session had no live server
-        # (downtime, or sent during :starting) are sitting unread — re-feed them
-        # through the normal debounced-nudge path so the agent gets one knock.
-        for message <- Signals.unread_messages!(session.id) do
-          send(self(), {:new_message, Signals.Notifications.summary(message)})
-        end
-
-        {:ok,
-         %{
-           session: session,
-           harness: harness,
-           runtime: runtime,
-           handle: handle,
-           tunnel: tunnel,
-           scrollback: Scrollback.new(),
-           offset: 0,
-           exited?: false,
-           nudge_count: 0,
-           nudge_froms: MapSet.new(),
-           nudge_timer: nil
-         }}
-      rescue
-        e ->
-          # The record write failed (e.g. deleted concurrently) — don't leak
-          # the just-started OS process, and best-effort mark the record.
-          runtime.stop(handle)
-          maybe_close_tunnel(tunnel)
-
-          try do
-            Agents.fail_session!(session, %{error: Exception.message(e)})
-            Notifications.sessions_changed()
-          rescue
-            _ -> :ok
-          end
-
-          :ignore
-      end
+         {:ok, tunnel, base_url} <- maybe_open_tunnel(session, caps) do
+      # The tunnel is open from here on, so every failure path below MUST close
+      # it (a leaked SpriteProxy.Server would otherwise reconnect forever).
+      launch(session, mode, harness, runtime, caps, tunnel, base_url)
     else
       {:error, reason} ->
+        Agents.fail_session!(session, %{error: reason})
+        Notifications.sessions_changed()
+        :ignore
+    end
+  end
+
+  defp launch(session, mode, harness, runtime, caps, tunnel, base_url) do
+    spec = harness.build_command(build_opts(session, mode, caps, base_url))
+    spec = %{spec | env: Map.merge(spec.env, platform_env(session, caps, base_url))}
+
+    case start_or_attach(runtime, spec, session, mode) do
+      {:ok, handle, ref} ->
+        try do
+          session = Agents.mark_session_running!(session, %{runtime_ref: ref})
+          broadcast(session.id, {:session_status, :running})
+          Notifications.sessions_changed()
+          Phoenix.PubSub.subscribe(Legend.PubSub, Signals.Notifications.inbox_topic(session.id))
+
+          # Catch-up: messages that arrived while this session had no live server
+          # (downtime, or sent during :starting) are sitting unread — re-feed them
+          # through the normal debounced-nudge path so the agent gets one knock.
+          for message <- Signals.unread_messages!(session.id) do
+            send(self(), {:new_message, Signals.Notifications.summary(message)})
+          end
+
+          {:ok,
+           %{
+             session: session,
+             harness: harness,
+             runtime: runtime,
+             handle: handle,
+             tunnel: tunnel,
+             scrollback: Scrollback.new(),
+             offset: 0,
+             exited?: false,
+             nudge_count: 0,
+             nudge_froms: MapSet.new(),
+             nudge_timer: nil
+           }}
+        rescue
+          e ->
+            # The record write failed (e.g. deleted concurrently) — don't leak
+            # the just-started OS process or the tunnel; best-effort mark the record.
+            runtime.stop(handle)
+            maybe_close_tunnel(tunnel)
+
+            try do
+              Agents.fail_session!(session, %{error: Exception.message(e)})
+              Notifications.sessions_changed()
+            rescue
+              _ -> :ok
+            end
+
+            :ignore
+        end
+
+      {:error, reason} ->
+        # Runtime failed to start — close the tunnel we already opened.
+        maybe_close_tunnel(tunnel)
         Agents.fail_session!(session, %{error: reason})
         Notifications.sessions_changed()
         :ignore

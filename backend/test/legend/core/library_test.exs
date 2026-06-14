@@ -77,7 +77,7 @@ defmodule Legend.Core.LibraryTest do
 
   test "primer(:api) tells the agent to use the library MCP tools" do
     p = Library.primer(:api)
-    assert p =~ "library_read" or p =~ "MCP tool"
+    assert p =~ "library_read" and p =~ "library_write"
     refute p =~ "$LEGEND_LIBRARY"
   end
 end

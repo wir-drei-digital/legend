@@ -9,6 +9,7 @@ defmodule Legend.Core.Agents.SessionTunnelTest do
 
     on_exit(fn ->
       Application.delete_env(:legend, :test_runtime_capabilities)
+      Application.delete_env(:legend, :test_tunnel_open)
 
       for {_, pid, _, _} <- DynamicSupervisor.which_children(Legend.Core.Agents.SessionSupervisor) do
         DynamicSupervisor.terminate_child(Legend.Core.Agents.SessionSupervisor, pid)
@@ -47,5 +48,44 @@ defmodule Legend.Core.Agents.SessionTunnelTest do
     assert_receive {:test_runtime, :start, spec, _opts}, 1000
     refute_received {:test_tunnel, :open, _}
     assert Map.has_key?(spec.env, "LEGEND_LIBRARY")
+  end
+
+  test "an unregistered tunnel id fails the session" do
+    TestRuntime.set_capabilities(%{provisions?: false, library: :api, tunnel: "no_such_tunnel"})
+
+    {:ok, s} = Agents.start_session(%{name: "u", harness_id: "claude_code", runtime_id: "test"})
+
+    s = Agents.get_session!(s.id)
+    assert s.status == :failed
+    assert s.error =~ "not registered"
+  end
+
+  test "a tunnel that fails to open fails the session without starting the runtime" do
+    TestRuntime.set_capabilities(%{provisions?: false, library: :api, tunnel: "test_tunnel"})
+    Application.put_env(:legend, :test_tunnel_open, {:error, "carrier down"})
+
+    {:ok, s} = Agents.start_session(%{name: "f", harness_id: "claude_code", runtime_id: "test"})
+
+    s = Agents.get_session!(s.id)
+    assert s.status == :failed
+    assert s.error =~ "tunnel open failed"
+    refute_received {:test_runtime, :start, _spec, _opts}
+  end
+
+  test "resume re-opens a fresh tunnel" do
+    TestRuntime.set_capabilities(%{provisions?: false, library: :api, tunnel: "test_tunnel"})
+
+    {:ok, s} = Agents.start_session(%{name: "r", harness_id: "claude_code", runtime_id: "test"})
+    assert_receive {:test_tunnel, :open, _}, 1000
+
+    # Simulate a persisted reattach ref, then stop + interrupt so it's resumable.
+    s = Agents.get_session!(s.id)
+    Agents.mark_session_running!(s, %{runtime_ref: %{"sprite" => s.id, "exec_id" => "e1"}})
+    Legend.Core.Agents.SessionServer.ensure_stopped(s.id)
+    {:ok, _} = Agents.interrupt_session(Agents.get_session!(s.id))
+
+    {:ok, _} = Agents.resume_session(Agents.get_session!(s.id))
+    # The carrier died with the backend, so resume opens a fresh tunnel.
+    assert_receive {:test_tunnel, :open, _}, 1000
   end
 end

@@ -12,6 +12,10 @@ defmodule LegendWeb.MCPLibraryTest do
     on_exit(fn ->
       File.rm_rf(root)
       Application.put_env(:legend, :library_default_root, original)
+
+      for {_, pid, _, _} <- DynamicSupervisor.which_children(Legend.Core.Agents.SessionSupervisor) do
+        DynamicSupervisor.terminate_child(Legend.Core.Agents.SessionSupervisor, pid)
+      end
     end)
 
     session = Agents.start_session!(%{harness_id: "claude_code", runtime_id: "test", cwd: "/tmp"})
