@@ -93,9 +93,53 @@ defmodule Legend.Sprites.Exec do
     GenServer.start_link(__MODULE__, {:attach, name, exec_id, opts})
   end
 
+  @doc """
+  Runs `spec` to completion non-interactively and returns
+  `{:ok, %{stdout: binary, status: integer}}`. Used for provisioning
+  (detect/install) before the PTY exists. The exec process is NOT linked to the
+  caller, so a SessionServer running this in `init` is unaffected by its exit.
+  """
+  @spec run(String.t(), CommandSpec.t(), timeout()) ::
+          {:ok, %{stdout: binary(), status: integer()}} | {:error, String.t()}
+  def run(name, %CommandSpec{} = spec, timeout \\ 120_000) do
+    parent = self()
+    ref = make_ref()
+    collector = spawn(fn -> collect_run(parent, ref, "") end)
+
+    case GenServer.start(__MODULE__, {:run, name, spec, %{owner: collector}}) do
+      {:ok, pid} ->
+        receive do
+          {^ref, status, stdout} ->
+            # The exec process stops itself after the exit frame; stop/1 is
+            # tolerant of the race where it has already terminated.
+            stop(pid)
+            {:ok, %{stdout: stdout, status: status || 0}}
+        after
+          timeout ->
+            stop(pid)
+            {:error, "sprites exec timed out after #{timeout}ms"}
+        end
+
+      {:error, reason} ->
+        {:error, "sprites exec start failed: #{inspect(reason)}"}
+    end
+  end
+
   def write(pid, data), do: GenServer.cast(pid, {:write, data})
   def resize(pid, cols, rows), do: GenServer.cast(pid, {:resize, cols, rows})
-  def stop(pid), do: GenServer.stop(pid, :normal)
+
+  @doc "Stops the exec. Tolerant of the race where the process already exited."
+  def stop(pid) do
+    if Process.alive?(pid) do
+      try do
+        GenServer.stop(pid, :normal, 1_000)
+      catch
+        :exit, _ -> :ok
+      end
+    else
+      :ok
+    end
+  end
 
   ## GenServer callbacks
 
@@ -120,10 +164,13 @@ defmodule Legend.Sprites.Exec do
   end
 
   defp open(mode, name, arg, opts, tkn, state) do
-    {path, known_id} =
+    {path, known_id, await?} =
       case mode do
-        :spawn -> {"/v1/sprites/#{name}/exec?#{spawn_query(arg, to_keyword(opts))}", nil}
-        :attach -> {"/v1/sprites/#{name}/exec/#{arg}", arg}
+        :spawn -> {"/v1/sprites/#{name}/exec?#{spawn_query(arg, to_keyword(opts))}", nil, true}
+        # Non-interactive one-shot: no session_info needed (output/exit flow
+        # through the normal loop to the collector).
+        :run -> {"/v1/sprites/#{name}/exec?#{spawn_query(arg, to_keyword(opts))}", nil, false}
+        :attach -> {"/v1/sprites/#{name}/exec/#{arg}", arg, true}
       end
 
     headers = [{"authorization", "Bearer #{tkn}"}]
@@ -135,9 +182,9 @@ defmodule Legend.Sprites.Exec do
          true <- status in 100..199 || {:bad_status, status},
          {:ok, conn, ws} <- Mint.WebSocket.new(conn, ref, status, resp_headers) do
       state = %{state | conn: conn, websocket: ws, ref: ref, exec_id: known_id}
-      # Read the leading session_info frame to capture/confirm the exec id,
-      # forwarding any interleaved output to the owner.
-      {:ok, await_session_info(state, @session_info_ticks)}
+      # Spawn/attach read the leading session_info frame to capture/confirm the
+      # exec id, forwarding any interleaved output to the owner.
+      if await?, do: {:ok, await_session_info(state, @session_info_ticks)}, else: {:ok, state}
     else
       {:bad_status, status} ->
         {:stop, "sprites exec upgrade returned HTTP #{status}"}
@@ -248,6 +295,14 @@ defmodule Legend.Sprites.Exec do
 
   defp exit_owner(%{exited?: true}, _code), do: :ok
   defp exit_owner(state, code), do: send(state.owner, {:runtime_exit, code})
+
+  # Collector for run/3: accumulate output, report {ref, status, stdout} on exit.
+  defp collect_run(parent, ref, acc) do
+    receive do
+      {:runtime_output, data} -> collect_run(parent, ref, acc <> data)
+      {:runtime_exit, code} -> send(parent, {ref, code, acc})
+    end
+  end
 
   ## Synchronous init helpers (mirror Legend.Sprites.Proxy)
 
