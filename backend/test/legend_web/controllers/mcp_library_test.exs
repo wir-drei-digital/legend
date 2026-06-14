@@ -3,13 +3,15 @@ defmodule LegendWeb.MCPLibraryTest do
   alias Legend.Core.Agents
 
   setup do
+    # Restore (not delete) the test-env-pinned default root on exit.
+    original = Application.get_env(:legend, :library_default_root)
     root = Path.join(System.tmp_dir!(), "mcp-lib-#{System.unique_integer([:positive])}")
     Application.put_env(:legend, :library_default_root, root)
     Legend.Core.Library.ensure_seeded!(root)
 
     on_exit(fn ->
       File.rm_rf(root)
-      Application.delete_env(:legend, :library_default_root)
+      Application.put_env(:legend, :library_default_root, original)
     end)
 
     session = Agents.start_session!(%{harness_id: "claude_code", runtime_id: "test", cwd: "/tmp"})

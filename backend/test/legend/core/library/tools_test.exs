@@ -3,13 +3,15 @@ defmodule Legend.Core.Library.ToolsTest do
   alias Legend.Core.Library.Tools
 
   setup do
+    # Restore (not delete) the test-env-pinned default root on exit.
+    original = Application.get_env(:legend, :library_default_root)
     root = Path.join(System.tmp_dir!(), "lib-tools-#{System.unique_integer([:positive])}")
     Application.put_env(:legend, :library_default_root, root)
     Legend.Core.Library.ensure_seeded!(root)
 
     on_exit(fn ->
       File.rm_rf(root)
-      Application.delete_env(:legend, :library_default_root)
+      Application.put_env(:legend, :library_default_root, original)
     end)
 
     :ok
