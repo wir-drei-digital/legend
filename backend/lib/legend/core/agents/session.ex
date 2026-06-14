@@ -77,8 +77,14 @@ defmodule Legend.Core.Agents.Session do
 
     # require_atomic? false on all updates: AshSqlite has no atomic-update
     # support, and Ash 3 defaults to requiring it.
+    update :mark_provisioning do
+      require_atomic? false
+      change set_attribute(:status, :provisioning)
+    end
+
     update :mark_running do
       require_atomic? false
+      accept [:runtime_ref]
       change set_attribute(:status, :running)
       change set_attribute(:started_at, &DateTime.utc_now/0)
     end
@@ -180,7 +186,11 @@ defmodule Legend.Core.Agents.Session do
       allow_nil?: false,
       default: :starting,
       public?: true,
-      constraints: [one_of: [:starting, :running, :exited, :failed, :interrupted]]
+      constraints: [one_of: [:starting, :provisioning, :running, :exited, :failed, :interrupted]]
+
+    # Opaque, runtime-specific handle for reattaching after a backend restart
+    # (e.g. %{"sprite" => name, "exec_id" => id}). nil for runtimes that don't reattach.
+    attribute :runtime_ref, :map, public?: true
 
     attribute :exit_code, :integer, public?: true
     attribute :error, :string, public?: true

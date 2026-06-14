@@ -14,7 +14,7 @@ defmodule Legend.Core.Agents.Janitor do
 
   def run do
     Legend.Core.Agents.Session
-    |> Ash.Query.filter(status in [:starting, :running])
+    |> Ash.Query.filter(status in [:starting, :provisioning, :running])
     |> Ash.read!()
     |> Enum.each(&Legend.Core.Agents.interrupt_session!/1)
   end

@@ -53,6 +53,21 @@ defmodule Legend.Core.Agents.SessionTest do
     assert failed.error == "spawn failed"
   end
 
+  test "a session can be marked provisioning then running with a runtime_ref" do
+    session = Agents.start_session!(@valid)
+
+    provisioning = Agents.mark_session_provisioning!(session)
+    assert provisioning.status == :provisioning
+
+    running =
+      Agents.mark_session_running!(provisioning, %{
+        runtime_ref: %{"sprite" => "abc", "exec_id" => "e1"}
+      })
+
+    assert running.status == :running
+    assert running.runtime_ref == %{"sprite" => "abc", "exec_id" => "e1"}
+  end
+
   test "list and get" do
     session = Agents.start_session!(@valid)
     assert Enum.any?(Agents.list_sessions!(), &(&1.id == session.id))
