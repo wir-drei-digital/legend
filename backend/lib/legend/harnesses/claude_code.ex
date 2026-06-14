@@ -19,6 +19,18 @@ defmodule Legend.Harnesses.ClaudeCode do
     }
   end
 
+  @impl Legend.Core.Harness
+  def provision do
+    %{
+      detect: %CommandSpec{cmd: "claude", args: ["--version"], io: :pipes},
+      install: %CommandSpec{
+        cmd: "sh",
+        args: ["-lc", "curl -fsSL https://claude.ai/install.sh | sh"],
+        io: :pipes
+      }
+    }
+  end
+
   @impl Legend.Core.Harness.Terminal
   def build_command(opts) do
     [cmd | args] = configured_command(:claude_code, "claude")
