@@ -7,17 +7,18 @@ defmodule Legend.Tunnels.SpriteProxyTest do
     assert function_exported?(Legend.Tunnels.SpriteProxy, :close, 1)
   end
 
-  test "close/1 stops both processes in the handle and is idempotent" do
+  test "close/1 stops the server (and its carrier) and is idempotent" do
     alias Legend.Tunnels.SpriteProxy.Server
 
-    {:ok, server} = Server.start_link(target_port: 1)
-    {:ok, carrier} = Server.start_link(target_port: 1)
+    noop = fn _s, _p, _srv -> {:ok, spawn(fn -> Process.sleep(:infinity) end)} end
 
-    assert :ok = Legend.Tunnels.SpriteProxy.close(%{carrier: carrier, server: server})
+    {:ok, server} =
+      Server.start_link(target_port: 1, sprite: "x", control_port: 9000, connector: noop)
+
+    assert :ok = Legend.Tunnels.SpriteProxy.close(%{server: server})
     refute Process.alive?(server)
-    refute Process.alive?(carrier)
 
-    # idempotent / race-safe: closing again with dead pids must not raise
-    assert :ok = Legend.Tunnels.SpriteProxy.close(%{carrier: carrier, server: server})
+    # idempotent / race-safe: closing again with a dead pid must not raise
+    assert :ok = Legend.Tunnels.SpriteProxy.close(%{server: server})
   end
 end

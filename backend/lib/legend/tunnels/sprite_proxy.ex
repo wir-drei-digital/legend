@@ -3,7 +3,7 @@ defmodule Legend.Tunnels.SpriteProxy do
   @behaviour Legend.Core.Tunnel
 
   alias Legend.Core.Runtime.CommandSpec
-  alias Legend.Sprites.{Client, Exec, Proxy}
+  alias Legend.Sprites.{Client, Exec}
   alias Legend.Tunnels.SpriteProxy.Server
 
   @control_port 9000
@@ -14,22 +14,23 @@ defmodule Legend.Tunnels.SpriteProxy do
   def id, do: "sprite_proxy"
 
   @impl true
-  def open(%{sprite: name}) do
+  def open(%{session_id: name}) do
     with {:ok, bin} <- read_bridge(),
          :ok <- ensure_bridge(name, bin),
-         {:ok, srv} <- Server.start_link(target_port: endpoint_port()),
-         {:ok, carrier} <- Proxy.connect(name, @control_port, srv) do
-      Server.set_out(srv, carrier)
-
-      {:ok,
-       %{base_url: "http://127.0.0.1:#{@data_port}", handle: %{carrier: carrier, server: srv}}}
+         {:ok, srv} <-
+           Server.start_link(
+             target_port: endpoint_port(),
+             sprite: name,
+             control_port: @control_port
+           ) do
+      # The Server owns the carrier (connects + reconnects internally).
+      {:ok, %{base_url: "http://127.0.0.1:#{@data_port}", handle: %{server: srv}}}
     end
   end
 
   @impl true
-  def close(%{carrier: carrier, server: server}) do
+  def close(%{server: server}) do
     stop(server)
-    stop(carrier)
     :ok
   end
 
