@@ -20,11 +20,12 @@ defmodule Legend.Sprites.Client do
   # Non-interactive command. Body shape is a best guess pending live verification.
   def exec(name, %{} = body), do: request(:post, "/sprites/#{name}/exec", json: body)
 
-  # Upload a file. `content` is raw bytes, sent base64. Path/field names best-guess.
-  def write_file(name, path, content) when is_binary(content) do
-    request(:put, "/sprites/#{name}/fs/file",
-      json: %{path: path, content: Base.encode64(content), encoding: "base64"}
-    )
+  # Upload raw bytes to `path` (fs API, verified 2026-06-14): PUT /fs/write with the
+  # path/mode/mkdir as query params and the file's raw bytes as the body. `mode`
+  # sets permissions at write time, so no separate chmod is needed for the bridge.
+  def write_file(name, path, content, mode \\ "0755") when is_binary(content) do
+    qs = URI.encode_query(%{"path" => path, "mode" => mode, "mkdir" => "true"})
+    request(:put, "/sprites/#{name}/fs/write?#{qs}", body: content)
   end
 
   def chmod(name, path, mode),
