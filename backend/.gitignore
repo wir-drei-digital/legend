@@ -41,3 +41,6 @@ burrito_out/
 /priv/static/index.html
 
 /priv/static/robots.txt
+
+# Cross-compiled reverse-tunnel bridge (built via `just build-bridge`)
+/priv/tunnel/legend-bridge-*
