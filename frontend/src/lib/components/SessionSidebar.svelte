@@ -14,6 +14,7 @@
 
 	const dotClass: Record<SessionStatus, string> = {
 		starting: 'bg-amber-500',
+		provisioning: 'bg-violet-500',
 		running: 'bg-emerald-500',
 		exited: 'bg-zinc-400',
 		failed: 'bg-red-500',

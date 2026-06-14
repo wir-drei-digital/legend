@@ -1,6 +1,6 @@
 import { apiBase } from './api';
 
-export type SessionStatus = 'starting' | 'running' | 'exited' | 'failed' | 'interrupted';
+export type SessionStatus = 'starting' | 'provisioning' | 'running' | 'exited' | 'failed' | 'interrupted';
 
 export interface Session {
 	id: string;
@@ -57,6 +57,17 @@ export async function listHarnesses(): Promise<Harness[]> {
 	return (await res.json()).data;
 }
 
+export interface Runtime {
+	id: string;
+	capabilities: { provisions?: boolean; library: 'path' | 'api'; tunnel: string | null };
+}
+
+export async function listRuntimes(): Promise<Runtime[]> {
+	const res = await fetch(`${apiBase}/api/runtimes`);
+	if (!res.ok) throw new Error(`listing runtimes failed: ${res.status}`);
+	return (await res.json()).data;
+}
+
 export async function listSessions(): Promise<Session[]> {
 	const res = await fetch(`${apiBase}/api/sessions`, { headers: { Accept: JSONAPI } });
 	if (!res.ok) throw new Error(`listing sessions failed: ${res.status}`);
@@ -65,6 +76,7 @@ export async function listSessions(): Promise<Session[]> {
 
 export async function createSession(attrs: {
 	harness_id: string;
+	runtime_id?: string;
 	name?: string;
 	cwd?: string;
 }): Promise<Session> {
