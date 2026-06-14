@@ -217,7 +217,7 @@ defmodule Legend.Core.Agents.SessionServer do
 
   defp build_opts(session, mode, %{library: :path}) do
     base = %{
-      library: %{path: Legend.Core.Library.root(), primer: Legend.Core.Library.primer()},
+      library: %{path: Legend.Core.Library.root(), primer: Legend.Core.Library.primer(:path)},
       messaging: %{
         primer: Signals.messaging_primer(session),
         instructions: session.instructions

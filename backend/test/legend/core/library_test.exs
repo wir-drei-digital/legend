@@ -70,4 +70,14 @@ defmodule Legend.Core.LibraryTest do
     assert {:error, :badarg} = Library.read(<<?a, 0, ?b>>)
     assert {:error, :badarg} = Library.write(<<?a, 0, ?b>>, "x")
   end
+
+  test "primer(:path) mentions the filesystem path" do
+    assert Library.primer(:path) =~ "$LEGEND_LIBRARY"
+  end
+
+  test "primer(:api) tells the agent to use the library MCP tools" do
+    p = Library.primer(:api)
+    assert p =~ "library_read" or p =~ "MCP tool"
+    refute p =~ "$LEGEND_LIBRARY"
+  end
 end
