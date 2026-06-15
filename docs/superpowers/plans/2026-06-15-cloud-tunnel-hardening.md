@@ -1378,7 +1378,9 @@ Remove `@bridge_dest "/tmp/legend-bridge"`. Replace the two functions:
     sha = :crypto.hash(:sha256, bin) |> Base.encode16(case: :lower) |> binary_part(0, 8)
     dest = "/tmp/legend-bridge-#{sha}"
 
-    case Exec.run(name, sh("pgrep -f '#{dest}' >/dev/null 2>&1")) do
+    # `^` anchors the match to the START of the command line — matches the bridge
+    # process but NOT the `sh -c "pgrep …<dest>…"` wrapper running this check.
+    case Exec.run(name, sh("pgrep -f '^#{dest}' >/dev/null 2>&1")) do
       {:ok, %{status: 0}} -> :ok
       _ -> deliver_and_launch(name, dest, bin)
     end
@@ -1395,7 +1397,10 @@ Remove `@bridge_dest "/tmp/legend-bridge"`. Replace the two functions:
   end
 
   defp launch_cmd(dest) do
-    "pkill -f '/tmp/legend-bridge-' >/dev/null 2>&1 || true ; " <>
+    # `^` anchors to the START of the command line: reaps stale bridges without
+    # SIGTERM-ing the `sh -c "…setsid …"` wrapper running this script (which would
+    # otherwise die before `setsid` runs, so the bridge would never launch).
+    "pkill -f '^/tmp/legend-bridge-' >/dev/null 2>&1 || true ; " <>
       "setsid #{dest} >/tmp/bridge.log 2>&1 & ; sleep 0.3"
   end
 

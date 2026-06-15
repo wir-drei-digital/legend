@@ -69,7 +69,10 @@ defmodule Legend.Tunnels.SpriteProxy do
     sha = :crypto.hash(:sha256, bin) |> Base.encode16(case: :lower) |> binary_part(0, 8)
     dest = "/tmp/legend-bridge-#{sha}"
 
-    case Exec.run(name, sh("pgrep -f '#{dest}' >/dev/null 2>&1")) do
+    # `^` anchors the match to the START of the command line, so it matches the
+    # bridge process (argv = "<dest>") but NOT the `sh -c "pgrep …<dest>…"` wrapper
+    # running this very check (its command line starts with "sh").
+    case Exec.run(name, sh("pgrep -f '^#{dest}' >/dev/null 2>&1")) do
       {:ok, %{status: 0}} -> :ok
       _ -> deliver_and_launch(name, dest, bin)
     end
@@ -86,7 +89,12 @@ defmodule Legend.Tunnels.SpriteProxy do
   end
 
   defp launch_cmd(dest) do
-    "pkill -f '/tmp/legend-bridge-' >/dev/null 2>&1 || true ; " <>
+    # `^` anchors to the START of the command line so pkill reaps stale bridge
+    # processes (argv begins with "/tmp/legend-bridge-") WITHOUT killing the
+    # `sh -c "…setsid /tmp/legend-bridge-…"` wrapper running this script (its
+    # command line begins with "sh", not "/tmp"). An unanchored pattern would
+    # SIGTERM that wrapper before `setsid` runs and the bridge would never launch.
+    "pkill -f '^/tmp/legend-bridge-' >/dev/null 2>&1 || true ; " <>
       "setsid #{dest} >/tmp/bridge.log 2>&1 & ; sleep 0.3"
   end
 
