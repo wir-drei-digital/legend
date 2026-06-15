@@ -320,6 +320,19 @@ disabled-Start path if the frontend test harness supports it (confirm in plan), 
 - **Mux flow-control (WINDOW frames)** — remain no-ops; backpressure is bounded channels +
   `active: :once`, not credit-based windows.
 - **Ephemeral-port TOCTOU** — the `listen(0)`→close→bind window is accepted on loopback.
+- **WebSocket-reassembly memory (final-review Medium)** — the 1 MiB cap is a *mux*-layer bound; it
+  applies only after `Mint.WebSocket` reassembles fragmented WS frames. A hostile sprite can stream
+  unbounded WS continuation frames, making the carrier `Legend.Sprites.Proxy` (and `Legend.Sprites.Exec`)
+  buffer one large message before the mux cap sees it. Blast radius is contained — the buffer lives in
+  the linked carrier/exec process, whose OOM kills only that process and triggers the existing
+  reconnect (a persistently hostile sprite only DoSes its own session) — and the trust model is
+  single-user. Accepted for now; the fix is a Mint-level max-frame option (if the installed
+  `mint_web_socket` supports it) or a cumulative per-message byte ceiling in the carrier's
+  `handle_responses`. Revisit before federation/multi-tenant exposure.
+- **Bridge head-of-line blocking & carrier-down DATA drop (final-review Low)** — one slow stream can
+  stall the bridge's `carrier_reader` via its bounded per-stream channel (intentional backpressure),
+  and in the brief window after an oversize-drop before the carrier `:EXIT` arrives, agent→host bytes
+  are discarded while the socket is re-armed. Both are PoC-acceptable; not leaks.
 
 ## Documentation
 
