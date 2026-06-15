@@ -122,4 +122,63 @@ defmodule Legend.Tunnels.SpriteProxy.ServerTest do
     assert resp =~ "200" and resp =~ "ok"
     :gen_tcp.close(sock)
   end
+
+  test "OPEN beyond the stream cap is refused with a CLOSE" do
+    # A real listener so stream 1's dial SUCCEEDS and occupies the only slot;
+    # stream 2 then hits the cap and is refused with a CLOSE back out the carrier.
+    {:ok, lsock} = :gen_tcp.listen(0, [:binary, active: false, reuseaddr: true])
+    {:ok, port} = :inet.port(lsock)
+
+    spawn_link(fn ->
+      {:ok, _} = :gen_tcp.accept(lsock)
+      Process.sleep(:infinity)
+    end)
+
+    srv =
+      start_supervised!(
+        {Server,
+         [
+           target_port: port,
+           sprite: "s",
+           control_port: 9000,
+           max_streams: 1,
+           connector: relay_connector(self())
+         ]}
+      )
+
+    send(srv, {:carrier_data, Mux.encode(%Frame{type: :open, stream_id: 1, payload: ""})})
+    send(srv, {:carrier_data, Mux.encode(%Frame{type: :open, stream_id: 2, payload: ""})})
+
+    # stream 1 connected (no CLOSE); only stream 2's cap-refusal frame comes back.
+    assert_receive {:carrier_out, bin}, 1000
+    assert {:ok, [%Frame{type: :close, stream_id: 2}], ""} = Mux.decode(bin)
+  end
+
+  test "the idle sweep closes a stream with no activity" do
+    {:ok, lsock} = :gen_tcp.listen(0, [:binary, active: false, reuseaddr: true])
+    {:ok, port} = :inet.port(lsock)
+
+    spawn_link(fn ->
+      {:ok, _} = :gen_tcp.accept(lsock)
+      Process.sleep(:infinity)
+    end)
+
+    srv =
+      start_supervised!(
+        {Server,
+         [
+           target_port: port,
+           sprite: "s",
+           control_port: 9000,
+           idle_ms: 0,
+           connector: relay_connector(self())
+         ]}
+      )
+
+    send(srv, {:carrier_data, Mux.encode(%Frame{type: :open, stream_id: 1, payload: ""})})
+    send(srv, :sweep)
+
+    assert_receive {:carrier_out, bin}, 1000
+    assert {:ok, [%Frame{type: :close, stream_id: 1}], ""} = Mux.decode(bin)
+  end
 end
