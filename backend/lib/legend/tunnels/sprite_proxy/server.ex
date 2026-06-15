@@ -142,6 +142,14 @@ defmodule Legend.Tunnels.SpriteProxy.Server do
 
   def handle_info(:reconnect, state), do: {:noreply, connect_carrier(state)}
 
+  def handle_info(:carrier_ready, %{ready_notified: false, notify: notify} = state)
+      when is_pid(notify) do
+    send(notify, {:tunnel_ready, self()})
+    {:noreply, %{state | ready_notified: true}}
+  end
+
+  def handle_info(:carrier_ready, state), do: {:noreply, state}
+
   def handle_info(:sweep, state) do
     cutoff = now_ms() - state.idle_ms
 

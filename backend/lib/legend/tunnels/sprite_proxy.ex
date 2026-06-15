@@ -9,6 +9,7 @@ defmodule Legend.Tunnels.SpriteProxy do
   @control_port 9000
   @data_port 7777
   @bridge_dest "/tmp/legend-bridge"
+  @ready_timeout_ms 15_000
 
   @impl true
   def id, do: "sprite_proxy"
@@ -23,9 +24,20 @@ defmodule Legend.Tunnels.SpriteProxy do
              session_id: name,
              control_port: @control_port,
              notify: self()
-           ) do
+           ),
+         :ok <- await_ready(srv) do
       # The Server owns the carrier + the session-bound listener.
       {:ok, %{base_url: "http://127.0.0.1:#{@data_port}", handle: %{server: srv}}}
+    end
+  end
+
+  defp await_ready(srv) do
+    receive do
+      {:tunnel_ready, ^srv} -> :ok
+    after
+      @ready_timeout_ms ->
+        stop(srv)
+        {:error, "tunnel carrier readiness timed out after #{@ready_timeout_ms}ms"}
     end
   end
 

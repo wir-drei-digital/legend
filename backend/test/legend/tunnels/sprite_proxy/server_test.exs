@@ -181,4 +181,21 @@ defmodule Legend.Tunnels.SpriteProxy.ServerTest do
     assert_receive {:carrier_out, bin}, 1000
     assert {:ok, [%Frame{type: :close, stream_id: 1}], ""} = Mux.decode(bin)
   end
+
+  test "the server notifies :tunnel_ready once the carrier acks" do
+    test = self()
+
+    connector = fn _s, _p, srv ->
+      send(srv, :carrier_ready)
+      {:ok, spawn(fn -> Process.sleep(:infinity) end)}
+    end
+
+    srv =
+      start_supervised!(
+        {Server,
+         [target_port: 0, sprite: "s", control_port: 9000, connector: connector, notify: test]}
+      )
+
+    assert_receive {:tunnel_ready, ^srv}, 1000
+  end
 end
