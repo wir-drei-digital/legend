@@ -21,6 +21,16 @@ defmodule LegendWeb.HarnessControllerTest do
     assert hermes["resumable"] == false
   end
 
+  test "GET /api/harnesses reports provisionable per harness", %{conn: conn} do
+    data = conn |> get("/api/harnesses") |> json_response(200) |> Map.fetch!("data")
+    by_id = Map.new(data, &{&1["id"], &1})
+
+    assert Map.has_key?(by_id, "claude_code")
+    assert by_id["claude_code"]["provisionable"] == true
+    # Every harness carries the boolean.
+    assert Enum.all?(data, &is_boolean(&1["provisionable"]))
+  end
+
   describe "setup" do
     setup do
       home =

@@ -13,6 +13,7 @@ defmodule LegendWeb.HarnessController do
           description: d.description,
           kind: d.kind,
           resumable: d.resumable,
+          provisionable: Harness.provision_for(mod) != nil,
           setup: Harness.setup_for(mod)
         }
       end
