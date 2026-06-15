@@ -30,7 +30,12 @@ config :phoenix,
 
 # Sessions in tests run on the in-memory TestRuntime ("test"), listed first so
 # fetch("test") short-circuits; LocalPty stays registered for its own tests.
-config :legend, :runtimes, [Legend.Runtimes.Test, Legend.Runtimes.LocalPty]
+config :legend, :runtimes, [
+  Legend.Runtimes.Test,
+  Legend.Runtimes.LocalPty,
+  Legend.Runtimes.TestHostApi
+]
+
 config :legend, :tunnels, [Legend.Tunnels.Test]
 
 # The janitor's boot pass conflicts with the SQL sandbox; tests call it directly.

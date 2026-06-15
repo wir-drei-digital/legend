@@ -235,7 +235,12 @@ defmodule Legend.Core.Signals.Tools do
     end
   end
 
-  defp host_runtime?(caps), do: caps.tunnel == nil and caps.library == :path
+  # "Host" = executes on the trusted backend host, classified fail-closed by the
+  # ONE trust-bearing capability: a runtime needs a tunnel precisely BECAUSE it
+  # runs in a remote sandbox, so "no tunnel" ⇒ host. Keying on :library (an I/O
+  # shape, not a trust boundary) would misclassify a future host runtime that
+  # speaks MCP over loopback (tunnel: nil, library: :api) as non-host.
+  defp host_runtime?(caps), do: caps.tunnel == nil
   defp allow_remote_host_spawn?, do: Application.get_env(:legend, :allow_remote_host_spawn, false)
 
   defp handoff_spawn(session, harness, summary) do

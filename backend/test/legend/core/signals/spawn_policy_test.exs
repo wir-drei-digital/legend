@@ -53,6 +53,15 @@ defmodule Legend.Core.Signals.SpawnPolicyTest do
     assert msg =~ "unknown runtime"
   end
 
+  # Fail-closed classification: a host-side runtime that happens to speak the
+  # library over MCP (tunnel: nil, library: :api) must still be gated from a
+  # remote caller. Keying host-ness on :library would wrongly let this through.
+  test "a host runtime that speaks MCP (tunnel: nil, library: :api) is still gated" do
+    TestRuntime.set_capabilities(%{provisions?: false, library: :api, tunnel: "test_tunnel"})
+    assert {:error, msg} = Tools.authorize_spawn(session("test"), "test_host_api")
+    assert msg =~ "may not spawn host"
+  end
+
   test "start_agent from a remote session denies a host runtime and creates no child" do
     TestRuntime.subscribe()
     TestRuntime.set_capabilities(%{provisions?: false, library: :api, tunnel: "test_tunnel"})
