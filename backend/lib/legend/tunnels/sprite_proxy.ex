@@ -8,7 +8,7 @@ defmodule Legend.Tunnels.SpriteProxy do
 
   @control_port 9000
   @data_port 7777
-  @bridge_dest "/tmp/legend-bridge"
+  @ready_timeout_ms 15_000
 
   @impl true
   def id, do: "sprite_proxy"
@@ -19,12 +19,24 @@ defmodule Legend.Tunnels.SpriteProxy do
          :ok <- ensure_bridge(name, bin),
          {:ok, srv} <-
            Server.start_link(
-             target_port: endpoint_port(),
              sprite: name,
-             control_port: @control_port
-           ) do
-      # The Server owns the carrier (connects + reconnects internally).
+             session_id: name,
+             control_port: @control_port,
+             notify: self()
+           ),
+         :ok <- await_ready(srv) do
+      # The Server owns the carrier + the session-bound listener.
       {:ok, %{base_url: "http://127.0.0.1:#{@data_port}", handle: %{server: srv}}}
+    end
+  end
+
+  defp await_ready(srv) do
+    receive do
+      {:tunnel_ready, ^srv} -> :ok
+    after
+      @ready_timeout_ms ->
+        stop(srv)
+        {:error, "tunnel carrier readiness timed out after #{@ready_timeout_ms}ms"}
     end
   end
 
@@ -49,13 +61,26 @@ defmodule Legend.Tunnels.SpriteProxy do
     end
   end
 
-  # Upload sets mode 0755 at write time; launch over the VERIFIED WSS exec (the
-  # REST exec returns the raw stream protocol, not JSON). setsid detaches the
-  # bridge so it survives the exec session; pgrep guards against a second launch
-  # (e.g. on resume the bridge is already running and the ports are bound).
+  # Content-address the bridge so a stale binary from a prior Legend version is
+  # detected and replaced. The launch path embeds the hash, so `pgrep -f <dest>`
+  # tells us whether OUR exact version is already running (resume fast-path); any
+  # other bridge is killed (they share the fixed 9000/7777).
   defp ensure_bridge(name, bin) do
-    with {:ok, _} <- Client.write_file(name, @bridge_dest, bin),
-         {:ok, %{status: 0}} <- launch_bridge(name) do
+    sha = :crypto.hash(:sha256, bin) |> Base.encode16(case: :lower) |> binary_part(0, 8)
+    dest = "/tmp/legend-bridge-#{sha}"
+
+    # `^` anchors the match to the START of the command line, so it matches the
+    # bridge process (argv = "<dest>") but NOT the `sh -c "pgrep …<dest>…"` wrapper
+    # running this very check (its command line starts with "sh").
+    case Exec.run(name, sh("pgrep -f '^#{dest}' >/dev/null 2>&1")) do
+      {:ok, %{status: 0}} -> :ok
+      _ -> deliver_and_launch(name, dest, bin)
+    end
+  end
+
+  defp deliver_and_launch(name, dest, bin) do
+    with {:ok, _} <- Client.write_file(name, dest, bin),
+         {:ok, %{status: 0}} <- Exec.run(name, sh(launch_cmd(dest))) do
       :ok
     else
       {:ok, %{status: s, stdout: out}} -> {:error, "bridge launch failed (#{s}): #{out}"}
@@ -63,13 +88,15 @@ defmodule Legend.Tunnels.SpriteProxy do
     end
   end
 
-  defp launch_bridge(name) do
-    cmd =
-      "(pgrep -x legend-bridge >/dev/null 2>&1 || " <>
-        "setsid #{@bridge_dest} >/tmp/bridge.log 2>&1 &) ; sleep 0.3"
-
-    Exec.run(name, %CommandSpec{cmd: "sh", args: ["-c", cmd], io: :pipes})
+  defp launch_cmd(dest) do
+    # `^` anchors to the START of the command line so pkill reaps stale bridge
+    # processes (argv begins with "/tmp/legend-bridge-") WITHOUT killing the
+    # `sh -c "…setsid /tmp/legend-bridge-…"` wrapper running this script (its
+    # command line begins with "sh", not "/tmp"). An unanchored pattern would
+    # SIGTERM that wrapper before `setsid` runs and the bridge would never launch.
+    "pkill -f '^/tmp/legend-bridge-' >/dev/null 2>&1 || true ; " <>
+      "setsid #{dest} >/tmp/bridge.log 2>&1 & ; sleep 0.3"
   end
 
-  defp endpoint_port, do: LegendWeb.Endpoint.config(:http)[:port]
+  defp sh(cmd), do: %CommandSpec{cmd: "sh", args: ["-c", cmd], io: :pipes}
 end

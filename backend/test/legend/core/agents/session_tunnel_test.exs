@@ -104,4 +104,21 @@ defmodule Legend.Core.Agents.SessionTunnelTest do
     assert_receive {:test_tunnel, :close, _}, 1000
     assert Agents.get_session!(s.id).status == :failed
   end
+
+  test "runtime exit closes the tunnel but keeps the session alive for scrollback" do
+    TestRuntime.set_capabilities(%{provisions?: false, library: :api, tunnel: "test_tunnel"})
+
+    {:ok, s} =
+      Agents.start_session(%{name: "exit", harness_id: "claude_code", runtime_id: "test"})
+
+    assert_receive {:test_tunnel, :open, _}, 1000
+    assert_receive {:test_runtime, :start, _spec, _opts}, 1000
+
+    pid = Legend.Core.Agents.SessionServer.whereis(s.id)
+    send(pid, {:runtime_exit, 0})
+
+    assert_receive {:test_tunnel, :close, _}, 1000
+    assert Agents.get_session!(s.id).status == :exited
+    assert Process.alive?(pid)
+  end
 end

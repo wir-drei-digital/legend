@@ -301,6 +301,7 @@ defmodule Legend.Sprites.Proxy do
     case Jason.decode(json) do
       {:ok, %{"status" => "connected"}} ->
         Logger.info("[Sprites.Proxy] carrier connected for sprite #{state.name}")
+        send(state.server, :carrier_ready)
         %{state | connected: true}
 
       {:ok, other} ->

@@ -19,6 +19,9 @@ pub const WINDOW: u8 = 4;
 #[allow(dead_code)]
 pub const INITIAL_WINDOW: u32 = 262_144;
 
+/// Maximum accepted frame payload (1 MiB). Keep in lockstep with mux.ex `@max_frame_payload`.
+pub const MAX_FRAME_PAYLOAD: usize = 1_048_576;
+
 /// Header size: 1 (type) + 4 (stream_id) + 4 (length) = 9 bytes.
 const HEADER_LEN: usize = 9;
 
@@ -41,6 +44,13 @@ pub async fn read_frame<R: AsyncRead + Unpin>(r: &mut R) -> io::Result<Option<Fr
     let typ = hdr[0];
     let stream_id = u32::from_be_bytes([hdr[1], hdr[2], hdr[3], hdr[4]]);
     let length = u32::from_be_bytes([hdr[5], hdr[6], hdr[7], hdr[8]]) as usize;
+
+    if length > MAX_FRAME_PAYLOAD {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "frame payload exceeds MAX_FRAME_PAYLOAD",
+        ));
+    }
 
     let mut payload = vec![0u8; length];
     if length > 0 {
@@ -67,4 +77,19 @@ pub async fn write_frame<W: AsyncWrite + Unpin>(w: &mut W, frame: &Frame) -> io:
         w.write_all(&frame.payload).await?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn rejects_oversized_frame_header() {
+        // type=DATA, stream=1, length = MAX_FRAME_PAYLOAD + 1
+        let mut bytes = vec![DATA];
+        bytes.extend_from_slice(&1u32.to_be_bytes());
+        bytes.extend_from_slice(&((MAX_FRAME_PAYLOAD + 1) as u32).to_be_bytes());
+        let mut cursor = std::io::Cursor::new(bytes);
+        assert!(read_frame(&mut cursor).await.is_err());
+    }
 }

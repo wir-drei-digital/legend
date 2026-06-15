@@ -21,21 +21,61 @@ defmodule Legend.Tunnels.SpriteProxy.Server do
   @impl true
   def init(opts) do
     Process.flag(:trap_exit, true)
+    {target_port, listener} = resolve_target(opts)
 
     state = %{
-      target_port: Keyword.fetch!(opts, :target_port),
+      target_port: target_port,
+      listener: listener,
       sprite: Keyword.fetch!(opts, :sprite),
       control_port: Keyword.fetch!(opts, :control_port),
       connector: Keyword.get(opts, :connector, &default_connect/3),
       reconnect_base_ms: Keyword.get(opts, :reconnect_base_ms, 500),
+      notify: Keyword.get(opts, :notify),
+      ready_notified: false,
       out: nil,
       attempt: 0,
       buffer: "",
       streams: %{},
-      ids: %{}
+      ids: %{},
+      max_streams: Keyword.get(opts, :max_streams, 256),
+      idle_ms: Keyword.get(opts, :idle_ms, 120_000),
+      last_seen: %{}
     }
 
+    Process.send_after(self(), :sweep, 30_000)
     {:ok, state, {:continue, :connect}}
+  end
+
+  # Production: allocate an ephemeral loopback port and a TunnelPlug listener
+  # bound to this session. Tests may pass :target_port to dial a fixture instead
+  # (then no listener is started).
+  defp resolve_target(opts) do
+    case Keyword.get(opts, :target_port) do
+      nil ->
+        session_id = Keyword.fetch!(opts, :session_id)
+        {:ok, listener, port} = start_listener(session_id)
+        {port, listener}
+
+      port ->
+        {port, nil}
+    end
+  end
+
+  defp start_listener(session_id) do
+    {:ok, probe} = :gen_tcp.listen(0, ip: {127, 0, 0, 1})
+    {:ok, port} = :inet.port(probe)
+    :gen_tcp.close(probe)
+
+    {:ok, listener} =
+      Bandit.start_link(
+        plug: {LegendWeb.TunnelPlug, bound_session_id: session_id},
+        scheme: :http,
+        ip: {127, 0, 0, 1},
+        port: port,
+        thousand_island_options: [num_acceptors: 2]
+      )
+
+    {:ok, listener, port}
   end
 
   @impl true
@@ -43,8 +83,14 @@ defmodule Legend.Tunnels.SpriteProxy.Server do
 
   @impl true
   def handle_info({:carrier_data, bin}, state) do
-    {frames, rest} = Mux.decode(state.buffer <> bin)
-    {:noreply, Enum.reduce(frames, %{state | buffer: rest}, &handle_frame/2)}
+    case Mux.decode(state.buffer <> bin) do
+      {:ok, frames, rest} ->
+        {:noreply, Enum.reduce(frames, %{state | buffer: rest}, &handle_frame/2)}
+
+      {:error, :frame_too_large} ->
+        Logger.warning("[SpriteProxy.Server] oversized mux frame — dropping carrier")
+        drop_carrier(state)
+    end
   end
 
   def handle_info({:tcp, sock, data}, state) do
@@ -54,7 +100,8 @@ defmodule Legend.Tunnels.SpriteProxy.Server do
 
       id ->
         out(state, %Frame{type: :data, stream_id: id, payload: data})
-        {:noreply, state}
+        :inet.setopts(sock, active: :once)
+        {:noreply, %{state | last_seen: Map.put(state.last_seen, id, now_ms())}}
     end
   end
 
@@ -76,6 +123,13 @@ defmodule Legend.Tunnels.SpriteProxy.Server do
     end
   end
 
+  # The listener (a linked process) died — unexpected for a loopback Bandit; fail
+  # the tunnel visibly rather than serve a half-broken path. The SessionServer
+  # surfaces it; resume reopens a fresh tunnel + listener.
+  def handle_info({:EXIT, pid, reason}, %{listener: pid} = state) when is_pid(pid) do
+    {:stop, {:listener_down, reason}, state}
+  end
+
   # The carrier (a linked process) died — reset in-flight streams and reconnect.
   def handle_info({:EXIT, pid, _reason}, %{out: pid} = state) do
     Enum.each(Map.keys(state.streams), &close_sock(state, &1))
@@ -88,15 +142,41 @@ defmodule Legend.Tunnels.SpriteProxy.Server do
 
   def handle_info(:reconnect, state), do: {:noreply, connect_carrier(state)}
 
-  @impl true
-  def terminate(_reason, %{out: carrier}) when is_pid(carrier) do
-    # Tear the carrier down with the Server. :shutdown to the (non-trapping)
-    # carrier kills it immediately; its socket is closed by the OS.
-    if Process.alive?(carrier), do: Process.exit(carrier, :shutdown)
-    :ok
+  def handle_info(:carrier_ready, %{ready_notified: false, notify: notify} = state)
+      when is_pid(notify) do
+    send(notify, {:tunnel_ready, self()})
+    {:noreply, %{state | ready_notified: true}}
   end
 
-  def terminate(_reason, _state), do: :ok
+  def handle_info(:carrier_ready, state), do: {:noreply, state}
+
+  def handle_info(:sweep, state) do
+    cutoff = now_ms() - state.idle_ms
+
+    stale = for {id, ts} <- state.last_seen, ts <= cutoff, do: id
+
+    state =
+      Enum.reduce(stale, state, fn id, acc ->
+        out(acc, %Frame{type: :close, stream_id: id, payload: ""})
+        drop(acc, id)
+      end)
+
+    Process.send_after(self(), :sweep, 30_000)
+    {:noreply, state}
+  end
+
+  @impl true
+  def terminate(_reason, state) do
+    if is_pid(state[:listener]) and Process.alive?(state.listener),
+      do: Process.exit(state.listener, :shutdown)
+
+    carrier = state[:out]
+
+    if is_pid(carrier) and Process.alive?(carrier),
+      do: Process.exit(carrier, :shutdown)
+
+    :ok
+  end
 
   defp connect_carrier(state) do
     case state.connector.(state.sprite, state.control_port, self()) do
@@ -122,14 +202,38 @@ defmodule Legend.Tunnels.SpriteProxy.Server do
     do: Legend.Sprites.Proxy.connect(sprite, control_port, server)
 
   defp handle_frame(%Frame{type: :open, stream_id: id}, state) do
-    case :gen_tcp.connect(~c"127.0.0.1", state.target_port, [:binary, active: true, packet: :raw]) do
-      {:ok, sock} ->
-        %{state | streams: Map.put(state.streams, id, sock), ids: Map.put(state.ids, sock, id)}
-
-      {:error, reason} ->
-        out(state, %Frame{type: :close, stream_id: id, payload: ""})
-        Logger.warning("tunnel dial: #{inspect(reason)}")
+    cond do
+      Map.has_key?(state.streams, id) ->
         state
+
+      map_size(state.streams) >= state.max_streams ->
+        out(state, %Frame{type: :close, stream_id: id, payload: ""})
+
+        Logger.warning(
+          "[SpriteProxy.Server] stream cap #{state.max_streams} reached — refusing #{id}"
+        )
+
+        state
+
+      true ->
+        case :gen_tcp.connect(~c"127.0.0.1", state.target_port, [
+               :binary,
+               active: :once,
+               packet: :raw
+             ]) do
+          {:ok, sock} ->
+            %{
+              state
+              | streams: Map.put(state.streams, id, sock),
+                ids: Map.put(state.ids, sock, id),
+                last_seen: Map.put(state.last_seen, id, now_ms())
+            }
+
+          {:error, reason} ->
+            out(state, %Frame{type: :close, stream_id: id, payload: ""})
+            Logger.warning("tunnel dial: #{inspect(reason)}")
+            state
+        end
     end
   end
 
@@ -138,7 +242,10 @@ defmodule Legend.Tunnels.SpriteProxy.Server do
       :gen_tcp.send(sock, p)
     end
 
-    state
+    case Map.has_key?(state.streams, id) do
+      true -> %{state | last_seen: Map.put(state.last_seen, id, now_ms())}
+      false -> state
+    end
   end
 
   defp handle_frame(%Frame{type: :close, stream_id: id}, state), do: drop(state, id)
@@ -149,6 +256,8 @@ defmodule Legend.Tunnels.SpriteProxy.Server do
 
   defp out(_state, _frame), do: :ok
 
+  defp now_ms, do: System.monotonic_time(:millisecond)
+
   defp drop(state, id) do
     case Map.get(state.streams, id) do
       nil ->
@@ -156,7 +265,13 @@ defmodule Legend.Tunnels.SpriteProxy.Server do
 
       sock ->
         :gen_tcp.close(sock)
-        %{state | streams: Map.delete(state.streams, id), ids: Map.delete(state.ids, sock)}
+
+        %{
+          state
+          | streams: Map.delete(state.streams, id),
+            ids: Map.delete(state.ids, sock),
+            last_seen: Map.delete(state.last_seen, id)
+        }
     end
   end
 
@@ -166,4 +281,11 @@ defmodule Legend.Tunnels.SpriteProxy.Server do
       sock -> :gen_tcp.close(sock)
     end
   end
+
+  defp drop_carrier(%{out: carrier} = state) when is_pid(carrier) do
+    if Process.alive?(carrier), do: Process.exit(carrier, :kill)
+    {:noreply, state}
+  end
+
+  defp drop_carrier(state), do: {:noreply, state}
 end

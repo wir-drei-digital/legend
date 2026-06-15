@@ -27,6 +27,7 @@ export interface Harness {
 	description: string;
 	kind: 'terminal' | 'acp' | 'native';
 	resumable: boolean;
+	provisionable: boolean;
 	setup: HarnessSetup;
 }
 
