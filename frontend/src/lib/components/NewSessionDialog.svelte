@@ -29,6 +29,12 @@
 	const selectedHarness = $derived(harnesses.find((h) => h.id === harnessId));
 	const selectedRuntime = $derived(runtimes.find((r) => r.id === runtimeId));
 
+	const incompatible = $derived(
+		!!selectedRuntime?.capabilities?.provisions &&
+			!!selectedHarness &&
+			!selectedHarness.provisionable
+	);
+
 	let dismissed = $state<Record<string, boolean>>({});
 	let applyingSetup = $state(false);
 	let setupError = $state('');
@@ -190,13 +196,20 @@
 				/>
 			</div>
 
+			{#if incompatible && selectedHarness && selectedRuntime}
+				<p class="text-sm text-destructive">
+					{selectedHarness.name} can't be auto-installed on {runtimeLabel(selectedRuntime.id)} —
+					pick a different harness or runtime.
+				</p>
+			{/if}
+
 			{#if error}
 				<p class="text-sm text-destructive">{error}</p>
 			{/if}
 		</div>
 
 		<Dialog.Footer>
-			<Button onclick={create} disabled={creating || !harnessId}>
+			<Button onclick={create} disabled={creating || !harnessId || incompatible}>
 				{creating ? 'Starting…' : 'Start session'}
 			</Button>
 		</Dialog.Footer>
