@@ -8,6 +8,7 @@ defmodule Legend.Core.Signals.Tools do
 
   alias Legend.Core.Agents
   alias Legend.Core.Harness
+  alias Legend.Core.Runtime
   alias Legend.Core.Signals
 
   def list do
@@ -44,7 +45,11 @@ defmodule Legend.Core.Signals.Tools do
             },
             instructions: %{type: "string", description: "the task for the new agent"},
             name: %{type: "string", description: "optional display name"},
-            cwd: %{type: "string", description: "optional working directory (defaults to yours)"}
+            cwd: %{type: "string", description: "optional working directory (defaults to yours)"},
+            runtime: %{
+              type: "string",
+              description: "optional runtime id; defaults to inheriting yours"
+            }
           },
           required: ["harness", "instructions"]
         }
@@ -90,7 +95,7 @@ defmodule Legend.Core.Signals.Tools do
         %{"harness" => harness, "instructions" => instructions} = args
       )
       when is_binary(harness) and is_binary(instructions) do
-    start_agent(session, harness, instructions, args["name"], args["cwd"])
+    start_agent(session, harness, instructions, args["name"], args["cwd"], args["runtime"])
   end
 
   def dispatch(session, "handoff", %{"to" => to, "summary" => summary})
@@ -146,8 +151,9 @@ defmodule Legend.Core.Signals.Tools do
     end
   end
 
-  defp start_agent(session, harness, instructions, name, cwd) do
+  defp start_agent(session, harness, instructions, name, cwd, runtime) do
     max = Application.get_env(:legend, :max_running_sessions, 10)
+    target_runtime = runtime || session.runtime_id
 
     cond do
       Harness.Registry.fetch(harness) == :error ->
@@ -158,39 +164,85 @@ defmodule Legend.Core.Signals.Tools do
         {:error, "session cap reached (#{max} running) — stop a session first"}
 
       true ->
-        case Agents.start_session(%{
-               harness_id: harness,
-               name: name,
-               cwd: cwd || session.cwd,
-               spawned_by_session_id: session.id,
-               instructions: instructions
-             }) do
-          {:ok, %{status: :failed} = failed} ->
-            {:error, "agent failed to start: #{failed.error}"}
-
-          {:ok, new_session} ->
-            audit(
-              session.id,
-              new_session.id,
-              :system,
-              "started with instructions:\n#{instructions}"
-            )
-
-            {:ok,
-             "Started session #{new_session.id} (#{harness}). It was told to report back " <>
-               "to you; you will also get a system message when it exits."}
-
-          {:error, error} ->
-            {:error, "could not start agent: #{render_error(error)}"}
+        with :ok <- authorize_spawn(session, target_runtime) do
+          start_child(session, harness, instructions, name, cwd, target_runtime)
         end
     end
   end
+
+  defp start_child(session, harness, instructions, name, cwd, target_runtime) do
+    case Agents.start_session(%{
+           harness_id: harness,
+           name: name,
+           cwd: cwd || session.cwd,
+           runtime_id: target_runtime,
+           spawned_by_session_id: session.id,
+           instructions: instructions
+         }) do
+      {:ok, %{status: :failed} = failed} ->
+        {:error, "agent failed to start: #{failed.error}"}
+
+      {:ok, new_session} ->
+        audit(
+          session.id,
+          new_session.id,
+          :system,
+          "started with instructions:\n#{instructions}"
+        )
+
+        {:ok,
+         "Started session #{new_session.id} (#{harness}). It was told to report back " <>
+           "to you; you will also get a system message when it exits."}
+
+      {:error, error} ->
+        {:error, "could not start agent: #{render_error(error)}"}
+    end
+  end
+
+  @doc """
+  Spawn-runtime policy. A remote caller (its runtime declares a tunnel) may not
+  spawn a host runtime (`tunnel: nil, library: :path`, e.g. `local_pty`) unless
+  `:allow_remote_host_spawn` is set. Same-runtime (inherit) and upward delegation
+  (host → remote) are always allowed.
+  """
+  @spec authorize_spawn(struct(), String.t()) :: :ok | {:error, String.t()}
+  def authorize_spawn(caller_session, target_runtime_id) do
+    case Runtime.Registry.fetch(target_runtime_id) do
+      :error ->
+        {:error, "unknown runtime: #{target_runtime_id}"}
+
+      {:ok, target_mod} ->
+        cond do
+          target_runtime_id == caller_session.runtime_id ->
+            :ok
+
+          host_runtime?(Runtime.capabilities(target_mod)) and
+            remote_caller?(caller_session) and not allow_remote_host_spawn?() ->
+            {:error,
+             "remote sessions may not spawn host (#{target_runtime_id}) sessions; " <>
+               "set :allow_remote_host_spawn to override"}
+
+          true ->
+            :ok
+        end
+    end
+  end
+
+  defp remote_caller?(%{runtime_id: rid}) do
+    case Runtime.Registry.fetch(rid) do
+      {:ok, mod} -> Runtime.capabilities(mod).tunnel != nil
+      :error -> false
+    end
+  end
+
+  defp host_runtime?(caps), do: caps.tunnel == nil and caps.library == :path
+  defp allow_remote_host_spawn?, do: Application.get_env(:legend, :allow_remote_host_spawn, false)
 
   defp handoff_spawn(session, harness, summary) do
     instructions =
       "You are taking over work handed off by another agent. Handoff summary:\n\n" <> summary
 
-    with {:ok, text} <- start_agent(session, harness, instructions, nil, nil) do
+    with {:ok, text} <- start_agent(session, harness, instructions, nil, nil, nil) do
       {:ok, "Handed off. " <> text}
     end
   end
