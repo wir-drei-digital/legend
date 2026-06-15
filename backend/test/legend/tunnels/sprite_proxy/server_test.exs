@@ -50,7 +50,7 @@ defmodule Legend.Tunnels.SpriteProxy.ServerTest do
     send(srv, {:carrier_data, Mux.encode(%Frame{type: :data, stream_id: 1, payload: "ping"})})
 
     assert_receive {:carrier_out, bin}, 1000
-    {[%Frame{type: :data, stream_id: 1, payload: "echo:ping"}], ""} = Mux.decode(bin)
+    {:ok, [%Frame{type: :data, stream_id: 1, payload: "echo:ping"}], ""} = Mux.decode(bin)
   end
 
   test "connects a carrier on start and reconnects when it drops" do

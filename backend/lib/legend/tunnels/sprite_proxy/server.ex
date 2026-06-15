@@ -79,8 +79,14 @@ defmodule Legend.Tunnels.SpriteProxy.Server do
 
   @impl true
   def handle_info({:carrier_data, bin}, state) do
-    {frames, rest} = Mux.decode(state.buffer <> bin)
-    {:noreply, Enum.reduce(frames, %{state | buffer: rest}, &handle_frame/2)}
+    case Mux.decode(state.buffer <> bin) do
+      {:ok, frames, rest} ->
+        {:noreply, Enum.reduce(frames, %{state | buffer: rest}, &handle_frame/2)}
+
+      {:error, :frame_too_large} ->
+        Logger.warning("[SpriteProxy.Server] oversized mux frame — dropping carrier")
+        drop_carrier(state)
+    end
   end
 
   def handle_info({:tcp, sock, data}, state) do
@@ -212,4 +218,11 @@ defmodule Legend.Tunnels.SpriteProxy.Server do
       sock -> :gen_tcp.close(sock)
     end
   end
+
+  defp drop_carrier(%{out: carrier} = state) when is_pid(carrier) do
+    if Process.alive?(carrier), do: Process.exit(carrier, :kill)
+    {:noreply, state}
+  end
+
+  defp drop_carrier(state), do: {:noreply, state}
 end

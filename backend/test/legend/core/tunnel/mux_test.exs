@@ -5,7 +5,7 @@ defmodule Legend.Core.Tunnel.MuxTest do
 
   test "encode/decode round-trips a DATA frame" do
     frame = %Frame{type: :data, stream_id: 7, payload: "hello"}
-    {[decoded], ""} = Mux.decode(Mux.encode(frame))
+    {:ok, [decoded], ""} = Mux.decode(Mux.encode(frame))
     assert decoded == frame
   end
 
@@ -20,7 +20,7 @@ defmodule Legend.Core.Tunnel.MuxTest do
       Mux.encode(%Frame{type: :open, stream_id: 1, payload: ""}) <>
         Mux.encode(%Frame{type: :data, stream_id: 1, payload: "ab"})
 
-    {frames, ""} = Mux.decode(buf)
+    {:ok, frames, ""} = Mux.decode(buf)
 
     assert [%Frame{type: :open, stream_id: 1}, %Frame{type: :data, stream_id: 1, payload: "ab"}] =
              frames
@@ -29,8 +29,8 @@ defmodule Legend.Core.Tunnel.MuxTest do
   test "decode/1 keeps an incomplete trailing frame in the leftover buffer" do
     full = Mux.encode(%Frame{type: :data, stream_id: 1, payload: "abcd"})
     {head, tail} = String.split_at(full, byte_size(full) - 2)
-    assert {[], ^head} = Mux.decode(head)
-    {[%Frame{payload: "abcd"}], ""} = Mux.decode(head <> tail)
+    assert {:ok, [], ^head} = Mux.decode(head)
+    {:ok, [%Frame{payload: "abcd"}], ""} = Mux.decode(head <> tail)
   end
 
   test "window/2 builds a WINDOW frame carrying the credit" do
@@ -38,5 +38,24 @@ defmodule Legend.Core.Tunnel.MuxTest do
 
     assert {:window, 3, 512} =
              Mux.parse_window(%Frame{type: :window, stream_id: 3, payload: <<512::32>>})
+  end
+
+  # --- Task 6: frame-size cap ---
+
+  test "round-trips a frame and reports leftover" do
+    bin = Mux.encode(%Frame{type: :data, stream_id: 7, payload: "hi"})
+    assert {:ok, [%Frame{type: :data, stream_id: 7, payload: "hi"}], "x"} = Mux.decode(bin <> "x")
+  end
+
+  test "an incomplete frame is left in the buffer" do
+    <<head::binary-size(5), _::binary>> =
+      Mux.encode(%Frame{type: :data, stream_id: 1, payload: "abc"})
+
+    assert {:ok, [], ^head} = Mux.decode(head)
+  end
+
+  test "a frame whose declared length exceeds the cap is rejected" do
+    oversized = <<2, 1::32, Mux.max_frame_payload() + 1::32>>
+    assert {:error, :frame_too_large} = Mux.decode(oversized)
   end
 end
