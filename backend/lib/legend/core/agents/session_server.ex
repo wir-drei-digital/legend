@@ -385,10 +385,11 @@ defmodule Legend.Core.Agents.SessionServer do
 
   def handle_info({:runtime_exit, code}, state) do
     session = Agents.finish_session!(state.session, %{exit_code: code})
+    maybe_close_tunnel(state.tunnel)
     notify_spawner_of_exit(session, code)
     broadcast(session.id, {:session_exit, code})
     Notifications.sessions_changed()
-    {:noreply, %{state | session: session, exited?: true}}
+    {:noreply, %{state | session: session, exited?: true, tunnel: nil}}
   end
 
   # Runtime helper processes exit normally after forwarding runtime_exit.
