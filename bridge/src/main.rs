@@ -30,6 +30,12 @@ const OUTBOUND_QUEUE: usize = 256;
 /// Payload capacity per stream's inbound (carrier → agent) queue.
 const STREAM_QUEUE: usize = 64;
 
+/// Maximum concurrent mux streams per carrier session. Mirrors `@max_streams` in server.ex.
+const MAX_STREAMS: usize = 256;
+
+/// Per-stream idle/read timeout. Mirrors `@idle_ms` default in server.ex.
+const STREAM_IDLE: std::time::Duration = std::time::Duration::from_secs(120);
+
 /// A new agent connection to be muxed over the carrier.
 struct NewStream {
     stream_id: u32,
@@ -50,6 +56,11 @@ type CarrierInboundTx = Arc<Mutex<Option<mpsc::Sender<NewStream>>>>;
 
 #[tokio::main]
 async fn main() {
+    if std::env::args().any(|a| a == "--version") {
+        println!("{}", env!("CARGO_PKG_VERSION"));
+        return;
+    }
+
     let control_addr = "127.0.0.1:9000";
     let data_addr = "127.0.0.1:7777";
 
@@ -175,6 +186,19 @@ async fn run_carrier_session(carrier: TcpStream, carrier_inbound_tx: CarrierInbo
             break;
         }
 
+        // Enforce per-session stream cap before registering.
+        {
+            let guard = stream_senders.lock().unwrap();
+            if guard.len() >= MAX_STREAMS {
+                eprintln!("[bridge] stream cap {MAX_STREAMS} reached — refusing stream {sid}");
+                let close_frame = encode_frame(mux::CLOSE, sid, &[]);
+                if out_tx.send(close_frame).await.is_err() {
+                    break;
+                }
+                continue;
+            }
+        }
+
         let (inbound_tx, inbound_rx) = mpsc::channel::<Vec<u8>>(STREAM_QUEUE);
         {
             let mut guard = stream_senders.lock().unwrap();
@@ -286,9 +310,19 @@ async fn splice_stream(
     let a2c = tokio::spawn(async move {
         let mut buf = vec![0u8; 8192];
         loop {
-            match tokio::io::AsyncReadExt::read(&mut agent_read, &mut buf).await {
-                Ok(0) | Err(_) => break,
-                Ok(n) => {
+            match tokio::time::timeout(
+                STREAM_IDLE,
+                tokio::io::AsyncReadExt::read(&mut agent_read, &mut buf),
+            )
+            .await
+            {
+                Err(_elapsed) => {
+                    // Idle timeout — close the stream.
+                    eprintln!("[bridge] stream {stream_id} idle timeout, closing");
+                    break;
+                }
+                Ok(Ok(0)) | Ok(Err(_)) => break,
+                Ok(Ok(n)) => {
                     let frame = encode_frame(mux::DATA, stream_id, &buf[..n]);
                     if out_tx_w.send(frame).await.is_err() {
                         break;
@@ -296,7 +330,7 @@ async fn splice_stream(
                 }
             }
         }
-        // Agent closed its write side — tell carrier.
+        // Agent closed its write side (or timed out) — tell carrier.
         let close_frame = encode_frame(mux::CLOSE, stream_id, &[]);
         let _ = out_tx_w.send(close_frame).await;
     });
