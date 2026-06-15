@@ -19,11 +19,12 @@ defmodule Legend.Tunnels.SpriteProxy do
          :ok <- ensure_bridge(name, bin),
          {:ok, srv} <-
            Server.start_link(
-             target_port: endpoint_port(),
              sprite: name,
-             control_port: @control_port
+             session_id: name,
+             control_port: @control_port,
+             notify: self()
            ) do
-      # The Server owns the carrier (connects + reconnects internally).
+      # The Server owns the carrier + the session-bound listener.
       {:ok, %{base_url: "http://127.0.0.1:#{@data_port}", handle: %{server: srv}}}
     end
   end
@@ -70,6 +71,4 @@ defmodule Legend.Tunnels.SpriteProxy do
 
     Exec.run(name, %CommandSpec{cmd: "sh", args: ["-c", cmd], io: :pipes})
   end
-
-  defp endpoint_port, do: LegendWeb.Endpoint.config(:http)[:port]
 end

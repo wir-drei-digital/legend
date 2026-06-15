@@ -21,13 +21,17 @@ defmodule Legend.Tunnels.SpriteProxy.Server do
   @impl true
   def init(opts) do
     Process.flag(:trap_exit, true)
+    {target_port, listener} = resolve_target(opts)
 
     state = %{
-      target_port: Keyword.fetch!(opts, :target_port),
+      target_port: target_port,
+      listener: listener,
       sprite: Keyword.fetch!(opts, :sprite),
       control_port: Keyword.fetch!(opts, :control_port),
       connector: Keyword.get(opts, :connector, &default_connect/3),
       reconnect_base_ms: Keyword.get(opts, :reconnect_base_ms, 500),
+      notify: Keyword.get(opts, :notify),
+      ready_notified: false,
       out: nil,
       attempt: 0,
       buffer: "",
@@ -36,6 +40,38 @@ defmodule Legend.Tunnels.SpriteProxy.Server do
     }
 
     {:ok, state, {:continue, :connect}}
+  end
+
+  # Production: allocate an ephemeral loopback port and a TunnelPlug listener
+  # bound to this session. Tests may pass :target_port to dial a fixture instead
+  # (then no listener is started).
+  defp resolve_target(opts) do
+    case Keyword.get(opts, :target_port) do
+      nil ->
+        session_id = Keyword.fetch!(opts, :session_id)
+        {:ok, listener, port} = start_listener(session_id)
+        {port, listener}
+
+      port ->
+        {port, nil}
+    end
+  end
+
+  defp start_listener(session_id) do
+    {:ok, probe} = :gen_tcp.listen(0, ip: {127, 0, 0, 1})
+    {:ok, port} = :inet.port(probe)
+    :gen_tcp.close(probe)
+
+    {:ok, listener} =
+      Bandit.start_link(
+        plug: {LegendWeb.TunnelPlug, bound_session_id: session_id},
+        scheme: :http,
+        ip: {127, 0, 0, 1},
+        port: port,
+        thousand_island_options: [num_acceptors: 2]
+      )
+
+    {:ok, listener, port}
   end
 
   @impl true
@@ -76,6 +112,13 @@ defmodule Legend.Tunnels.SpriteProxy.Server do
     end
   end
 
+  # The listener (a linked process) died — unexpected for a loopback Bandit; fail
+  # the tunnel visibly rather than serve a half-broken path. The SessionServer
+  # surfaces it; resume reopens a fresh tunnel + listener.
+  def handle_info({:EXIT, pid, reason}, %{listener: pid} = state) when is_pid(pid) do
+    {:stop, {:listener_down, reason}, state}
+  end
+
   # The carrier (a linked process) died — reset in-flight streams and reconnect.
   def handle_info({:EXIT, pid, _reason}, %{out: pid} = state) do
     Enum.each(Map.keys(state.streams), &close_sock(state, &1))
@@ -89,14 +132,17 @@ defmodule Legend.Tunnels.SpriteProxy.Server do
   def handle_info(:reconnect, state), do: {:noreply, connect_carrier(state)}
 
   @impl true
-  def terminate(_reason, %{out: carrier}) when is_pid(carrier) do
-    # Tear the carrier down with the Server. :shutdown to the (non-trapping)
-    # carrier kills it immediately; its socket is closed by the OS.
-    if Process.alive?(carrier), do: Process.exit(carrier, :shutdown)
+  def terminate(_reason, state) do
+    if is_pid(state[:listener]) and Process.alive?(state.listener),
+      do: Process.exit(state.listener, :shutdown)
+
+    carrier = state[:out]
+
+    if is_pid(carrier) and Process.alive?(carrier),
+      do: Process.exit(carrier, :shutdown)
+
     :ok
   end
-
-  def terminate(_reason, _state), do: :ok
 
   defp connect_carrier(state) do
     case state.connector.(state.sprite, state.control_port, self()) do

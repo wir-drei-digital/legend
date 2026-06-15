@@ -100,4 +100,26 @@ defmodule Legend.Tunnels.SpriteProxy.ServerTest do
     assert_receive {:attempt, 0}, 500
     assert_receive {:attempt, 1}, 1000
   end
+
+  test "with no target_port it allocates a session-bound listener serving health" do
+    srv =
+      start_supervised!(
+        {Server,
+         [
+           session_id: "sess-1",
+           sprite: "s",
+           control_port: 9000,
+           connector: fn _s, _p, _srv -> {:ok, spawn(fn -> Process.sleep(:infinity) end)} end
+         ]}
+      )
+
+    port = :sys.get_state(srv).target_port
+    assert is_integer(port) and port > 0
+
+    {:ok, sock} = :gen_tcp.connect(~c"127.0.0.1", port, [:binary, active: false, packet: :raw])
+    :ok = :gen_tcp.send(sock, "GET /api/health HTTP/1.1\r\nHost: x\r\n\r\n")
+    {:ok, resp} = :gen_tcp.recv(sock, 0, 1000)
+    assert resp =~ "200" and resp =~ "ok"
+    :gen_tcp.close(sock)
+  end
 end
