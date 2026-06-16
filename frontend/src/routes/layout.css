@@ -1,81 +1,127 @@
 @import 'tailwindcss';
-@import "tw-animate-css";
-@import "shadcn-svelte/tailwind.css";
-@import "@fontsource-variable/ibm-plex-sans";
+@import 'tw-animate-css';
+@import 'shadcn-svelte/tailwind.css';
+@import '@fontsource-variable/geist';
+@import '@fontsource-variable/geist-mono';
 
 @custom-variant dark (&:is(.dark *));
 
+/* ----------------------------------------------------------------------------
+   Legend design system — dark only.
+   A near-black violet surface ramp + a single themeable teal accent.
+   The raw tokens below are the source of truth; the shadcn semantic variables
+   (--background, --primary, …) are mapped onto them so every shadcn component
+   inherits the palette for free. Swapping --accent re-themes every active state.
+---------------------------------------------------------------------------- */
 :root {
-	--background: oklch(1 0 0);
-	--foreground: oklch(0.141 0.005 285.823);
-	--card: oklch(1 0 0);
-	--card-foreground: oklch(0.141 0.005 285.823);
-	--popover: oklch(1 0 0);
-	--popover-foreground: oklch(0.141 0.005 285.823);
-	--primary: oklch(0.21 0.006 285.885);
-	--primary-foreground: oklch(0.985 0 0);
-	--secondary: oklch(0.967 0.001 286.375);
-	--secondary-foreground: oklch(0.21 0.006 285.885);
-	--muted: oklch(0.967 0.001 286.375);
-	--muted-foreground: oklch(0.552 0.016 285.938);
-	--accent: oklch(0.967 0.001 286.375);
-	--accent-foreground: oklch(0.21 0.006 285.885);
-	--destructive: oklch(0.577 0.245 27.325);
-	--border: oklch(0.92 0.004 286.32);
-	--input: oklch(0.92 0.004 286.32);
-	--ring: oklch(0.705 0.015 286.067);
-	--chart-1: oklch(0.897 0.196 126.665);
-	--chart-2: oklch(0.768 0.233 130.85);
-	--chart-3: oklch(0.648 0.2 131.684);
-	--chart-4: oklch(0.532 0.157 131.589);
-	--chart-5: oklch(0.453 0.124 130.933);
-	--radius: 0.45rem;
-	--sidebar: oklch(0.985 0 0);
-	--sidebar-foreground: oklch(0.141 0.005 285.823);
-	--sidebar-primary: oklch(0.21 0.006 285.885);
-	--sidebar-primary-foreground: oklch(0.985 0 0);
-	--sidebar-accent: oklch(0.967 0.001 286.375);
-	--sidebar-accent-foreground: oklch(0.21 0.006 285.885);
-	--sidebar-border: oklch(0.92 0.004 286.32);
-	--sidebar-ring: oklch(0.705 0.015 286.067);
+	/* Surfaces — void (desktop) → shell (chrome) → app (window) → panel/raised → inset */
+	--bg-void: #08070d;
+	--bg-shell: #0c0a13;
+	--bg-app: #100d1a;
+	--bg-panel: #151022;
+	--bg-raised: #1b1530;
+	--bg-inset: #0e0b17;
+
+	/* Hairlines */
+	--border: rgba(255, 255, 255, 0.07);
+	--border-strong: rgba(255, 255, 255, 0.13);
+
+	/* Text ramp */
+	--text-1: #edeaf7;
+	--text-2: #a49ebc;
+	--text-3: #685f85;
+
+	/* Accent (themeable) — every selection/active state derives from this */
+	--accent: #14b8a6;
+	--accent-hi: #2dd4bf;
+	--accent-soft: rgba(20, 184, 166, 0.16);
+	--accent-contrast: #ffffff;
+
+	/* Status */
+	--green: #34d399;
+	--amber: #fbbf24;
+	--red: #f87171;
+
+	/* Agent identities — each distinct from the accent and from each other */
+	--claude: #e0745c;
+	--hermes: #4d9ff5;
+	--openclaw: #ef4444;
+	--legend: #2dd4bf;
+
+	/* Neutral hover/selection tint — intentionally NOT derived from the accent,
+	   so a loud accent never bleeds into every surface. */
+	--hover-tint: rgba(160, 170, 220, 0.06);
+
+	/* Radii — 7 / 11 / 15, window 16 */
+	--radius: 0.6875rem; /* 11px base; shadcn derives sm/md from this */
+
+	/* ---- shadcn semantic mapping (dark) ---- */
+	--background: var(--bg-app);
+	--foreground: var(--text-1);
+	--card: var(--bg-panel);
+	--card-foreground: var(--text-1);
+	--popover: var(--bg-panel);
+	--popover-foreground: var(--text-1);
+	--primary: var(--accent);
+	--primary-foreground: var(--accent-contrast);
+	--secondary: var(--bg-raised);
+	--secondary-foreground: var(--text-1);
+	--muted: var(--bg-inset);
+	--muted-foreground: var(--text-2);
+	--accent-foreground: var(--text-1); /* shadcn --accent is its neutral hover token (mapped to bg-raised in @theme), not the brand accent */
+	--destructive: var(--red);
+	--border: rgba(255, 255, 255, 0.07);
+	--input: var(--border-strong);
+	--ring: var(--accent-hi);
+	--chart-1: var(--accent-hi);
+	--chart-2: var(--hermes);
+	--chart-3: var(--claude);
+	--chart-4: var(--amber);
+	--chart-5: var(--green);
+	--sidebar: var(--bg-shell);
+	--sidebar-foreground: var(--text-2);
+	--sidebar-primary: var(--accent);
+	--sidebar-primary-foreground: var(--accent-contrast);
+	--sidebar-accent: var(--bg-raised);
+	--sidebar-accent-foreground: var(--text-1);
+	--sidebar-border: var(--border);
+	--sidebar-ring: var(--accent-hi);
 }
 
+/* Force dark: the .dark class lives on <html> (app.html). Re-declaring the
+   palette here means dark: utilities resolve to the same tokens. */
 .dark {
-	--background: oklch(0.141 0.005 285.823);
-	--foreground: oklch(0.985 0 0);
-	--card: oklch(0.21 0.006 285.885);
-	--card-foreground: oklch(0.985 0 0);
-	--popover: oklch(0.21 0.006 285.885);
-	--popover-foreground: oklch(0.985 0 0);
-	--primary: oklch(0.92 0.004 286.32);
-	--primary-foreground: oklch(0.21 0.006 285.885);
-	--secondary: oklch(0.274 0.006 286.033);
-	--secondary-foreground: oklch(0.985 0 0);
-	--muted: oklch(0.274 0.006 286.033);
-	--muted-foreground: oklch(0.705 0.015 286.067);
-	--accent: oklch(0.274 0.006 286.033);
-	--accent-foreground: oklch(0.985 0 0);
-	--destructive: oklch(0.704 0.191 22.216);
-	--border: oklch(1 0 0 / 10%);
-	--input: oklch(1 0 0 / 15%);
-	--ring: oklch(0.552 0.016 285.938);
-	--chart-1: oklch(0.897 0.196 126.665);
-	--chart-2: oklch(0.768 0.233 130.85);
-	--chart-3: oklch(0.648 0.2 131.684);
-	--chart-4: oklch(0.532 0.157 131.589);
-	--chart-5: oklch(0.453 0.124 130.933);
-	--sidebar: oklch(0.21 0.006 285.885);
-	--sidebar-foreground: oklch(0.985 0 0);
-	--sidebar-primary: oklch(0.488 0.243 264.376);
-	--sidebar-primary-foreground: oklch(0.985 0 0);
-	--sidebar-accent: oklch(0.274 0.006 286.033);
-	--sidebar-accent-foreground: oklch(0.985 0 0);
-	--sidebar-border: oklch(1 0 0 / 10%);
-	--sidebar-ring: oklch(0.552 0.016 285.938);
+	color-scheme: dark;
 }
 
 @theme inline {
-	--font-sans: 'IBM Plex Sans Variable', sans-serif;
+	--font-sans: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
+	--font-mono: 'Geist Mono Variable', ui-monospace, 'SF Mono', Menlo, monospace;
+
+	/* Convenience utilities for Legend tokens (non-conflicting names). */
+	--color-void: var(--bg-void);
+	--color-shell: var(--bg-shell);
+	--color-app: var(--bg-app);
+	--color-panel: var(--bg-panel);
+	--color-raised: var(--bg-raised);
+	--color-inset: var(--bg-inset);
+	--color-hair: var(--border);
+	--color-hair-strong: var(--border-strong);
+	--color-ink-1: var(--text-1);
+	--color-ink-2: var(--text-2);
+	--color-ink-3: var(--text-3);
+	--color-brand: var(--accent);
+	--color-brand-hi: var(--accent-hi);
+	--color-brand-soft: var(--accent-soft);
+	--color-ok: var(--green);
+	--color-warn: var(--amber);
+	--color-bad: var(--red);
+	--color-claude: var(--claude);
+	--color-hermes: var(--hermes);
+	--color-openclaw: var(--openclaw);
+	--color-legend: var(--legend);
+
+	/* shadcn semantic colors (unchanged names). */
 	--color-sidebar-ring: var(--sidebar-ring);
 	--color-sidebar-border: var(--sidebar-border);
 	--color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -94,36 +140,104 @@
 	--color-border: var(--border);
 	--color-destructive: var(--destructive);
 	--color-accent-foreground: var(--accent-foreground);
-	--color-accent: var(--accent);
+	--color-accent: var(--bg-raised); /* shadcn hover/selection bg — neutral, NOT the brand accent */
 	--color-muted-foreground: var(--muted-foreground);
 	--color-muted: var(--muted);
 	--color-secondary-foreground: var(--secondary-foreground);
 	--color-secondary: var(--secondary);
 	--color-primary-foreground: var(--primary-foreground);
-	--color-primary: var(--primary);
+	--color-primary: var(--primary); /* brand accent (teal) → bg-primary buttons */
 	--color-popover-foreground: var(--popover-foreground);
 	--color-popover: var(--popover);
 	--color-card-foreground: var(--card-foreground);
 	--color-card: var(--card);
 	--color-foreground: var(--foreground);
 	--color-background: var(--background);
-	--radius-sm: calc(var(--radius) * 0.6);
-	--radius-md: calc(var(--radius) * 0.8);
+	--radius-sm: calc(var(--radius) * 0.55);
+	--radius-md: calc(var(--radius) * 0.78);
 	--radius-lg: var(--radius);
-	--radius-xl: calc(var(--radius) * 1.4);
-	--radius-2xl: calc(var(--radius) * 1.8);
-	--radius-3xl: calc(var(--radius) * 2.2);
-	--radius-4xl: calc(var(--radius) * 2.6);
+	--radius-xl: calc(var(--radius) * 1.35);
+	--radius-2xl: calc(var(--radius) * 1.75);
+	--radius-3xl: calc(var(--radius) * 2.1);
+	--radius-4xl: calc(var(--radius) * 2.5);
 }
 
 @layer base {
 	* {
 		@apply border-border outline-ring/50;
+		min-width: 0;
 	}
 	body {
-		@apply bg-background text-foreground;
+		@apply bg-shell text-foreground;
+		font-feature-settings: 'cv01', 'cv03', 'ss03';
+		-webkit-font-smoothing: antialiased;
+		text-rendering: optimizeLegibility;
 	}
 	html {
 		@apply font-sans;
+		background: var(--bg-shell);
+	}
+
+	/* Tabular figures everywhere mono appears — counts/ids line up. */
+	.font-mono {
+		font-variant-numeric: tabular-nums;
+	}
+
+	/* Quiet, thin scrollbars to match the dense aesthetic. */
+	* {
+		scrollbar-width: thin;
+		scrollbar-color: var(--border-strong) transparent;
+	}
+	*::-webkit-scrollbar {
+		width: 7px;
+		height: 7px;
+	}
+	*::-webkit-scrollbar-thumb {
+		background: var(--border-strong);
+		border-radius: 999px;
+	}
+	*::-webkit-scrollbar-thumb:hover {
+		background: var(--text-3);
+	}
+}
+
+/* ---- shared keyframes for live state ---- */
+@keyframes lg-pulse {
+	0%,
+	100% {
+		opacity: 1;
+	}
+	50% {
+		opacity: 0.35;
+	}
+}
+@keyframes lg-pulse-ring {
+	0% {
+		box-shadow: 0 0 0 0 var(--ring-color, var(--accent-soft));
+	}
+	70% {
+		box-shadow: 0 0 0 4px transparent;
+	}
+	100% {
+		box-shadow: 0 0 0 0 transparent;
+	}
+}
+@keyframes lg-rise {
+	from {
+		opacity: 0;
+		transform: translateY(4px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+	}
+}
+@keyframes lg-caret {
+	0%,
+	100% {
+		opacity: 0;
+	}
+	50% {
+		opacity: 1;
 	}
 }

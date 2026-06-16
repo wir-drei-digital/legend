@@ -16,10 +16,14 @@
 
 	let {
 		sessionId,
-		onstatus
+		onstatus,
+		fontSize = 13,
+		background = '#100d1a'
 	}: {
 		sessionId: string;
 		onstatus?: (status: SessionStatus, exitCode: number | null, error: string | null) => void;
+		fontSize?: number;
+		background?: string;
 	} = $props();
 
 	let container: HTMLDivElement;
@@ -40,9 +44,10 @@
 	onMount(() => {
 		const term = new Terminal({
 			cursorBlink: true,
-			fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-			fontSize: 13,
-			theme: { background: '#0a0a0a' }
+			fontFamily: "'Geist Mono Variable', ui-monospace, SFMono-Regular, Menlo, monospace",
+			fontSize,
+			lineHeight: 1.2,
+			theme: { background }
 		});
 		const fit = new FitAddon();
 		term.loadAddon(fit);
@@ -98,4 +103,4 @@
 	});
 </script>
 
-<div bind:this={container} class="h-full w-full bg-[#0a0a0a]"></div>
+<div bind:this={container} class="h-full w-full" style:background></div>

@@ -5,6 +5,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
+	import { watchSet } from '$lib/shell/watchset.svelte';
 	import {
 		applyHarnessSetup,
 		createSession,
@@ -16,7 +17,10 @@
 		type Runtime
 	} from '$lib/sessions';
 
-	let open = $state(false);
+	// `open` can be driven externally (the shell's "Add tile" button). `trigger`
+	// controls whether this renders its own button.
+	let { open = $bindable(false), trigger = true }: { open?: boolean; trigger?: boolean } = $props();
+
 	let harnesses = $state<Harness[]>([]);
 	let harnessId = $state('');
 	let runtimes = $state<Runtime[]>([]);
@@ -86,9 +90,8 @@
 		dismissed = { ...dismissed, [selectedHarness.id]: true };
 	}
 
-	async function openDialog() {
+	async function load() {
 		error = '';
-		open = true;
 		try {
 			harnesses = await listHarnesses();
 			harnessId = harnesses[0]?.id ?? '';
@@ -101,6 +104,13 @@
 			error = e instanceof Error ? e.message : 'failed to load harnesses';
 		}
 	}
+
+	// Load harness/runtime options whenever the dialog opens (however it's opened).
+	let wasOpen = false;
+	$effect(() => {
+		if (open && !wasOpen) void load();
+		wasOpen = open;
+	});
 
 	async function create() {
 		if (!harnessId) return;
@@ -116,7 +126,9 @@
 			open = false;
 			name = '';
 			cwd = '';
-			await goto(`/sessions/${session.id}`);
+			// Surface the fresh session straight into the watch-set grid.
+			watchSet.promote(session.id);
+			await goto('/');
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'failed to create session';
 		} finally {
@@ -125,7 +137,9 @@
 	}
 </script>
 
-<Button class="w-full" onclick={openDialog}>New session</Button>
+{#if trigger}
+	<Button class="w-full" onclick={() => (open = true)}>New session</Button>
+{/if}
 
 <Dialog.Root bind:open>
 	<Dialog.Content class="sm:max-w-md">
