@@ -63,10 +63,12 @@
 		const up = () => {
 			window.removeEventListener('pointermove', move);
 			window.removeEventListener('pointerup', up);
+			window.removeEventListener('pointercancel', up);
 			document.body.style.userSelect = '';
 		};
 		window.addEventListener('pointermove', move);
 		window.addEventListener('pointerup', up);
+		window.addEventListener('pointercancel', up);
 	}
 </script>
 

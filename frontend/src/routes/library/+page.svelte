@@ -24,6 +24,14 @@
 	let menuOpen = $state(false);
 	let confirmingDelete = $state(false);
 
+	// Switching files dismisses an in-flight delete confirmation / open menu
+	// (the store can't reach this page-local UI state).
+	$effect(() => {
+		void libraryStore.selected;
+		menuOpen = false;
+		confirmingDelete = false;
+	});
+
 	const sel = $derived(libraryStore.selected);
 	const crumbs = $derived(sel ? sel.split('/') : []);
 
