@@ -4,6 +4,7 @@
 	import TopBar from './TopBar.svelte';
 	import StatusBar from './StatusBar.svelte';
 	import SpacesOverlay from './SpacesOverlay.svelte';
+	import SettingsModal from './SettingsModal.svelte';
 	import NewSessionDialog from '$lib/components/NewSessionDialog.svelte';
 	import WorkbenchLayout from './WorkbenchLayout.svelte';
 	import TileGrid from './TileGrid.svelte';
@@ -148,4 +149,6 @@
 	{/if}
 
 	<NewSessionDialog bind:open={shell.newSessionOpen} trigger={false} />
+
+	<SettingsModal />
 </div>
