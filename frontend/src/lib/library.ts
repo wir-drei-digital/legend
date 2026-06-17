@@ -78,3 +78,28 @@ export function buildTree(entries: LibraryEntry[]): TreeNode[] {
 	order(roots);
 	return roots;
 }
+
+/**
+ * Prunes the tree to nodes whose name matches `query` (case-insensitive),
+ * keeping the ancestor folders of any match so the path stays navigable.
+ * Returns a new tree; the input is not mutated.
+ */
+export function filterTree(nodes: TreeNode[], query: string): TreeNode[] {
+	const q = query.trim().toLowerCase();
+	if (!q) return nodes;
+	const walk = (list: TreeNode[]): TreeNode[] => {
+		const out: TreeNode[] = [];
+		for (const n of list) {
+			if (n.type === 'dir') {
+				const children = walk(n.children);
+				if (children.length || n.name.toLowerCase().includes(q)) {
+					out.push({ ...n, children });
+				}
+			} else if (n.name.toLowerCase().includes(q)) {
+				out.push(n);
+			}
+		}
+		return out;
+	};
+	return walk(nodes);
+}

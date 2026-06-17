@@ -27,7 +27,10 @@
 		| 'trash'
 		| 'chevron-down'
 		| 'chevron-right'
-		| 'corner-down-left';
+		| 'corner-down-left'
+		| 'file'
+		| 'panel-right'
+		| 'link';
 </script>
 
 <script lang="ts">
@@ -139,6 +142,16 @@
 		<path d="M6 9.5l6 6 6-6" />
 	{:else if name === 'chevron-right'}
 		<path d="M9.5 6l6 6-6 6" />
+	{:else if name === 'file'}
+		<path d="M13 3.5H6.5A1.5 1.5 0 005 5v14a1.5 1.5 0 001.5 1.5h11A1.5 1.5 0 0019 19V9.5z" />
+		<path d="M13 3.5V9.5h6" />
+	{:else if name === 'panel-right'}
+		<rect x="3.5" y="4.5" width="17" height="15" rx="2.4" />
+		<path d="M14.5 4.5v15" />
+	{:else if name === 'link'}
+		<path d="M9.5 14.5l5-5" />
+		<path d="M8 11l-2.2 2.2a3.1 3.1 0 004.4 4.4L12 16" />
+		<path d="M16 13l2.2-2.2a3.1 3.1 0 00-4.4-4.4L12 8" />
 	{:else if name === 'corner-down-left'}
 		<path d="M9 10l-4 4 4 4" />
 		<path d="M5 14h10a4 4 0 004-4V6" />

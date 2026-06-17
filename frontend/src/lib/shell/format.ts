@@ -19,3 +19,13 @@ export function basename(path: string | null | undefined): string {
 	const parts = path.replace(/\/+$/, '').split('/');
 	return parts[parts.length - 1] || path;
 }
+
+/** Compact byte size, e.g. "0 B", "4 KB", "1.6 MB". */
+export function formatBytes(n: number): string {
+	if (!Number.isFinite(n) || n <= 0) return '0 B';
+	const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+	const i = Math.min(units.length - 1, Math.floor(Math.log(n) / Math.log(1024)));
+	const v = n / 1024 ** i;
+	const s = i === 0 ? String(v) : String(Math.round(v * 10) / 10);
+	return `${s} ${units[i]}`;
+}
