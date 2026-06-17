@@ -677,9 +677,9 @@ Create `frontend/src/lib/components/shell/TileGrid.svelte`:
 			{@const r = rectFor(id)}
 			<div
 				data-tile-id={id}
-				class="absolute overflow-hidden"
-				class:transition-[transform,width,height]={!layout.draggingId}
-				class:duration-150={!layout.draggingId}
+				class="absolute overflow-hidden {layout.draggingId
+					? ''
+					: 'transition-[transform,width,height] duration-150 ease-out'}"
 				style:transform="translate({r.left}px, {r.top}px)"
 				style:width="{r.width}px"
 				style:height="{r.height}px"
@@ -1570,25 +1570,24 @@ Replace `frontend/src/lib/components/shell/LegendShell.svelte` with:
 
 	<div class="flex min-h-0 flex-1">
 		{#if space.kind === 'sessions'}
-			<WorkbenchLayout storageKey={sideOpenKey} sideOpen={false}>
-				{#snippet rail()}<SessionBench />{/snippet}
-				{#snippet primary()}
-					<TileGrid layout={space.layout} dragLabel={sessionLabel}>
-						{#snippet tile(id, grab)}
-							{@const s = sessionById.get(id)}
-							{#if s}<SessionPane session={s} {grab} />{/if}
-						{/snippet}
-						{#snippet empty()}
-							<div class="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
-								<div class="grid size-12 place-items-center rounded-2xl border border-hair bg-panel text-ink-3"><Icon name="sessions" size={22} /></div>
-								<p class="text-title text-ink-2">{sessionsStore.sessions.length === 0 ? 'No sessions running.' : 'No tiles in the grid.'}</p>
-								<p class="max-w-[260px] text-ui text-ink-3">{sessionsStore.sessions.length === 0 ? 'Use New session in the toolbar to launch an agent.' : 'Promote a session from the bench on the left to watch it here.'}</p>
-							</div>
-						{/snippet}
-					</TileGrid>
-				{/snippet}
-				{#snippet side()}{/snippet}
-			</WorkbenchLayout>
+			<!-- Sessions renders bench + grid directly (SessionBench owns its own
+			     178px aside + border) — matches today's shell exactly for parity. -->
+			<SessionBench />
+			<div class="min-w-0 flex-1 overflow-hidden bg-app">
+				<TileGrid layout={space.layout} dragLabel={sessionLabel}>
+					{#snippet tile(id, grab)}
+						{@const s = sessionById.get(id)}
+						{#if s}<SessionPane session={s} {grab} />{/if}
+					{/snippet}
+					{#snippet empty()}
+						<div class="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
+							<div class="grid size-12 place-items-center rounded-2xl border border-hair bg-panel text-ink-3"><Icon name="sessions" size={22} /></div>
+							<p class="text-title text-ink-2">{sessionsStore.sessions.length === 0 ? 'No sessions running.' : 'No tiles in the grid.'}</p>
+							<p class="max-w-[260px] text-ui text-ink-3">{sessionsStore.sessions.length === 0 ? 'Use New session in the toolbar to launch an agent.' : 'Promote a session from the bench on the left to watch it here.'}</p>
+						</div>
+					{/snippet}
+				</TileGrid>
+			</div>
 		{:else}
 			<WorkbenchLayout storageKey={sideOpenKey}>
 				{#snippet rail()}<LibraryRail />{/snippet}
