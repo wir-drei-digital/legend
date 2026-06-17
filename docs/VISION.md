@@ -45,6 +45,8 @@ Realized incrementally, starting with the agent sessions PoC (`docs/superpowers/
 
 **Federation:** a user runs multiple Legend instances — local (desktop) and cloud — and continues the *same* sessions from either. The local instance pairs with the cloud over an outbound reverse tunnel (no inbound ports) and registers its sessions; the cloud UI proxies channel traffic to the owning instance. Federation is also where authentication becomes mandatory.
 
+**The windowing core** realizes principle 4 ("UI panels are extension points") for the frontend. Tiling is the windowing core of the app: every view is a tile in a layout, not a route. *Surfaces* — `session`, `file`, `messages` today, calendar/email later — are the concrete form of the panel-as-extension-point idea: each is a `(kind, params)` binding resolved through a registry to a component, so a new panel type is a registry entry, not a new page. *Spaces* are named tiling workspaces the user arranges (and, later, an agent arranges) — an auto Sessions space, a Library space, and user-created custom spaces. The launcher's `openSurface(kind, params)` call is the seam an agent will eventually use to arrange the human's UI on its own, the same way it spawns sessions and sends messages today.
+
 ## Concept map
 
 The long-term concepts, organized by layer. Items here are direction, not commitments with dates.

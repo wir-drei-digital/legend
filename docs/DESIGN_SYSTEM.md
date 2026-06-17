@@ -246,6 +246,35 @@ region and optional `localStorage` persistence of its width + open state.
   the window.
 - Use when: a top-level view needs the standard rail/primary/inspector layout.
 
+### `TileGrid`
+The windowing primitive: a tiling layout of *surfaces*. Renders each tile **once** in a
+flat list and positions it with an absolute `transform`/`width`/`height` derived from the
+layout tree (`layout.rects(W, H)`, host measured via `ResizeObserver`) — re-tiling,
+splitting, resizing, and focus only change a tile's rect, **never reparent the node**, so a
+live surface (e.g. an xterm/PTY view) is never remounted. Owns the resize seams, the
+drag-to-re-tile (i3-style directional split) ghost + drop overlay.
+- Props: `layout: TileLayout` (req), `tile: Snippet<[id, grab]>` (req — renders one tile),
+  `empty?: Snippet` (shown when no tiles), `dragLabel?(id) → string`, `minColPx = 160`,
+  `minRowPx = 90`.
+- **Surface contract:** the `tile` snippet receives `(tileId, grab)` and renders the
+  surface component for that tile, passing `{ tileId, params, grab }` — `params` resolved
+  from the surface registry binding, `grab` the pointer handler that begins a drag from the
+  surface's header. (`SurfaceDef.component` types this exactly.)
+- Use when: a space needs an arrangeable, splittable grid of surfaces. The render-once +
+  rect-from-tree contract is the rule: do not key tiles by position or remount on re-tile.
+
+### Space-frame composition
+A *space* is a named `TileGrid` plus an optional chrome frame; `LegendShell` picks the frame
+from the active space's shape. Three frames, all composing primitives above:
+- **Auto Sessions** (`space.auto === 'sessions'`) — `SessionBench` + the grid rendered
+  **directly** (the bench owns its own 178px aside + border); matches the pre-tiling shell
+  for parity.
+- **Library** (`space.rail === 'library'`) — the grid wrapped in `WorkbenchLayout`
+  (rail = `LibraryRail`, side = `LibrarySide`, side-open persisted per space).
+- **Custom** — the bare grid (`bg-app`), no rail/side.
+Each frame supplies its own `empty` snippet (the centered "no tiles / no file / empty space"
+state). Reach for these compositions, not a bespoke layout, when adding a space kind.
+
 ---
 
 ## Token-discipline rule
