@@ -1,19 +1,19 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import { sessionsLayout } from '$lib/shell/sessions-layout.svelte';
+	import { workspaceStore } from '$lib/shell/workspace.svelte';
 
-	// The single-session route is now a deep link into the multiplex: focus the
-	// session in the watch-set grid and hand off to the Sessions view.
-	$effect(() => {
+	// The single-session route is now a deep link into the multiplex: promote
+	// the session into the watch-set grid, switch to the Sessions space, and
+	// normalize the URL.
+	onMount(() => {
 		const id = page.params.id;
 		if (id) {
-			sessionsLayout.focus(id);
-			void goto('/', { replaceState: true });
+			sessionsLayout.promote(id);
+			workspaceStore.switchSpace('sessions');
 		}
+		void goto('/');
 	});
 </script>
-
-<div class="flex h-full items-center justify-center">
-	<p class="text-body text-ink-3">Opening session…</p>
-</div>
