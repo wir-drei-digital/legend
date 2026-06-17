@@ -1,5 +1,6 @@
 <script lang="ts">
 	import MessageComposer from '$lib/components/MessageComposer.svelte';
+	import SectionLabel from '$lib/components/shell/SectionLabel.svelte';
 	import type { Message } from '$lib/messages';
 	import { messagesStore } from '$lib/stores/messages.svelte';
 	import { sessionsStore } from '$lib/stores/sessions.svelte';
@@ -51,30 +52,35 @@
 	});
 
 	const kindBadge: Record<string, string> = {
-		message: 'bg-accent text-accent-foreground',
-		handoff: 'bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200',
-		system: 'bg-muted text-muted-foreground'
+		message: 'bg-[var(--accent-soft)] text-brand-hi',
+		handoff: 'bg-[color-mix(in_oklab,var(--amber)_16%,transparent)] text-[var(--amber)]',
+		system: 'bg-inset text-ink-3'
 	};
 </script>
 
 <div class="flex h-full flex-col gap-3 p-4">
-	<h1 class="text-lg font-semibold">Messages</h1>
+	<h1 class="text-title font-semibold text-ink-1">Messages</h1>
 
-	<div class="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto">
+	<div class="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
 		{#each groups as group (group.root)}
-			<section class="rounded-lg border">
-				<header class="border-b px-3 py-2 text-sm font-medium">
-					{sessionLabel(group.root)} — thread
+			<section class="rounded-[10px] border border-hair">
+				<header class="flex items-center gap-2 border-b border-hair px-3 py-2">
+					<SectionLabel>{sessionLabel(group.root)} thread</SectionLabel>
+					<span class="font-mono text-meta text-ink-3">{group.messages.length}</span>
 				</header>
-				<ul class="flex flex-col gap-2 p-3">
+				<ul class="flex flex-col">
 					{#each group.messages as m (m.id)}
-						<li class="flex items-baseline gap-2 text-sm">
-							<span class="rounded px-1.5 py-0.5 text-xs {kindBadge[m.kind]}">{m.kind}</span>
-							<span class="shrink-0 font-medium">{m.from_label}</span>
-							<span class="shrink-0 text-muted-foreground">→ {sessionLabel(m.to_session_id)}</span>
+						<li
+							class="flex items-baseline gap-2 px-3 py-1.5 text-ui text-ink-2 not-last:border-b not-last:border-hair"
+						>
+							<span class="rounded px-1.5 py-0.5 font-mono text-micro uppercase {kindBadge[m.kind]}"
+								>{m.kind}</span
+							>
+							<span class="shrink-0 font-medium text-ink-1">{m.from_label}</span>
+							<span class="shrink-0 text-ink-3">→ {sessionLabel(m.to_session_id)}</span>
 							<span class="min-w-0 whitespace-pre-wrap break-words">{m.payload}</span>
 							{#if !m.read_at}
-								<span class="ml-auto shrink-0 text-xs text-amber-600">unread</span>
+								<span class="ml-auto shrink-0 text-meta text-[var(--amber)]">unread</span>
 							{/if}
 						</li>
 					{/each}
@@ -82,7 +88,7 @@
 			</section>
 		{:else}
 			{#if messagesStore.loaded}
-				<p class="text-sm text-muted-foreground">No messages yet. Agents (and you) can talk here.</p>
+				<p class="text-ui text-ink-3">No messages yet. Agents (and you) can talk here.</p>
 			{/if}
 		{/each}
 	</div>

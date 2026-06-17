@@ -3,6 +3,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
+	import SectionLabel from '$lib/components/shell/SectionLabel.svelte';
 	import {
 		getLibraryPath,
 		putLibraryPath,
@@ -110,14 +111,14 @@
 </script>
 
 <div class="mx-auto flex max-w-2xl flex-col gap-6 p-8">
-	<h1 class="text-xl font-semibold">Settings</h1>
+	<h1 class="text-title font-semibold text-ink-1">Settings</h1>
 
 	<section class="flex flex-col gap-3">
-		<h2 class="text-sm font-medium">Library</h2>
+		<SectionLabel>Library</SectionLabel>
 
 		{#if info}
 			{#if envLocked}
-				<p class="text-sm text-muted-foreground">
+				<p class="text-ui text-ink-2">
 					The library path is set by the <code>LIBRARY_PATH</code> environment variable to
 					<code>{info.effective}</code> and can't be edited here. Unset it in
 					<code>backend/.env</code> to manage it from this page.
@@ -152,33 +153,33 @@
 			{/if}
 
 			{#if saved}
-				<p class="text-sm text-emerald-600">Saved.</p>
+				<p class="text-ui text-[var(--green)]">Saved.</p>
 			{/if}
 		{/if}
 
 		{#if error}
-			<p class="text-sm text-destructive">{error}</p>
+			<p class="text-ui text-[var(--red)]">{error}</p>
 		{/if}
 	</section>
 
 	{#if withSetup.length > 0 || harnessError}
 		<section class="flex flex-col gap-3">
-			<h2 class="text-sm font-medium">Harness integrations</h2>
+			<SectionLabel>Harness integrations</SectionLabel>
 
 			{#each withSetup as harness (harness.id)}
-				<div class="flex flex-col gap-2 rounded-md border p-3">
+				<div class="flex flex-col gap-2 rounded-[10px] border border-hair p-3">
 					<div class="flex items-center gap-2">
-						<span class="text-sm font-medium">{harness.name}</span>
+						<span class="text-ui font-medium text-ink-1">{harness.name}</span>
 						{#if harness.setup.status === 'ok'}
-							<span class="text-sm text-emerald-600">✓ configured</span>
+							<span class="text-meta text-[var(--green)]">✓ configured</span>
 						{:else if harness.setup.status === 'missing'}
-							<span class="text-sm text-muted-foreground">not configured</span>
+							<span class="text-meta text-ink-3">not configured</span>
 						{:else}
-							<span class="text-sm text-destructive">configuration error</span>
+							<span class="text-meta text-[var(--red)]">configuration error</span>
 						{/if}
 					</div>
 
-					<p class="text-sm text-muted-foreground">{harness.setup.summary}</p>
+					<p class="text-ui text-ink-2">{harness.setup.summary}</p>
 
 					{#if harness.setup.status === 'missing'}
 						<div>
@@ -193,17 +194,19 @@
 					{/if}
 
 					{#if harness.setup.status === 'error' && harness.setup.detail}
-						<pre class="overflow-x-auto rounded bg-muted p-2 text-xs">{harness.setup.detail}</pre>
+						<pre
+							class="overflow-x-auto rounded bg-inset p-2 font-mono text-meta text-ink-2">{harness
+								.setup.detail}</pre>
 					{/if}
 
 					{#if appliedMsg[harness.id]}
-						<p class="text-sm text-emerald-600">{appliedMsg[harness.id]}</p>
+						<p class="text-ui text-[var(--green)]">{appliedMsg[harness.id]}</p>
 					{/if}
 				</div>
 			{/each}
 
 			{#if harnessError}
-				<p class="text-sm text-destructive">{harnessError}</p>
+				<p class="text-ui text-[var(--red)]">{harnessError}</p>
 			{/if}
 		</section>
 	{/if}
