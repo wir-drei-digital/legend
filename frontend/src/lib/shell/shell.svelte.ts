@@ -22,6 +22,8 @@ function loadPinned(): string[] {
 
 class ShellStore {
 	spacesOpen = $state(false);
+	settingsOpen = $state(false);
+	newSessionOpen = $state(false);
 	pinned = $state<string[]>(loadPinned());
 
 	openSpaces(): void {
@@ -32,6 +34,18 @@ class ShellStore {
 	}
 	toggleSpaces(): void {
 		this.spacesOpen = !this.spacesOpen;
+	}
+
+	openSettings(): void {
+		this.closeSpaces();
+		this.settingsOpen = true;
+	}
+	closeSettings(): void {
+		this.settingsOpen = false;
+	}
+	openNewSession(): void {
+		this.closeSpaces();
+		this.newSessionOpen = true;
 	}
 
 	isPinned(id: string): boolean {

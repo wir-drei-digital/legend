@@ -4,7 +4,7 @@
 	import TopBar from './TopBar.svelte';
 	import StatusBar from './StatusBar.svelte';
 	import SpacesOverlay from './SpacesOverlay.svelte';
-	import SpaceSwitcher from './SpaceSwitcher.svelte';
+	import NewSessionDialog from '$lib/components/NewSessionDialog.svelte';
 	import WorkbenchLayout from './WorkbenchLayout.svelte';
 	import TileGrid from './TileGrid.svelte';
 	import Icon from './Icon.svelte';
@@ -77,9 +77,7 @@
 <svelte:window onkeydown={onKeydown} />
 
 <div class="relative flex h-dvh w-full flex-col overflow-hidden bg-shell">
-	<TopBar {section} sub={subText} count={chipCount} {isTauri} toolbar={view?.toolbar}>
-		{#snippet center()}<SpaceSwitcher />{/snippet}
-	</TopBar>
+	<TopBar {section} sub={subText} count={chipCount} {isTauri} toolbar={view?.toolbar} />
 
 	{#snippet surfaceTile(id: string, grab: (e: PointerEvent) => void)}
 		{@const b = workspaceStore.binding(id)}
@@ -148,4 +146,6 @@
 	{#if shell.spacesOpen}
 		<SpacesOverlay />
 	{/if}
+
+	<NewSessionDialog bind:open={shell.newSessionOpen} trigger={false} />
 </div>
