@@ -7,7 +7,7 @@
 	import ConfirmButton from '$lib/components/shell/ConfirmButton.svelte';
 	import StatusDot from '$lib/components/shell/StatusDot.svelte';
 	import StateBadge from '$lib/components/shell/StateBadge.svelte';
-	import { sessionsLayout } from '$lib/shell/sessions-layout.svelte';
+	import type { TileLayout } from '$lib/shell/tiling.svelte';
 	import { liveState } from '$lib/shell/sessionState';
 	import { identityFor } from '$lib/shell/identities';
 	import { relativeTime, basename } from '$lib/shell/format';
@@ -15,13 +15,23 @@
 	import { deleteSession, resumeSession, type Session } from '$lib/sessions';
 
 	// `grab` is the grid's pointer-drag starter — fired when the header is pressed.
-	let { session, grab }: { session: Session; grab?: (e: PointerEvent) => void } = $props();
+	let {
+		session,
+		grab,
+		layout,
+		onClose
+	}: {
+		session: Session;
+		grab?: (e: PointerEvent) => void;
+		layout: TileLayout;
+		onClose: () => void;
+	} = $props();
 
 	const live = $derived(liveState(session));
 	const identity = $derived(identityFor(session.harness_id));
-	const active = $derived(sessionsLayout.layout.activeId === session.id);
-	const focusedMode = $derived(sessionsLayout.layout.focusedId === session.id);
-	const dragging = $derived(sessionsLayout.layout.draggingId === session.id);
+	const active = $derived(layout.activeId === session.id);
+	const focusedMode = $derived(layout.focusedId === session.id);
+	const dragging = $derived(layout.draggingId === session.id);
 
 	// A session only has a live PTY while running/starting; otherwise the pane
 	// shows a resume affordance so a stopped tile is still usable.
@@ -67,7 +77,7 @@
 		try {
 			await deleteSession(session.id);
 		} finally {
-			sessionsLayout.evict(session.id);
+			onClose();
 		}
 	}
 
@@ -93,8 +103,8 @@
 	);
 
 	function toggleFocus() {
-		if (focusedMode) sessionsLayout.restore();
-		else sessionsLayout.focus(session.id);
+		if (focusedMode) layout.restore();
+		else layout.focus(session.id);
 	}
 </script>
 
@@ -102,7 +112,7 @@
 <div
 	class="flex h-full min-h-0 flex-col bg-app transition-opacity"
 	style:opacity={dragging ? 0.45 : 1}
-	onpointerdown={() => sessionsLayout.setActive(session.id)}
+	onpointerdown={() => layout.setActive(session.id)}
 >
 	<!-- header -->
 	<div
@@ -182,7 +192,7 @@
 			size={14}
 			box={20}
 			title="Close pane"
-			onclick={() => sessionsLayout.evict(session.id)}
+			onclick={onClose}
 		/>
 	</div>
 

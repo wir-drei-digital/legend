@@ -9,7 +9,13 @@
 	import { libraryStore } from '$lib/stores/library.svelte';
 	import { deleteFile } from '$lib/library';
 
-	let { tileId, grab }: { tileId: string; grab?: (e: PointerEvent) => void } = $props();
+	// `params` is part of the uniform surface contract; FileSurface reads its path
+	// via workspaceStore.tilePath(tileId) instead, so it stays unused for now.
+	let {
+		tileId,
+		grab,
+		params
+	}: { tileId: string; grab?: (e: PointerEvent) => void; params?: Record<string, unknown> } = $props();
 
 	const layout = workspaceStore.library.layout;
 	const path = $derived(workspaceStore.tilePath(tileId));

@@ -91,7 +91,7 @@
 				<TileGrid layout={space.layout} dragLabel={sessionLabel}>
 					{#snippet tile(id, grab)}
 						{@const s = sessionById.get(id)}
-						{#if s}<SessionPane session={s} {grab} />{/if}
+						{#if s}<SessionPane session={s} {grab} layout={sessionsLayout.layout} onClose={() => sessionsLayout.evict(id)} />{/if}
 					{/snippet}
 					{#snippet empty()}
 						<div class="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
