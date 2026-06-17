@@ -12,7 +12,7 @@ import {
  * Shared Library view-state. Lives in a singleton (not page-local) because the
  * "New file" action is a shell-rendered toolbar outside the page's component
  * tree — the toolbar, rail, editor and side pane all read/write this store, the
- * same way sessionsStore/watchSet coordinate the Sessions chrome.
+ * same way sessionsStore/sessionsLayout coordinate the Sessions chrome.
  */
 class LibraryStore {
 	entries = $state<LibraryEntry[]>([]);

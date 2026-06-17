@@ -7,7 +7,7 @@
 	import ConfirmButton from '$lib/components/shell/ConfirmButton.svelte';
 	import StatusDot from '$lib/components/shell/StatusDot.svelte';
 	import StateBadge from '$lib/components/shell/StateBadge.svelte';
-	import { watchSet } from '$lib/shell/watchset.svelte';
+	import { sessionsLayout } from '$lib/shell/sessions-layout.svelte';
 	import { liveState } from '$lib/shell/sessionState';
 	import { identityFor } from '$lib/shell/identities';
 	import { relativeTime, basename } from '$lib/shell/format';
@@ -19,9 +19,9 @@
 
 	const live = $derived(liveState(session));
 	const identity = $derived(identityFor(session.harness_id));
-	const active = $derived(watchSet.activeId === session.id);
-	const focusedMode = $derived(watchSet.focusedId === session.id);
-	const dragging = $derived(watchSet.draggingId === session.id);
+	const active = $derived(sessionsLayout.layout.activeId === session.id);
+	const focusedMode = $derived(sessionsLayout.layout.focusedId === session.id);
+	const dragging = $derived(sessionsLayout.layout.draggingId === session.id);
 
 	// A session only has a live PTY while running/starting; otherwise the pane
 	// shows a resume affordance so a stopped tile is still usable.
@@ -67,7 +67,7 @@
 		try {
 			await deleteSession(session.id);
 		} finally {
-			watchSet.evict(session.id);
+			sessionsLayout.evict(session.id);
 		}
 	}
 
@@ -93,8 +93,8 @@
 	);
 
 	function toggleFocus() {
-		if (focusedMode) watchSet.restore();
-		else watchSet.focus(session.id);
+		if (focusedMode) sessionsLayout.restore();
+		else sessionsLayout.focus(session.id);
 	}
 </script>
 
@@ -102,7 +102,7 @@
 <div
 	class="flex h-full min-h-0 flex-col bg-app transition-opacity"
 	style:opacity={dragging ? 0.45 : 1}
-	onpointerdown={() => watchSet.setActive(session.id)}
+	onpointerdown={() => sessionsLayout.setActive(session.id)}
 >
 	<!-- header -->
 	<div
@@ -182,7 +182,7 @@
 			size={14}
 			box={20}
 			title="Close pane"
-			onclick={() => watchSet.evict(session.id)}
+			onclick={() => sessionsLayout.evict(session.id)}
 		/>
 	</div>
 

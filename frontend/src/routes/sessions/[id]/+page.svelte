@@ -1,14 +1,14 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
-	import { watchSet } from '$lib/shell/watchset.svelte';
+	import { sessionsLayout } from '$lib/shell/sessions-layout.svelte';
 
 	// The single-session route is now a deep link into the multiplex: focus the
 	// session in the watch-set grid and hand off to the Sessions view.
 	$effect(() => {
 		const id = page.params.id;
 		if (id) {
-			watchSet.focus(id);
+			sessionsLayout.focus(id);
 			void goto('/', { replaceState: true });
 		}
 	});

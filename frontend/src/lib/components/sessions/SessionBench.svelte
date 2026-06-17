@@ -4,7 +4,7 @@
 	import StatusDot from '$lib/components/shell/StatusDot.svelte';
 	import { sessionsStore } from '$lib/stores/sessions.svelte';
 	import { messagesStore } from '$lib/stores/messages.svelte';
-	import { watchSet } from '$lib/shell/watchset.svelte';
+	import { sessionsLayout } from '$lib/shell/sessions-layout.svelte';
 	import { liveState } from '$lib/shell/sessionState';
 	import type { Session } from '$lib/sessions';
 
@@ -24,7 +24,7 @@
 			.filter((s) => !q || (s.name || s.harness_id).toLowerCase().includes(q))
 			.map((s) => ({
 				session: s,
-				watching: watchSet.isWatching(s.id),
+				watching: sessionsLayout.isWatching(s.id),
 				state: liveState(s),
 				unread: messagesStore.unreadCount(s.id)
 			}));
@@ -40,7 +40,7 @@
 	const groups = $derived.by((): Group[] => {
 		const needs = rows.filter((r) => r.state.attention && !r.watching);
 		// preserve grid order for the watching group
-		const watching = watchSet.watching
+		const watching = sessionsLayout.watching
 			.map((id) => rows.find((r) => r.session.id === id))
 			.filter((r): r is Row => !!r);
 		const running = rows.filter(
@@ -117,7 +117,7 @@
 	{@const surfaced = row.state.attention}
 	<button
 		type="button"
-		onclick={() => watchSet.promote(row.session.id)}
+		onclick={() => sessionsLayout.promote(row.session.id)}
 		class="group/row relative flex h-[var(--h-row)] w-full items-center gap-2 pl-3 pr-2 text-left transition-colors hover:bg-[var(--hover-tint)]"
 		style:background={row.watching ? 'var(--accent-soft)' : undefined}
 		title={row.state.label}

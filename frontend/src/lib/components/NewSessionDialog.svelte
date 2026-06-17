@@ -5,7 +5,7 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import SectionLabel from '$lib/components/shell/SectionLabel.svelte';
-	import { watchSet } from '$lib/shell/watchset.svelte';
+	import { sessionsLayout } from '$lib/shell/sessions-layout.svelte';
 	import {
 		applyHarnessSetup,
 		createSession,
@@ -127,7 +127,7 @@
 			name = '';
 			cwd = '';
 			// Surface the fresh session straight into the watch-set grid.
-			watchSet.promote(session.id);
+			sessionsLayout.promote(session.id);
 			await goto('/');
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'failed to create session';

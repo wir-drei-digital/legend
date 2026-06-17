@@ -8,7 +8,7 @@
 	import { sessionsStore } from '$lib/stores/sessions.svelte';
 	import { messagesStore } from '$lib/stores/messages.svelte';
 	import { counts, liveState } from '$lib/shell/sessionState';
-	import { watchSet } from '$lib/shell/watchset.svelte';
+	import { sessionsLayout } from '$lib/shell/sessions-layout.svelte';
 
 	const c = $derived(counts(sessionsStore.sessions));
 
@@ -61,7 +61,7 @@
 				label={s.name || s.harness_id}
 				detail={st.label}
 				flag={st.flag ?? 'ASK'}
-				onclick={() => watchSet.promote(s.id)}
+				onclick={() => sessionsLayout.promote(s.id)}
 			/>
 		{/each}
 		{#if moreNotifs > 0}
