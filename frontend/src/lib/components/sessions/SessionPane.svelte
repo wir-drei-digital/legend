@@ -1,6 +1,10 @@
 <script lang="ts">
 	import Terminal from '$lib/components/Terminal.svelte';
 	import Icon from '$lib/components/shell/Icon.svelte';
+	import IconButton from '$lib/components/shell/IconButton.svelte';
+	import Popover from '$lib/components/shell/Popover.svelte';
+	import MenuItem from '$lib/components/shell/MenuItem.svelte';
+	import ConfirmButton from '$lib/components/shell/ConfirmButton.svelte';
 	import StatusDot from '$lib/components/shell/StatusDot.svelte';
 	import StateBadge from '$lib/components/shell/StateBadge.svelte';
 	import { watchSet } from '$lib/shell/watchset.svelte';
@@ -50,22 +54,16 @@
 	// ---- per-pane actions menu (⋯) ----
 	let terminal = $state<ReturnType<typeof Terminal>>();
 	let menuOpen = $state(false);
-	let confirmingDelete = $state(false);
-
-	function closeMenu() {
-		menuOpen = false;
-		confirmingDelete = false;
-	}
 
 	/** Suspend: terminate the agent process; the session becomes resumable. */
 	function suspend() {
 		terminal?.requestStop();
-		closeMenu();
+		menuOpen = false;
 	}
 
 	/** Delete: destroy the session entirely and drop its tile. */
 	async function remove() {
-		closeMenu();
+		menuOpen = false;
 		try {
 			await deleteSession(session.id);
 		} finally {
@@ -106,9 +104,9 @@
 	style:opacity={dragging ? 0.45 : 1}
 	onpointerdown={() => watchSet.setActive(session.id)}
 >
-	<!-- header (29px) -->
+	<!-- header -->
 	<div
-		class="flex h-[29px] shrink-0 items-center gap-2 border-b border-hair px-2.5"
+		class="flex h-[var(--h-bar)] shrink-0 items-center gap-2 border-b border-hair px-2.5"
 		style:background={active ? 'color-mix(in oklab, var(--accent) 7%, var(--bg-shell))' : 'var(--bg-shell)'}
 	>
 		<!-- drag handle: press + drag a tile by its header to re-tile the grid -->
@@ -120,16 +118,16 @@
 			title="Drag to re-tile"
 		>
 			<StatusDot color={live.dotColor} pulse={live.pulse} size={6} />
-			<span class="shrink-0 text-[11.5px] font-semibold text-ink-1">
+			<span class="shrink-0 text-ui font-semibold text-ink-1">
 				{session.name || session.harness_id}
 			</span>
 			<span
-				class="shrink-0 font-mono text-[9px] font-bold tracking-[0.04em]"
+				class="shrink-0 font-mono text-micro font-bold tracking-[0.04em]"
 				style:color="var({identity.colorVar})"
 			>
 				{identity.tag}
 			</span>
-			<span class="min-w-0 flex-1 truncate text-[10px] text-ink-3">{summary}</span>
+			<span class="min-w-0 flex-1 truncate text-meta text-ink-3">{summary}</span>
 		</div>
 
 		{#if badge}
@@ -143,100 +141,49 @@
 		{/if}
 
 		{#if time}
-			<span class="shrink-0 font-mono text-[9.5px] text-ink-3">{time}</span>
+			<span class="shrink-0 font-mono text-micro text-ink-3">{time}</span>
 		{/if}
 
 		<!-- per-pane actions menu -->
 		<div class="relative shrink-0">
-			<button
-				type="button"
-				onclick={() => (menuOpen = !menuOpen)}
-				aria-expanded={menuOpen}
+			<IconButton
+				icon="more"
+				size={14}
+				box={20}
 				title="More actions"
-				class="grid size-5 place-items-center rounded text-ink-3 transition-colors hover:bg-[var(--hover-tint)] hover:text-ink-1"
-				class:text-ink-1={menuOpen}
-			>
-				<Icon name="more" size={14} />
-			</button>
+				active={menuOpen}
+				onclick={() => (menuOpen = !menuOpen)}
+			/>
 
-			{#if menuOpen}
-				<button
-					type="button"
-					class="fixed inset-0 z-40 cursor-default"
-					aria-label="Close menu"
-					onclick={closeMenu}
-				></button>
-				<div
-					class="absolute right-0 top-[26px] z-50 w-[150px] overflow-hidden rounded-[10px] border border-hair-strong bg-panel py-1 shadow-[0_18px_44px_-12px_rgba(0,0,0,0.7)]"
-					style:animation="lg-rise 0.12s ease-out"
-				>
-					{#if isLive}
-						<button
-							type="button"
-							onclick={suspend}
-							class="flex w-full items-center gap-2 px-2.5 py-[7px] text-left text-[11.5px] text-ink-2 transition-colors hover:bg-[var(--hover-tint)] hover:text-ink-1"
-						>
-							<Icon name="pause" size={13} class="text-ink-3" />
-							Suspend
-						</button>
-					{:else}
-						<button
-							type="button"
-							onclick={() => {
-								void resume();
-								closeMenu();
-							}}
-							class="flex w-full items-center gap-2 px-2.5 py-[7px] text-left text-[11.5px] text-ink-2 transition-colors hover:bg-[var(--hover-tint)] hover:text-ink-1"
-						>
-							<Icon name="refresh" size={13} class="text-ink-3" />
-							{resumeLabel}
-						</button>
-					{/if}
-
-					<div class="my-1 h-px bg-hair"></div>
-
-					{#if confirmingDelete}
-						<button
-							type="button"
-							onclick={remove}
-							class="flex w-full items-center gap-2 px-2.5 py-[7px] text-left text-[11.5px] font-medium transition-colors hover:bg-[color-mix(in_oklab,var(--red)_16%,transparent)]"
-							style:color="var(--red)"
-						>
-							<Icon name="trash" size={13} />
-							Confirm delete
-						</button>
-					{:else}
-						<button
-							type="button"
-							onclick={() => (confirmingDelete = true)}
-							class="flex w-full items-center gap-2 px-2.5 py-[7px] text-left text-[11.5px] transition-colors hover:bg-[color-mix(in_oklab,var(--red)_12%,transparent)]"
-							style:color="var(--red)"
-						>
-							<Icon name="trash" size={13} />
-							Delete session
-						</button>
-					{/if}
-				</div>
-			{/if}
+			<Popover bind:open={menuOpen} class="right-0 top-[26px] w-[150px]">
+				{#if isLive}
+					<MenuItem icon="pause" onclick={suspend}>Suspend</MenuItem>
+				{:else}
+					<MenuItem icon="refresh" onclick={() => { void resume(); menuOpen = false; }}>
+						{resumeLabel}
+					</MenuItem>
+				{/if}
+				<div class="my-1 h-px bg-hair"></div>
+				<ConfirmButton idleLabel="Delete session" confirmLabel="Confirm delete" onconfirm={remove} />
+			</Popover>
 		</div>
 
-		<button
-			type="button"
-			onclick={toggleFocus}
+		<IconButton
+			icon="eye"
+			size={14}
+			box={20}
 			title={focusedMode ? 'Restore grid' : 'Focus pane'}
-			class="grid size-5 shrink-0 place-items-center rounded text-ink-3 transition-colors hover:bg-[var(--hover-tint)] hover:text-ink-1"
-			class:text-brand-hi={focusedMode}
-		>
-			<Icon name="eye" size={14} />
-		</button>
-		<button
-			type="button"
-			onclick={() => watchSet.evict(session.id)}
+			active={focusedMode}
+			tone="accent"
+			onclick={toggleFocus}
+		/>
+		<IconButton
+			icon="close"
+			size={14}
+			box={20}
 			title="Close pane"
-			class="grid size-5 shrink-0 place-items-center rounded text-ink-3 transition-colors hover:bg-[var(--hover-tint)] hover:text-ink-1"
-		>
-			<Icon name="close" size={14} />
-		</button>
+			onclick={() => watchSet.evict(session.id)}
+		/>
 	</div>
 
 	<!-- stream (live terminal) -->
@@ -251,20 +198,20 @@
 				class="absolute inset-0 flex flex-col items-center justify-center gap-2.5 px-4 text-center"
 				style:background="color-mix(in oklab, var(--bg-app) 82%, transparent)"
 			>
-				<span class="font-mono text-[10.5px] uppercase tracking-[0.1em]" style:color={live.dotColor}>
+				<span class="font-mono text-meta uppercase tracking-[0.1em]" style:color={live.dotColor}>
 					{live.label}
 				</span>
 				{#if session.error}
-					<p class="max-w-[260px] font-mono text-[11px] text-ink-2">{session.error}</p>
+					<p class="max-w-[260px] font-mono text-meta text-ink-2">{session.error}</p>
 				{/if}
 				{#if resumeError}
-					<p class="max-w-[260px] text-[11px]" style:color="var(--red)">{resumeError}</p>
+					<p class="max-w-[260px] text-meta" style:color="var(--red)">{resumeError}</p>
 				{/if}
 				<button
 					type="button"
 					onclick={resume}
 					disabled={resuming}
-					class="flex items-center gap-1.5 rounded-[9px] border border-hair-strong bg-raised px-3 py-1.5 text-[11.5px] font-medium text-ink-1 transition-colors hover:border-[color-mix(in_oklab,var(--accent-hi)_40%,var(--border-strong))] disabled:opacity-50"
+					class="flex items-center gap-1.5 rounded-[9px] border border-hair-strong bg-raised px-3 py-1.5 text-ui font-medium text-ink-1 transition-colors hover:border-[color-mix(in_oklab,var(--accent-hi)_40%,var(--border-strong))] disabled:opacity-50"
 				>
 					<Icon name="refresh" size={13} />
 					{resuming ? 'Resuming…' : resumeLabel}

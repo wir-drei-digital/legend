@@ -136,15 +136,15 @@
 			<Icon name="sessions" size={22} />
 		</div>
 		{#if sessionsStore.sessions.length === 0}
-			<p class="text-[13px] text-ink-2">No sessions running.</p>
-			<p class="max-w-[260px] text-[11.5px] text-ink-3">
+			<p class="text-title text-ink-2">No sessions running.</p>
+			<p class="max-w-[260px] text-ui text-ink-3">
 				Use <span class="text-ink-2">New session</span> in the toolbar to launch an agent, or
-				<kbd class="rounded border border-hair bg-inset px-1 font-mono text-[10px]">⌘K</kbd> to jump
+				<kbd class="rounded border border-hair bg-inset px-1 font-mono text-meta">⌘K</kbd> to jump
 				to another view.
 			</p>
 		{:else}
-			<p class="text-[13px] text-ink-2">No tiles in the grid.</p>
-			<p class="max-w-[260px] text-[11.5px] text-ink-3">
+			<p class="text-title text-ink-2">No tiles in the grid.</p>
+			<p class="max-w-[260px] text-ui text-ink-3">
 				Promote a session from the bench on the left to watch it here.
 			</p>
 		{/if}
@@ -204,7 +204,7 @@
 
 		{#if watchSet.draggingId && ghost}
 			<div
-				class="pointer-events-none fixed z-[100] flex -translate-x-1/2 -translate-y-[150%] items-center gap-1.5 rounded-[8px] border border-hair-strong bg-raised px-2.5 py-1 text-[11.5px] text-ink-1 shadow-[0_12px_30px_-8px_rgba(0,0,0,0.7)]"
+				class="pointer-events-none fixed z-[100] flex -translate-x-1/2 -translate-y-[150%] items-center gap-1.5 rounded-[8px] border border-hair-strong bg-raised px-2.5 py-1 text-ui text-ink-1 shadow-drag"
 				style:left="{ghost.x}px"
 				style:top="{ghost.y}px"
 			>

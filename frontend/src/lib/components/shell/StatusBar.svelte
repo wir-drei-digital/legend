@@ -29,7 +29,7 @@
 </script>
 
 <footer
-	class="flex h-[46px] shrink-0 items-center gap-3 border-t border-hair bg-shell px-3.5 font-mono text-[11.5px]"
+	class="flex h-[46px] shrink-0 items-center gap-3 border-t border-hair bg-shell px-3.5 font-mono text-ui"
 >
 	<!-- LEFT — global state -->
 	<div class="flex shrink-0 items-center gap-2.5">

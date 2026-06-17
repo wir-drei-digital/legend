@@ -1,5 +1,6 @@
 <script lang="ts">
 	import Icon from '$lib/components/shell/Icon.svelte';
+	import IconButton from '$lib/components/shell/IconButton.svelte';
 	import StatusDot from '$lib/components/shell/StatusDot.svelte';
 	import { sessionsStore } from '$lib/stores/sessions.svelte';
 	import { messagesStore } from '$lib/stores/messages.svelte';
@@ -59,7 +60,7 @@
 
 <aside class="flex w-[178px] shrink-0 flex-col border-r border-hair bg-shell">
 	<!-- header -->
-	<div class="flex h-8 shrink-0 items-center gap-2 border-b border-hair pl-3 pr-1.5">
+	<div class="flex h-[var(--h-bar)] shrink-0 items-center gap-2 border-b border-hair pl-3 pr-1.5">
 		{#if searching}
 			<!-- svelte-ignore a11y_autofocus -->
 			<input
@@ -69,24 +70,22 @@
 					if (!query) searching = false;
 				}}
 				placeholder="Filter…"
-				class="min-w-0 flex-1 bg-transparent text-[11.5px] text-ink-1 placeholder:text-ink-3 focus:outline-none"
+				class="min-w-0 flex-1 bg-transparent text-ui text-ink-1 placeholder:text-ink-3 focus:outline-none"
 			/>
 		{:else}
-			<span class="text-[11.5px] font-semibold text-ink-2">Sessions</span>
-			<span class="font-mono text-[10.5px] text-ink-3">{sessionsStore.sessions.length}</span>
+			<span class="text-ui font-semibold text-ink-2">Sessions</span>
+			<span class="font-mono text-meta text-ink-3">{sessionsStore.sessions.length}</span>
 			<div class="flex-1"></div>
 		{/if}
-		<button
-			type="button"
+		<IconButton
+			icon={searching ? 'close' : 'search'}
+			size={13}
+			title="Filter sessions"
 			onclick={() => {
 				searching = !searching;
 				if (!searching) query = '';
 			}}
-			class="grid size-6 shrink-0 place-items-center rounded-md text-ink-3 transition-colors hover:bg-[var(--hover-tint)] hover:text-ink-2"
-			title="Filter sessions"
-		>
-			<Icon name={searching ? 'close' : 'search'} size={13} />
-		</button>
+		/>
 	</div>
 
 	<!-- groups -->
@@ -95,19 +94,19 @@
 			<div class="flex flex-col">
 				<div class="flex items-center justify-between px-3 pb-1">
 					<span
-						class="font-mono text-[9px] font-semibold uppercase tracking-[0.14em]"
+						class="font-mono text-micro font-semibold uppercase tracking-[0.14em]"
 						style:color={group.amber ? 'var(--amber)' : 'var(--text-3)'}
 					>
 						{group.label}
 					</span>
-					<span class="font-mono text-[9px] text-ink-3">{group.rows.length}</span>
+					<span class="font-mono text-micro text-ink-3">{group.rows.length}</span>
 				</div>
 				{#each group.rows as row (row.session.id)}
 					{@render benchRow(row)}
 				{/each}
 			</div>
 		{:else}
-			<p class="px-3 text-[11px] text-ink-3">
+			<p class="px-3 text-meta text-ink-3">
 				{sessionsStore.loaded ? 'No sessions match.' : 'Connecting…'}
 			</p>
 		{/each}
@@ -119,7 +118,7 @@
 	<button
 		type="button"
 		onclick={() => watchSet.promote(row.session.id)}
-		class="group/row relative flex h-[26px] w-full items-center gap-2 pl-3 pr-2 text-left transition-colors hover:bg-[var(--hover-tint)]"
+		class="group/row relative flex h-[var(--h-row)] w-full items-center gap-2 pl-3 pr-2 text-left transition-colors hover:bg-[var(--hover-tint)]"
 		style:background={row.watching ? 'var(--accent-soft)' : undefined}
 		title={row.state.label}
 	>
@@ -132,7 +131,7 @@
 		<StatusDot color={row.state.dotColor} pulse={row.state.pulse} size={6} />
 
 		<span
-			class="min-w-0 flex-1 truncate text-[11.5px]"
+			class="min-w-0 flex-1 truncate text-ui"
 			style:color={row.watching ? 'var(--text-1)' : 'var(--text-2)'}
 			style:font-weight={row.watching ? 600 : 500}
 		>
@@ -141,7 +140,7 @@
 
 		{#if row.unread > 0}
 			<span
-				class="grid h-[15px] min-w-[15px] shrink-0 place-items-center rounded-full px-1 text-[9px] font-bold leading-none text-white"
+				class="grid h-[15px] min-w-[15px] shrink-0 place-items-center rounded-full px-1 text-micro font-bold leading-none text-white"
 				style:background="var(--accent)"
 			>
 				{row.unread}
@@ -150,7 +149,7 @@
 
 		{#if row.state.flag}
 			<span
-				class="shrink-0 font-mono text-[9px] font-bold tracking-[0.06em]"
+				class="shrink-0 font-mono text-micro font-bold tracking-[0.06em]"
 				style:color={row.state.flag === 'ERR' ? 'var(--red)' : 'var(--amber)'}
 			>
 				{row.state.flag}

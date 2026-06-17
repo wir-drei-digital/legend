@@ -2,6 +2,8 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import Icon from './Icon.svelte';
+	import Surface from './Surface.svelte';
+	import SectionLabel from './SectionLabel.svelte';
 	import { shell } from '$lib/shell/shell.svelte';
 	import { VIEWS, viewById, sectionForPath, type ViewDef } from '$lib/shell/views';
 	import { sessionsStore } from '$lib/stores/sessions.svelte';
@@ -59,11 +61,12 @@
 ></div>
 
 <div
-	class="absolute left-3.5 top-[50px] z-50 w-[296px] overflow-hidden rounded-[14px] border border-hair-strong bg-panel shadow-[0_24px_60px_-12px_rgba(0,0,0,0.7)]"
+	class="absolute left-3.5 top-[50px] z-50 w-[296px]"
 	style:animation="lg-rise 0.13s ease-out"
 	role="dialog"
 	aria-label="Spaces"
 >
+	<Surface elevation="overlay" class="w-full rounded-[14px]">
 	<!-- search / command row -->
 	<div class="flex h-10 items-center gap-2 border-b border-hair px-3">
 		<Icon name="search" size={14} class="shrink-0 text-ink-3" />
@@ -72,30 +75,31 @@
 			bind:value={query}
 			onkeydown={onKeydown}
 			placeholder="Jump to a view or run a command…"
-			class="min-w-0 flex-1 bg-transparent text-[12.5px] text-ink-1 placeholder:text-ink-3 focus:outline-none"
+			class="min-w-0 flex-1 bg-transparent text-body text-ink-1 placeholder:text-ink-3 focus:outline-none"
 		/>
-		<kbd class="shrink-0 rounded-[5px] border border-hair bg-inset px-1.5 py-0.5 font-mono text-[9.5px] text-ink-3">⌘K</kbd>
+		<kbd class="shrink-0 rounded-[5px] border border-hair bg-inset px-1.5 py-0.5 font-mono text-micro text-ink-3">⌘K</kbd>
 	</div>
 
 	<div class="max-h-[60vh] overflow-y-auto py-1.5">
 		{#if pinned.length}
-			<p class="px-3 pb-1 pt-1.5 font-mono text-[9px] uppercase tracking-[0.12em] text-ink-3">Pinned</p>
+			<SectionLabel class="block px-3 pb-1 pt-1.5 tracking-[0.12em]">Pinned</SectionLabel>
 			{#each pinned as v (v.id)}
 				{@render row(v)}
 			{/each}
 		{/if}
 
 		{#if others.length}
-			<p class="px-3 pb-1 pt-2.5 font-mono text-[9px] uppercase tracking-[0.12em] text-ink-3">All views</p>
+			<SectionLabel class="block px-3 pb-1 pt-2.5 tracking-[0.12em]">All views</SectionLabel>
 			{#each others as v (v.id)}
 				{@render row(v)}
 			{/each}
 		{/if}
 
 		{#if !pinned.length && !others.length}
-			<p class="px-3 py-3 text-[12px] text-ink-3">No views match "{query}".</p>
+			<p class="px-3 py-3 text-body text-ink-3">No views match "{query}".</p>
 		{/if}
 	</div>
+	</Surface>
 </div>
 
 {#snippet row(v: ViewDef)}
@@ -115,13 +119,13 @@
 			size={15}
 			class={active ? 'text-brand-hi' : 'text-ink-2'}
 		/>
-		<span class="flex-1 truncate text-[12.5px] {active ? 'font-semibold text-ink-1' : 'text-ink-2'}">
+		<span class="flex-1 truncate text-body {active ? 'font-semibold text-ink-1' : 'text-ink-2'}">
 			{v.label}
 		</span>
 		{#if v.soon}
-			<span class="font-mono text-[9px] uppercase tracking-[0.1em] text-ink-3">soon</span>
+			<span class="font-mono text-micro uppercase tracking-[0.1em] text-ink-3">soon</span>
 		{:else if count}
-			<span class="font-mono text-[10.5px] text-ink-3">{count}</span>
+			<span class="font-mono text-meta text-ink-3">{count}</span>
 		{/if}
 		<button
 			type="button"
