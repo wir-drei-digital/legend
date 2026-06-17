@@ -61,6 +61,15 @@ class SessionsLayout {
 	restore(): void {
 		this.layout.restore();
 	}
+
+	/** Snapshot the user-dismissed set so the workspace snapshot can persist it. */
+	dismissedIds(): string[] {
+		return [...this.#dismissed];
+	}
+	/** Restore the user-dismissed set from a workspace snapshot. */
+	restoreDismissed(ids: string[]): void {
+		this.#dismissed = new Set(ids);
+	}
 	setActive(id: string): void {
 		this.layout.setActive(id);
 	}

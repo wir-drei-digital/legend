@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
+	import { onMount } from 'svelte';
 	import { page } from '$app/state';
 	import TopBar from './TopBar.svelte';
 	import StatusBar from './StatusBar.svelte';
@@ -15,6 +16,7 @@
 	import { shell } from '$lib/shell/shell.svelte';
 	import { sectionForPath, viewById } from '$lib/shell/views';
 	import { workspaceStore } from '$lib/shell/workspace.svelte';
+	import { localStoragePersistence } from '$lib/shell/workspace-persistence';
 	import { SURFACES } from '$lib/shell/surfaces';
 	import { sessionsLayout } from '$lib/shell/sessions-layout.svelte';
 	import { sessionsStore } from '$lib/stores/sessions.svelte';
@@ -36,6 +38,18 @@
 	$effect(() => {
 		sessionsStore.connect();
 		messagesStore.connect();
+	});
+
+	// Workspace persistence: hydrate once on mount, then reactively save. The
+	// `hydrated` guard prevents clobbering storage with defaults before load.
+	let hydrated = $state(false);
+	onMount(() => {
+		workspaceStore.hydrate(localStoragePersistence.load());
+		hydrated = true;
+	});
+	$effect(() => {
+		const snap = workspaceStore.snapshot();
+		if (hydrated) localStoragePersistence.save(snap);
 	});
 
 	// Sessions auto-tile: keep the watch-set consistent with live sessions.

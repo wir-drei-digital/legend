@@ -7,6 +7,7 @@ import { TileLayout } from './tiling.svelte';
 import { sessionsLayout } from './sessions-layout.svelte';
 import { filesStore } from '$lib/stores/files.svelte';
 import { SURFACES } from './surfaces';
+import { WORKSPACE_SCHEMA, type WorkspaceSnapshot } from './workspace-persistence';
 
 export interface Binding {
 	kind: string;
@@ -194,6 +195,109 @@ class WorkspaceStore {
 
 	#mint(): string {
 		return `tile-${++this.#seq}`;
+	}
+
+	// ---- persistence (snapshot / hydrate) --------------------------------
+	/**
+	 * Capture the workspace as a serializable snapshot. READS reactive state so a
+	 * `$effect` calling this tracks changes and re-saves. The auto Sessions space
+	 * is recorded as a marker only (empty layout/bindings) — it repopulates from
+	 * live sessions via the reconcile effect.
+	 */
+	snapshot(): WorkspaceSnapshot {
+		const spaces = this.spaces.map((space) => {
+			if (space.auto) {
+				return {
+					id: space.id,
+					name: space.name,
+					auto: space.auto,
+					rail: space.rail,
+					side: space.side,
+					layout: new TileLayout().serialize(),
+					bindings: []
+				};
+			}
+			const bindings = space.layout.tiles
+				.map((id) => ({ id, ...this.#bindings[id] }))
+				.filter((b) => b.kind);
+			return {
+				id: space.id,
+				name: space.name,
+				rail: space.rail,
+				side: space.side,
+				layout: space.layout.serialize(),
+				bindings
+			};
+		});
+		return {
+			version: WORKSPACE_SCHEMA,
+			activeId: this.activeId,
+			dismissed: sessionsLayout.dismissedIds(),
+			spaces
+		};
+	}
+
+	/**
+	 * Rebuild the workspace from a snapshot. Tolerant: a null snapshot or ANY
+	 * error keeps the seeded defaults. Unknown surface kinds are dropped; missing
+	 * files are tolerated (the FileSurface shows its empty/missing state).
+	 */
+	hydrate(snap: WorkspaceSnapshot | null): void {
+		if (!snap) return; // keep seeded defaults
+		try {
+			let maxSeq = this.#seq;
+			const noteSeq = (id: string, prefix: string) => {
+				if (id.startsWith(prefix)) {
+					const n = Number.parseInt(id.slice(prefix.length), 10);
+					if (Number.isFinite(n) && n > maxSeq) maxSeq = n;
+				}
+			};
+
+			const live = this.#sessionsSpace;
+			const bindings: Record<string, Binding> = {};
+
+			const spaces: Space[] = snap.spaces.map((entry) => {
+				if (entry.auto === 'sessions') {
+					// KEEP the live sessions space — its layout MUST stay
+					// sessionsLayout.layout so the reconcile $effect keeps working.
+					noteSeq(entry.id, 'space-');
+					return live;
+				}
+				noteSeq(entry.id, 'space-');
+				const layout = new TileLayout();
+				layout.deserialize(entry.layout);
+				for (const b of entry.bindings) {
+					noteSeq(b.id, 'tile-');
+					if (SURFACES[b.kind]) bindings[b.id] = { kind: b.kind, params: b.params };
+				}
+				return {
+					id: entry.id,
+					name: entry.name,
+					rail: entry.rail,
+					side: entry.side,
+					layout
+				};
+			});
+
+			this.spaces = spaces;
+			this.#bindings = bindings;
+			this.activeId = spaces.some((s) => s.id === snap.activeId) ? snap.activeId : 'sessions';
+			sessionsLayout.restoreDismissed(snap.dismissed ?? []);
+
+			// Collision guard: advance #seq past the largest restored numeric suffix
+			// so newly minted tile-/space- ids never collide with restored ones.
+			this.#seq = maxSeq;
+
+			// Lazy-load restored file buffers (tolerate missing — errors route to
+			// filesStore.error and the FileSurface shows its empty state).
+			for (const b of Object.values(bindings)) {
+				if (b.kind === 'file' && typeof b.params.path === 'string') {
+					void filesStore.load(b.params.path);
+				}
+			}
+		} catch {
+			// tolerant: any failure leaves the seeded defaults intact
+		}
 	}
 }
 
