@@ -55,6 +55,7 @@ Release builds must go through `backend/scripts/build-release.sh [legend|legend_
 - `src/lib/api.ts` (`PUBLIC_API_URL || ''` base) and `src/lib/socket.ts` (singleton Phoenix socket, `PUBLIC_WS_URL || '/socket'`). Blank `PUBLIC_*` vars = same-origin (correct for dev + web); the desktop build bakes `http://localhost:4807` in via `beforeBuildCommand` in `tauri.conf.json`.
 - `+layout.svelte` renders a `data-tauri-drag-region` header strip only inside Tauri (`__TAURI_INTERNALS__` check) — the window uses macOS `titleBarStyle: Overlay` with inline traffic lights.
 - Global CSS + shadcn theme tokens live in `src/routes/layout.css` (not app.css).
+- **Design system:** tokens in `src/routes/layout.css`, primitives in `src/lib/components/shell/`, canonical reference in `docs/DESIGN_SYSTEM.md`. Token discipline: feature code uses Legend tokens (`text-ink-*`, `bg-shell/app/panel/…`, `text-micro…title`) + shell primitives, never raw shadcn neutral classes / ad-hoc hex / ad-hoc `text-[Npx]`; `src/lib/components/ui/` is the only place shadcn semantic classes appear.
 
 ### Desktop (`desktop/`, Tauri v2)
 

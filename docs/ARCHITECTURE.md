@@ -85,6 +85,13 @@ Agents message each other, delegate, and hand off through Legend-provided MCP to
 - **Every domain in `ash_domains` must use the `AshJsonApi.Domain` extension, even with zero routes** — the router probes each domain's `json_api_match_route/2` in order, and one domain without it 500s every route owned by a *later* domain (this shipped once via Settings).
 - Channels ride one unauthenticated `UserSocket` — acceptable only under the loopback single-user posture; **auth is mandatory before federation/any remote exposure** (recorded in the specs).
 
+### Design system
+
+- **Token layer** (`frontend/src/routes/layout.css`): the raw `--bg-*` / `--text-*` / `--accent*` tokens are the source of truth; shadcn's semantic vars (`--background`, `--primary`, …) are **mapped onto them** so every shadcn component inherits the dark palette for free. Type scale (`text-micro…title`), elevation (`shadow-pop/overlay/drag`) and control heights (`--h-bar`/`--h-row`) are `@theme` utilities.
+- **Primitive layer** (`frontend/src/lib/components/shell/`): small Svelte 5 components baking those tokens into recurring shapes (`IconButton`, `Surface`, `Popover`, `MenuItem`, `ConfirmButton`, `SectionLabel`, `SidePane`(+Section/Field), `WorkbenchLayout`, …). Feature code composes these, never raw classes.
+- **The shadcn semantic mapping is the seam:** re-theming is swapping `--accent`; `src/lib/components/ui/` is the only place shadcn semantic classes appear. Dark only, no runtime switcher.
+- **Canonical reference:** [DESIGN_SYSTEM.md](DESIGN_SYSTEM.md) — keep it in sync when either layer changes.
+
 ## Data & boot
 
 - SQLite via AshSqlite; **no atomic updates** — every custom update action needs `require_atomic? false`.

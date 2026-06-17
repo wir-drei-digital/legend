@@ -15,5 +15,5 @@
 </script>
 
 <div class="flex h-full items-center justify-center">
-	<p class="text-[12px] text-ink-3">Opening session…</p>
+	<p class="text-body text-ink-3">Opening session…</p>
 </div>
