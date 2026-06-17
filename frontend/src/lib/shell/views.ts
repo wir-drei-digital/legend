@@ -12,6 +12,7 @@ import type { Component } from 'svelte';
 import type { IconName } from '$lib/components/shell/Icon.svelte';
 import SessionBench from '$lib/components/sessions/SessionBench.svelte';
 import SessionsToolbar from '$lib/components/sessions/SessionsToolbar.svelte';
+import LibraryToolbar from '$lib/components/library/LibraryToolbar.svelte';
 import { sessionsStore } from '$lib/stores/sessions.svelte';
 import { messagesStore } from '$lib/stores/messages.svelte';
 
@@ -54,7 +55,7 @@ export const VIEWS: ViewDef[] = [
 		href: '/library',
 		icon: 'folder',
 		defaultPinned: true,
-		sub: () => 'shared knowledge, skills & artifacts'
+		toolbar: LibraryToolbar
 	},
 	{
 		id: 'messages',
