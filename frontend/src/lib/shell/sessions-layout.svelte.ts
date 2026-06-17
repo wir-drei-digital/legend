@@ -3,6 +3,7 @@
 // the user-dismissed set, and reconciliation against live sessions. In Phase 2
 // this instance becomes the Sessions space's backing model.
 
+import { SvelteSet } from 'svelte/reactivity';
 import { TileLayout } from './tiling.svelte';
 import { reconcileColumns } from './tiling-core';
 
@@ -10,8 +11,13 @@ const MAX_TILES = 6;
 
 class SessionsLayout {
 	layout = new TileLayout();
-	/** sessions the user explicitly evicted — not auto-refilled until promoted */
-	#dismissed = new Set<string>();
+	/**
+	 * Sessions the user explicitly evicted — not auto-refilled until promoted.
+	 * Reactive (SvelteSet) so `dismissedIds()` iterating it registers a dependency
+	 * and the workspace save `$effect` re-runs on every add/delete; .add/.delete/
+	 * iteration semantics match a plain Set.
+	 */
+	#dismissed = new SvelteSet<string>();
 
 	get watching(): string[] {
 		return this.layout.tiles;
@@ -68,7 +74,8 @@ class SessionsLayout {
 	}
 	/** Restore the user-dismissed set from a workspace snapshot. */
 	restoreDismissed(ids: string[]): void {
-		this.#dismissed = new Set(ids);
+		this.#dismissed.clear();
+		for (const id of ids) this.#dismissed.add(id);
 	}
 	setActive(id: string): void {
 		this.layout.setActive(id);

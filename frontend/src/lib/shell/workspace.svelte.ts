@@ -6,6 +6,7 @@
 import { TileLayout } from './tiling.svelte';
 import { sessionsLayout } from './sessions-layout.svelte';
 import { filesStore } from '$lib/stores/files.svelte';
+import { sessionsStore } from '$lib/stores/sessions.svelte';
 import { SURFACES } from './surfaces';
 import { WORKSPACE_SCHEMA, type WorkspaceSnapshot } from './workspace-persistence';
 
@@ -57,6 +58,12 @@ class WorkspaceStore {
 	dragLabel(id: string): string {
 		const b = this.binding(id);
 		if (!b) return 'tile';
+		if (b.kind === 'session') {
+			// Session tiles bind only {sessionId}; resolve the live name here so the
+			// drag ghost shows it instead of the literal "session" fallback.
+			const s = sessionsStore.sessions.find((x) => x.id === b.params.sessionId);
+			return s?.name || s?.harness_id || 'session';
+		}
 		const def = SURFACES[b.kind];
 		return def?.dragLabel?.(b.params) ?? def?.title(b.params) ?? b.kind;
 	}

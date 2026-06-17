@@ -53,7 +53,6 @@
 	});
 
 	// Sessions auto-tile: keep the watch-set consistent with live sessions.
-	const sessionById = $derived(new Map(sessionsStore.sessions.map((s) => [s.id, s])));
 	const candidates = $derived.by(() => {
 		const rank = (st: { attention: boolean; kind: string }) =>
 			st.attention ? 0 : st.kind === 'running' ? 1 : 2;
@@ -65,8 +64,6 @@
 	$effect(() => {
 		sessionsLayout.reconcile(candidates);
 	});
-	const sessionLabel = (id: string) =>
-		sessionById.get(id)?.name || sessionById.get(id)?.harness_id || 'session';
 
 	function onKeydown(e: KeyboardEvent) {
 		if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {

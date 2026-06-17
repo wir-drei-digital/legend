@@ -1,5 +1,4 @@
 <script lang="ts">
-	import type { Snippet } from 'svelte';
 	import Icon, { type IconName } from './Icon.svelte';
 	import Surface from './Surface.svelte';
 	import SectionLabel from './SectionLabel.svelte';
