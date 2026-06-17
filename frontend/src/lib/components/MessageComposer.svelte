@@ -31,13 +31,16 @@
 	}
 </script>
 
-<div class="flex flex-col gap-2 border-t pt-2">
+<div class="flex flex-col gap-2 border-t border-hair pt-2">
 	{#if error}
-		<p class="text-sm text-destructive">{error}</p>
+		<p class="text-meta text-[var(--red)]">{error}</p>
 	{/if}
 	<div class="flex gap-2">
 		{#if !target}
-			<select bind:value={selected} class="h-9 rounded-md border bg-background px-2 text-sm">
+			<select
+				bind:value={selected}
+				class="h-9 rounded-md border border-hair-strong bg-inset px-2 text-ui text-ink-1 focus:border-[color-mix(in_oklab,var(--accent-hi)_40%,var(--border-strong))] focus:outline-none"
+			>
 				<option value="" disabled>To session…</option>
 				{#each sessions as s (s.id)}
 					<option value={s.id}>{s.name || s.harness_id}</option>
@@ -47,7 +50,7 @@
 		<input
 			bind:value={draft}
 			placeholder="Message as human…"
-			class="h-9 min-w-0 flex-1 rounded-md border bg-background px-2 text-sm"
+			class="h-9 min-w-0 flex-1 rounded-md border border-hair-strong bg-inset px-2 text-ui text-ink-1 placeholder:text-ink-3 focus:border-[color-mix(in_oklab,var(--accent-hi)_40%,var(--border-strong))] focus:outline-none"
 			onkeydown={(e) => e.key === 'Enter' && send()}
 		/>
 		<Button size="sm" onclick={send} disabled={!to || !draft.trim() || sending}>Send</Button>

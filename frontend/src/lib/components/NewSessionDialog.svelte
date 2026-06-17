@@ -4,7 +4,7 @@
 	import * as Select from '$lib/components/ui/select';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
-	import { Label } from '$lib/components/ui/label';
+	import SectionLabel from '$lib/components/shell/SectionLabel.svelte';
 	import { watchSet } from '$lib/shell/watchset.svelte';
 	import {
 		applyHarnessSetup,
@@ -150,7 +150,7 @@
 
 		<div class="flex flex-col gap-4">
 			<div class="flex flex-col gap-2">
-				<Label for="harness">Harness</Label>
+				<SectionLabel><label for="harness">Harness</label></SectionLabel>
 				<Select.Root type="single" bind:value={harnessId}>
 					<Select.Trigger id="harness" class="w-full">
 						{selectedHarness?.name ?? 'Pick a harness'}
@@ -164,7 +164,7 @@
 			</div>
 
 			<div class="flex flex-col gap-2">
-				<Label for="runtime">Runtime</Label>
+				<SectionLabel><label for="runtime">Runtime</label></SectionLabel>
 				<Select.Root type="single" bind:value={runtimeId}>
 					<Select.Trigger id="runtime" class="w-full">
 						{selectedRuntime ? runtimeLabel(selectedRuntime.id) : 'Pick a runtime'}
@@ -178,10 +178,10 @@
 			</div>
 
 			{#if setupNeeded && selectedHarness}
-				<div class="flex flex-col gap-2 rounded-md border bg-muted/40 p-3 text-sm">
+				<div class="flex flex-col gap-2 rounded-md border border-hair bg-inset p-3 text-ui text-ink-1">
 					<p>{selectedHarness.name}: {selectedHarness.setup.summary}</p>
 					{#if setupError}
-						<p class="text-destructive">{setupError}</p>
+						<p class="text-[var(--red)]">{setupError}</p>
 					{/if}
 					<div class="flex gap-2">
 						<Button size="sm" onclick={applySetup} disabled={applyingSetup}>
@@ -191,16 +191,16 @@
 					</div>
 				</div>
 			{:else if setupApplied}
-				<p class="text-sm text-emerald-600">{setupApplied}</p>
+				<p class="text-ui text-[var(--green)]">{setupApplied}</p>
 			{/if}
 
 			<div class="flex flex-col gap-2">
-				<Label for="name">Name (optional)</Label>
+				<SectionLabel><label for="name">Name (optional)</label></SectionLabel>
 				<Input id="name" bind:value={name} placeholder="e.g. refactor sprint" />
 			</div>
 
 			<div class="flex flex-col gap-2">
-				<Label for="cwd">Working directory</Label>
+				<SectionLabel><label for="cwd">Working directory</label></SectionLabel>
 				<Input
 					id="cwd"
 					bind:value={cwd}
@@ -211,14 +211,14 @@
 			</div>
 
 			{#if incompatible && selectedHarness && selectedRuntime}
-				<p class="text-sm text-destructive">
+				<p class="text-ui text-[var(--red)]">
 					{selectedHarness.name} can't be auto-installed on {runtimeLabel(selectedRuntime.id)} —
 					pick a different harness or runtime.
 				</p>
 			{/if}
 
 			{#if error}
-				<p class="text-sm text-destructive">{error}</p>
+				<p class="text-ui text-[var(--red)]">{error}</p>
 			{/if}
 		</div>
 
