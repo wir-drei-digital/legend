@@ -81,7 +81,7 @@
 		{#if dirty}<span class="shrink-0 text-meta text-warn">Unsaved</span>{/if}
 
 		<Button size="sm" class="h-7 px-2.5 text-meta" onclick={() => path && filesStore.save(path)} disabled={!dirty}>Save</Button>
-		<IconButton icon="columns" size={14} box={20} title="Split right" onclick={() => workspaceStore.splitActiveFile()} />
+		<IconButton icon="columns" size={14} box={20} title="Split right" onclick={() => workspaceStore.splitActive()} />
 		<IconButton icon="eye" size={14} box={20} title={focusedMode ? 'Restore grid' : 'Focus pane'} active={focusedMode} tone="accent" onclick={toggleFocus} />
 		<div class="relative shrink-0">
 			<IconButton icon="more" size={14} box={20} title="More actions" active={menuOpen} onclick={() => (menuOpen = !menuOpen)} />

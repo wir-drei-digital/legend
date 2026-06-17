@@ -9,13 +9,12 @@
 	import TileGrid from './TileGrid.svelte';
 	import Icon from './Icon.svelte';
 	import SessionBench from '$lib/components/sessions/SessionBench.svelte';
-	import SessionPane from '$lib/components/sessions/SessionPane.svelte';
 	import LibraryRail from '$lib/components/library/LibraryRail.svelte';
 	import LibrarySide from '$lib/components/library/LibrarySide.svelte';
-	import FileSurface from '$lib/components/library/FileSurface.svelte';
 	import { shell } from '$lib/shell/shell.svelte';
 	import { sectionForPath, viewById } from '$lib/shell/views';
 	import { workspaceStore } from '$lib/shell/workspace.svelte';
+	import { SURFACES } from '$lib/shell/surfaces';
 	import { sessionsLayout } from '$lib/shell/sessions-layout.svelte';
 	import { sessionsStore } from '$lib/stores/sessions.svelte';
 	import { messagesStore } from '$lib/stores/messages.svelte';
@@ -62,7 +61,7 @@
 		}
 		const el = e.target as HTMLElement | null;
 		if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return;
-		if (shell.spacesOpen || space.kind !== 'sessions') return;
+		if (shell.spacesOpen || space.auto !== 'sessions') return;
 		if (e.key === 'Escape') {
 			sessionsLayout.restore();
 			return;
@@ -82,43 +81,65 @@
 		{#snippet center()}<SpaceSwitcher />{/snippet}
 	</TopBar>
 
+	{#snippet surfaceTile(id: string, grab: (e: PointerEvent) => void)}
+		{@const b = workspaceStore.binding(id)}
+		{@const Surface = b ? SURFACES[b.kind]?.component : undefined}
+		{#if b && Surface}<Surface tileId={id} params={b.params} {grab} />{/if}
+	{/snippet}
+
+	{#snippet sessionsEmpty()}
+		<div class="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
+			<div class="grid size-12 place-items-center rounded-2xl border border-hair bg-panel text-ink-3"><Icon name="sessions" size={22} /></div>
+			<p class="text-title text-ink-2">{sessionsStore.sessions.length === 0 ? 'No sessions running.' : 'No tiles in the grid.'}</p>
+			<p class="max-w-[260px] text-ui text-ink-3">{sessionsStore.sessions.length === 0 ? 'Use New session in the toolbar to launch an agent.' : 'Promote a session from the bench on the left to watch it here.'}</p>
+		</div>
+	{/snippet}
+
+	{#snippet libraryEmpty()}
+		<div class="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
+			<div class="grid size-12 place-items-center rounded-2xl border border-hair bg-panel text-ink-3"><Icon name="folder" size={22} /></div>
+			<p class="text-title text-ink-2">No file open.</p>
+			<p class="max-w-[260px] text-ui text-ink-3">Pick a file from the Explorer on the left to open it here.</p>
+		</div>
+	{/snippet}
+
+	{#snippet customEmpty()}
+		<div class="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
+			<div class="grid size-12 place-items-center rounded-2xl border border-hair bg-panel text-ink-3"><Icon name="grid" size={22} /></div>
+			<p class="text-title text-ink-2">Empty space.</p>
+			<p class="max-w-[260px] text-ui text-ink-3">Open a surface from <kbd class="rounded border border-hair bg-inset px-1 font-mono text-meta">⌘K</kbd> to start tiling.</p>
+		</div>
+	{/snippet}
+
 	<div class="flex min-h-0 flex-1">
-		{#if space.kind === 'sessions'}
+		{#if space.auto === 'sessions'}
 			<!-- Sessions renders bench + grid directly (SessionBench owns its own
 			     178px aside + border) — matches today's shell exactly for parity. -->
 			<SessionBench />
 			<div class="min-w-0 flex-1 overflow-hidden bg-app">
-				<TileGrid layout={space.layout} dragLabel={sessionLabel}>
-					{#snippet tile(id, grab)}
-						{@const s = sessionById.get(id)}
-						{#if s}<SessionPane session={s} {grab} layout={sessionsLayout.layout} onClose={() => sessionsLayout.evict(id)} />{/if}
-					{/snippet}
-					{#snippet empty()}
-						<div class="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
-							<div class="grid size-12 place-items-center rounded-2xl border border-hair bg-panel text-ink-3"><Icon name="sessions" size={22} /></div>
-							<p class="text-title text-ink-2">{sessionsStore.sessions.length === 0 ? 'No sessions running.' : 'No tiles in the grid.'}</p>
-							<p class="max-w-[260px] text-ui text-ink-3">{sessionsStore.sessions.length === 0 ? 'Use New session in the toolbar to launch an agent.' : 'Promote a session from the bench on the left to watch it here.'}</p>
-						</div>
-					{/snippet}
+				<TileGrid layout={space.layout} dragLabel={(id) => workspaceStore.dragLabel(id)}>
+					{#snippet tile(id, grab)}{@render surfaceTile(id, grab)}{/snippet}
+					{#snippet empty()}{@render sessionsEmpty()}{/snippet}
 				</TileGrid>
 			</div>
-		{:else}
+		{:else if space.rail === 'library'}
 			<WorkbenchLayout storageKey={sideOpenKey}>
 				{#snippet rail()}<LibraryRail />{/snippet}
 				{#snippet primary()}
-					<TileGrid layout={space.layout} dragLabel={(id) => workspaceStore.tilePath(id)?.split('/').at(-1) ?? 'file'}>
-						{#snippet tile(id, grab)}<FileSurface tileId={id} {grab} />{/snippet}
-						{#snippet empty()}
-							<div class="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
-								<div class="grid size-12 place-items-center rounded-2xl border border-hair bg-panel text-ink-3"><Icon name="folder" size={22} /></div>
-								<p class="text-title text-ink-2">No file open.</p>
-								<p class="max-w-[260px] text-ui text-ink-3">Pick a file from the Explorer on the left to open it here.</p>
-							</div>
-						{/snippet}
+					<TileGrid layout={space.layout} dragLabel={(id) => workspaceStore.dragLabel(id)}>
+						{#snippet tile(id, grab)}{@render surfaceTile(id, grab)}{/snippet}
+						{#snippet empty()}{@render libraryEmpty()}{/snippet}
 					</TileGrid>
 				{/snippet}
 				{#snippet side()}<LibrarySide />{/snippet}
 			</WorkbenchLayout>
+		{:else}
+			<div class="min-w-0 flex-1 overflow-hidden bg-app">
+				<TileGrid layout={space.layout} dragLabel={(id) => workspaceStore.dragLabel(id)}>
+					{#snippet tile(id, grab)}{@render surfaceTile(id, grab)}{/snippet}
+					{#snippet empty()}{@render customEmpty()}{/snippet}
+				</TileGrid>
+			</div>
 		{/if}
 	</div>
 
