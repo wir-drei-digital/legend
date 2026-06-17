@@ -1,5 +1,5 @@
 <script lang="ts">
-	import type { Component } from 'svelte';
+	import type { Component, Snippet } from 'svelte';
 	import Icon from './Icon.svelte';
 	import { shell } from '$lib/shell/shell.svelte';
 	import { viewById } from '$lib/shell/views';
@@ -9,13 +9,15 @@
 		sub,
 		count,
 		isTauri = false,
-		toolbar
+		toolbar,
+		center
 	}: {
 		section: string;
 		sub?: string;
 		count?: number;
 		isTauri?: boolean;
 		toolbar?: Component;
+		center?: Snippet;
 	} = $props();
 
 	const view = $derived(viewById(section));
@@ -60,6 +62,8 @@
 		<span class="min-w-0 truncate text-ui text-ink-3">{sub}</span>
 	{/if}
 
+	<div class="flex-1"></div>
+	{#if center}{@render center()}{/if}
 	<div class="flex-1"></div>
 
 	{#if Toolbar}
