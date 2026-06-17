@@ -153,12 +153,12 @@
 			{/if}
 
 			{#if saved}
-				<p class="text-ui text-[var(--green)]">Saved.</p>
+				<p class="text-ui text-ok">Saved.</p>
 			{/if}
 		{/if}
 
 		{#if error}
-			<p class="text-ui text-[var(--red)]">{error}</p>
+			<p class="text-ui text-bad">{error}</p>
 		{/if}
 	</section>
 
@@ -171,11 +171,11 @@
 					<div class="flex items-center gap-2">
 						<span class="text-ui font-medium text-ink-1">{harness.name}</span>
 						{#if harness.setup.status === 'ok'}
-							<span class="text-meta text-[var(--green)]">✓ configured</span>
+							<span class="text-meta text-ok">✓ configured</span>
 						{:else if harness.setup.status === 'missing'}
 							<span class="text-meta text-ink-3">not configured</span>
 						{:else}
-							<span class="text-meta text-[var(--red)]">configuration error</span>
+							<span class="text-meta text-bad">configuration error</span>
 						{/if}
 					</div>
 
@@ -200,13 +200,13 @@
 					{/if}
 
 					{#if appliedMsg[harness.id]}
-						<p class="text-ui text-[var(--green)]">{appliedMsg[harness.id]}</p>
+						<p class="text-ui text-ok">{appliedMsg[harness.id]}</p>
 					{/if}
 				</div>
 			{/each}
 
 			{#if harnessError}
-				<p class="text-ui text-[var(--red)]">{harnessError}</p>
+				<p class="text-ui text-bad">{harnessError}</p>
 			{/if}
 		</section>
 	{/if}

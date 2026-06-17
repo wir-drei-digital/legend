@@ -53,7 +53,7 @@
 
 	const kindBadge: Record<string, string> = {
 		message: 'bg-[var(--accent-soft)] text-brand-hi',
-		handoff: 'bg-[color-mix(in_oklab,var(--amber)_16%,transparent)] text-[var(--amber)]',
+		handoff: 'bg-[color-mix(in_oklab,var(--amber)_16%,transparent)] text-warn',
 		system: 'bg-inset text-ink-3'
 	};
 </script>
@@ -80,7 +80,7 @@
 							<span class="shrink-0 text-ink-3">→ {sessionLabel(m.to_session_id)}</span>
 							<span class="min-w-0 whitespace-pre-wrap break-words">{m.payload}</span>
 							{#if !m.read_at}
-								<span class="ml-auto shrink-0 text-meta text-[var(--amber)]">unread</span>
+								<span class="ml-auto shrink-0 text-meta text-warn">unread</span>
 							{/if}
 						</li>
 					{/each}

@@ -25,7 +25,7 @@
 
 	const hover = $derived(
 		tone === 'danger'
-			? 'hover:bg-[color-mix(in_oklab,var(--red)_14%,transparent)] hover:text-[var(--red)]'
+			? 'hover:bg-[color-mix(in_oklab,var(--red)_14%,transparent)] hover:text-bad'
 			: 'hover:bg-[var(--hover-tint)] hover:text-ink-2'
 	);
 	const activeColor = $derived(tone === 'accent' ? 'var(--accent-hi)' : 'var(--text-1)');

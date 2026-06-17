@@ -181,7 +181,7 @@
 				<div class="flex flex-col gap-2 rounded-md border border-hair bg-inset p-3 text-ui text-ink-1">
 					<p>{selectedHarness.name}: {selectedHarness.setup.summary}</p>
 					{#if setupError}
-						<p class="text-[var(--red)]">{setupError}</p>
+						<p class="text-bad">{setupError}</p>
 					{/if}
 					<div class="flex gap-2">
 						<Button size="sm" onclick={applySetup} disabled={applyingSetup}>
@@ -191,7 +191,7 @@
 					</div>
 				</div>
 			{:else if setupApplied}
-				<p class="text-ui text-[var(--green)]">{setupApplied}</p>
+				<p class="text-ui text-ok">{setupApplied}</p>
 			{/if}
 
 			<div class="flex flex-col gap-2">
@@ -211,14 +211,14 @@
 			</div>
 
 			{#if incompatible && selectedHarness && selectedRuntime}
-				<p class="text-ui text-[var(--red)]">
+				<p class="text-ui text-bad">
 					{selectedHarness.name} can't be auto-installed on {runtimeLabel(selectedRuntime.id)} —
 					pick a different harness or runtime.
 				</p>
 			{/if}
 
 			{#if error}
-				<p class="text-ui text-[var(--red)]">{error}</p>
+				<p class="text-ui text-bad">{error}</p>
 			{/if}
 		</div>
 

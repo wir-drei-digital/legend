@@ -25,7 +25,7 @@
 					{#if m.to_session_id !== sessionId}
 						<span class="text-meta text-ink-3">→ out</span>
 					{:else if !m.read_at}
-						<span class="ml-auto text-meta text-[var(--amber)]">unread</span>
+						<span class="ml-auto text-meta text-warn">unread</span>
 					{/if}
 				</div>
 				<p class="whitespace-pre-wrap break-words text-ink-1">{m.payload}</p>

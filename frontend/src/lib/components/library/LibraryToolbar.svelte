@@ -25,7 +25,7 @@
 
 	<Popover bind:open class="right-0 top-[36px] w-[280px]">
 		<div class="p-2.5">
-			<SectionLabel class="mb-1.5 block">New file path</SectionLabel>
+			<SectionLabel class="mb-1.5 block"><label for="new-file-path">New file path</label></SectionLabel>
 			<!-- svelte-ignore a11y_autofocus -->
 			<input
 				id="new-file-path"

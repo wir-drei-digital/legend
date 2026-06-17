@@ -33,7 +33,7 @@
 
 <div class="flex flex-col gap-2 border-t border-hair pt-2">
 	{#if error}
-		<p class="text-meta text-[var(--red)]">{error}</p>
+		<p class="text-meta text-bad">{error}</p>
 	{/if}
 	<div class="flex gap-2">
 		{#if !target}
