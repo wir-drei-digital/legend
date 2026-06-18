@@ -1,25 +1,13 @@
 <script lang="ts">
-	import type { Component } from 'svelte';
 	import Icon from './Icon.svelte';
+	import { Button } from '$lib/components/ui/button';
 	import { shell } from '$lib/shell/shell.svelte';
-	import { viewById } from '$lib/shell/views';
+	import { workspaceStore } from '$lib/shell/workspace.svelte';
 
-	let {
-		section,
-		sub,
-		count,
-		isTauri = false,
-		toolbar
-	}: {
-		section: string;
-		sub?: string;
-		count?: number;
-		isTauri?: boolean;
-		toolbar?: Component;
-	} = $props();
+	let { isTauri = false }: { isTauri?: boolean } = $props();
 
-	const view = $derived(viewById(section));
-	const Toolbar = $derived(toolbar);
+	const space = $derived(workspaceStore.active);
+	const count = $derived(space.layout.tileCount || undefined);
 </script>
 
 <header
@@ -41,28 +29,22 @@
 		</div>
 	{/if}
 
-	<!-- Spaces switcher: the entire navigation footprint. -->
+	<!-- Spaces switcher: the entire navigation footprint. Shows the active space. -->
 	<button
 		type="button"
 		onclick={() => shell.toggleSpaces()}
 		aria-expanded={shell.spacesOpen}
 		class="flex h-[30px] shrink-0 items-center gap-2 rounded-full border border-hair-strong bg-raised pl-2.5 pr-2 transition-colors hover:border-[color-mix(in_oklab,var(--accent-hi)_30%,var(--border-strong))]"
 	>
-		{#if view}<Icon name={view.icon} size={15} class="text-brand-hi" />{/if}
-		<span class="text-title font-semibold text-ink-1">{view?.label ?? section}</span>
-		{#if count !== undefined && count > 0}
+		<Icon name={space.icon} size={15} class="text-brand-hi" />
+		<span class="text-title font-semibold text-ink-1">{space.name}</span>
+		{#if count !== undefined}
 			<span class="font-mono text-ui text-ink-3">{count}</span>
 		{/if}
 		<Icon name="chevron-down" size={14} class="text-ink-3" />
 	</button>
 
-	{#if sub}
-		<span class="min-w-0 truncate text-ui text-ink-3">{sub}</span>
-	{/if}
-
 	<div class="flex-1"></div>
 
-	{#if Toolbar}
-		<div class="flex shrink-0 items-center gap-2"><Toolbar /></div>
-	{/if}
+	<Button size="sm" class="h-[30px] px-3" onclick={() => shell.openNewSession()}>New session</Button>
 </header>

@@ -1,7 +1,6 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import { onMount } from 'svelte';
-	import { page } from '$app/state';
 	import TopBar from './TopBar.svelte';
 	import StatusBar from './StatusBar.svelte';
 	import SpacesOverlay from './SpacesOverlay.svelte';
@@ -14,7 +13,6 @@
 	import LibraryRail from '$lib/components/library/LibraryRail.svelte';
 	import LibrarySide from '$lib/components/library/LibrarySide.svelte';
 	import { shell } from '$lib/shell/shell.svelte';
-	import { sectionForPath, viewById } from '$lib/shell/views';
 	import { workspaceStore } from '$lib/shell/workspace.svelte';
 	import { localStoragePersistence } from '$lib/shell/workspace-persistence';
 	import { SURFACES } from '$lib/shell/surfaces';
@@ -26,11 +24,6 @@
 	let { children }: { children: Snippet } = $props();
 
 	const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
-
-	const section = $derived(sectionForPath(page.url.pathname));
-	const view = $derived(viewById(section));
-	const subText = $derived(view?.sub?.() ?? '');
-	const chipCount = $derived(view?.count?.());
 
 	const space = $derived(workspaceStore.active);
 	const sideOpenKey = $derived(`legend:space:${space.id}:side`);
@@ -92,7 +85,7 @@
 <svelte:window onkeydown={onKeydown} />
 
 <div class="relative flex h-dvh w-full flex-col overflow-hidden bg-shell">
-	<TopBar {section} sub={subText} count={chipCount} {isTauri} toolbar={view?.toolbar} />
+	<TopBar {isTauri} />
 
 	{#snippet surfaceTile(id: string, grab: (e: PointerEvent) => void)}
 		{@const b = workspaceStore.binding(id)}
@@ -104,7 +97,7 @@
 		<div class="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
 			<div class="grid size-12 place-items-center rounded-2xl border border-hair bg-panel text-ink-3"><Icon name="sessions" size={22} /></div>
 			<p class="text-title text-ink-2">{sessionsStore.sessions.length === 0 ? 'No sessions running.' : 'No tiles in the grid.'}</p>
-			<p class="max-w-[260px] text-ui text-ink-3">{sessionsStore.sessions.length === 0 ? 'Use New session in the toolbar to launch an agent.' : 'Promote a session from the bench on the left to watch it here.'}</p>
+			<p class="max-w-[260px] text-ui text-ink-3">{sessionsStore.sessions.length === 0 ? 'Use New session in the top bar to launch an agent.' : 'Promote a session from the bench on the left to watch it here.'}</p>
 		</div>
 	{/snippet}
 

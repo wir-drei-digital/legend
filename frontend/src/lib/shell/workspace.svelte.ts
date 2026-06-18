@@ -9,6 +9,7 @@ import { filesStore } from '$lib/stores/files.svelte';
 import { sessionsStore } from '$lib/stores/sessions.svelte';
 import { SURFACES } from './surfaces';
 import { WORKSPACE_SCHEMA, type WorkspaceSnapshot } from './workspace-persistence';
+import type { IconName } from '$lib/components/shell/Icon.svelte';
 
 export interface Binding {
 	kind: string;
@@ -18,6 +19,7 @@ export interface Binding {
 export interface Space {
 	id: string;
 	name: string;
+	icon: IconName;
 	auto?: 'sessions';
 	rail?: 'library';
 	side?: 'library';
@@ -26,8 +28,8 @@ export interface Space {
 
 class WorkspaceStore {
 	spaces = $state<Space[]>([
-		{ id: 'sessions', name: 'Sessions', auto: 'sessions', layout: sessionsLayout.layout },
-		{ id: 'library', name: 'Library', rail: 'library', side: 'library', layout: new TileLayout() }
+		{ id: 'sessions', name: 'Sessions', icon: 'sessions', auto: 'sessions', layout: sessionsLayout.layout },
+		{ id: 'library', name: 'Library', icon: 'folder', rail: 'library', side: 'library', layout: new TileLayout() }
 	]);
 	activeId = $state('sessions');
 
@@ -181,7 +183,7 @@ class WorkspaceStore {
 	// ---- custom space management -----------------------------------------
 	createSpace(name = 'Workspace'): string {
 		const id = `space-${++this.#seq}`;
-		this.spaces = [...this.spaces, { id, name, layout: new TileLayout() }];
+		this.spaces = [...this.spaces, { id, name, icon: 'grid', layout: new TileLayout() }];
 		this.activeId = id;
 		return id;
 	}
@@ -280,6 +282,7 @@ class WorkspaceStore {
 				return {
 					id: entry.id,
 					name: entry.name,
+					icon: (entry.rail === 'library' ? 'folder' : 'grid') as IconName,
 					rail: entry.rail,
 					side: entry.side,
 					layout

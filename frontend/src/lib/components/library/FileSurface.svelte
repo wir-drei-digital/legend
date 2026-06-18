@@ -17,7 +17,7 @@
 		params
 	}: { tileId: string; grab?: (e: PointerEvent) => void; params?: Record<string, unknown> } = $props();
 
-	const layout = workspaceStore.library.layout;
+	const layout = $derived(workspaceStore.active.layout);
 	const path = $derived(workspaceStore.tilePath(tileId));
 	const active = $derived(layout.activeId === tileId);
 	const focusedMode = $derived(layout.focusedId === tileId);
