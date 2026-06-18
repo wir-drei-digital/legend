@@ -63,10 +63,14 @@ class WorkspaceStore {
 		for (const id of unplacedRunning(placed, live)) sessionsLayout.autoAdd(id);
 	}
 
-	/** Resolve a tile id to its surface binding (derived for session tiles). */
+	/** Resolve a tile id to its surface binding (derived for session tiles).
+	 *  A tile recorded in #bindings is a MANUAL tile (file/messages/session) and keeps
+	 *  its real kind regardless of which layout it sits in — only a tile NOT in #bindings
+	 *  that sits in the auto Sessions layout is a derived session tile (id === sessionId). */
 	binding(id: string): Binding | null {
-		if (this.#sessionsSpace.layout.has(id)) return { kind: 'session', params: { sessionId: id } };
-		return this.#bindings[id] ?? null;
+		if (this.#bindings[id]) return this.#bindings[id]; // manual tile — real kind
+		if (this.#sessionsSpace.layout.has(id)) return { kind: 'session', params: { sessionId: id } }; // auto session tile
+		return null;
 	}
 
 	dragLabel(id: string): string {
@@ -250,7 +254,14 @@ class WorkspaceStore {
 					// restore its saved layout onto it so session tiles persist.
 					noteSeq(entry.id, 'space-');
 					live.layout.deserialize(entry.layout);
-					// session tiles are derived; nothing to put in #bindings
+					// Session tiles are derived from layout membership; restore only the
+					// MANUAL (file/messages) bindings so non-session tiles in the default
+					// space survive reload instead of becoming binding-less orphan ids.
+					for (const b of entry.bindings) {
+						noteSeq(b.id, 'tile-');
+						if (b.kind !== 'session' && SURFACES[b.kind])
+							bindings[b.id] = { kind: b.kind, params: b.params };
+					}
 					return live;
 				}
 				noteSeq(entry.id, 'space-');
