@@ -25,6 +25,7 @@
 		| 'more'
 		| 'pause'
 		| 'trash'
+		| 'pencil'
 		| 'chevron-down'
 		| 'chevron-right'
 		| 'corner-down-left'
@@ -133,6 +134,8 @@
 		<path d="M4 7h16" />
 		<path d="M9 7V5a1 1 0 011-1h4a1 1 0 011 1v2" />
 		<path d="M6.5 7l.8 12a2 2 0 002 1.9h5.4a2 2 0 002-1.9L17.5 7" />
+	{:else if name === 'pencil'}
+		<path d="M15.5 5.5l3 3M4 20l1-4.2L16.3 4.5a1.5 1.5 0 012.1 0l1.1 1.1a1.5 1.5 0 010 2.1L8.2 19z" />
 	{:else if name === 'refresh'}
 		<path d="M3.5 12a8.5 8.5 0 0114.95-5.5" />
 		<path d="M19 3.5V8h-4.5" />

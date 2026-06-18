@@ -65,27 +65,11 @@
 		shell.closeSpaces();
 	}
 
-	// Custom spaces support double-click rename, so a single click must wait long
-	// enough to know a second click isn't coming before it switches+closes.
-	let clickTimer: ReturnType<typeof setTimeout> | null = null;
+	// Single click always switches immediately — custom spaces are renamed via the
+	// hover-revealed pencil button, not a double-click, so there's no debounce.
 	function rowClick(s: Space) {
 		if (renamingId === s.id) return;
-		if (!isCustom(s)) {
-			chooseSpace(s);
-			return;
-		}
-		if (clickTimer) clearTimeout(clickTimer);
-		clickTimer = setTimeout(() => {
-			clickTimer = null;
-			chooseSpace(s);
-		}, 220);
-	}
-	function rowDblClick(s: Space) {
-		if (clickTimer) {
-			clearTimeout(clickTimer);
-			clickTimer = null;
-		}
-		startRename(s);
+		chooseSpace(s);
 	}
 
 	function newSpace() {
@@ -209,9 +193,7 @@
 		style:background={active ? 'var(--accent-soft)' : undefined}
 		role="button"
 		tabindex="0"
-		title={custom ? 'Double-click to rename' : undefined}
 		onclick={() => rowClick(s)}
-		ondblclick={() => custom && rowDblClick(s)}
 		onkeydown={(e) => e.key === 'Enter' && renamingId !== s.id && chooseSpace(s)}
 	>
 		<Icon name="grid" size={15} class={active ? 'text-brand-hi' : 'text-ink-2'} />
@@ -247,6 +229,17 @@
 						<Icon name="trash" size={13} />
 					</button>
 				{:else}
+					<button
+						type="button"
+						title="Rename space"
+						onclick={(e) => {
+							e.stopPropagation();
+							startRename(s);
+						}}
+						class="shrink-0 rounded p-0.5 text-ink-3 opacity-0 transition-opacity hover:text-ink-1 group-hover/row:opacity-100"
+					>
+						<Icon name="pencil" size={13} />
+					</button>
 					<button
 						type="button"
 						title="Delete space"
