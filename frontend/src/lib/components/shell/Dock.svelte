@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import Icon from './Icon.svelte';
 	import IconButton from './IconButton.svelte';
 	import { DOCK_SOURCES } from '$lib/shell/dock-sources';
 
@@ -62,25 +61,10 @@
 					class="flex min-h-0 flex-col border-b border-hair last:border-b-0"
 					class:flex-1={openSections[s.id]}
 				>
-					<button
-						type="button"
-						onclick={() => (openSections[s.id] = !openSections[s.id])}
-						class="flex h-[var(--h-row)] shrink-0 items-center gap-1.5 px-2.5 text-left"
-					>
-						<Icon
-							name={openSections[s.id] ? 'chevron-down' : 'chevron-right'}
-							size={12}
-							class="text-ink-3"
-						/>
-						<Icon name={s.icon} size={13} class="text-ink-3" />
-						<span
-							class="font-mono text-micro font-semibold uppercase tracking-[0.14em] text-ink-3"
-							>{s.label}</span
-						>
-					</button>
-					{#if openSections[s.id]}
-						<div class="min-h-0 flex-1 overflow-y-auto"><Section /></div>
-					{/if}
+					<Section
+						open={openSections[s.id]}
+						ontoggle={() => (openSections[s.id] = !openSections[s.id])}
+					/>
 				</div>
 			{/each}
 		</div>

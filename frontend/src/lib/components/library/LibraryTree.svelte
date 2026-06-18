@@ -5,12 +5,14 @@
 	let {
 		nodes,
 		selected,
+		openPaths = [],
 		dirtyPath = null,
 		onselect,
 		ondragstart
 	}: {
 		nodes: TreeNode[];
 		selected: string | null;
+		openPaths?: string[];
 		dirtyPath?: string | null;
 		onselect: (path: string) => void;
 		ondragstart?: (path: string, e: PointerEvent) => void;
@@ -43,18 +45,20 @@
 		{/if}
 	{:else}
 		{@const active = selected === n.path}
+		{@const open = !active && openPaths.includes(n.path)}
 		<button
 			type="button"
 			class="relative flex h-[var(--h-row)] w-full items-center gap-1.5 pr-2 text-left text-ui transition-colors hover:bg-[var(--hover-tint)]"
 			style:padding-left="{depth * 12 + 12}px"
 			style:background={active ? 'var(--accent-soft)' : undefined}
-			style:color={active ? 'var(--text-1)' : 'var(--text-2)'}
+			style:color={active || open ? 'var(--text-1)' : 'var(--text-2)'}
 			onclick={() => onselect(n.path)}
 			onpointerdown={(e) => ondragstart?.(n.path, e)}
 		>
 			<span
 				class="absolute left-0 top-0 h-full w-[2px]"
-				style:background={active ? 'var(--accent)' : 'transparent'}
+				style:background={active || open ? 'var(--accent)' : 'transparent'}
+				style:opacity={open ? 0.55 : 1}
 			></span>
 			<Icon name="file" size={13} class="shrink-0 text-ink-3" />
 			<span class="min-w-0 flex-1 truncate">{n.name}</span>

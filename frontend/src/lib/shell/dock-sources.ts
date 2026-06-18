@@ -3,11 +3,16 @@ import type { IconName } from '$lib/components/shell/Icon.svelte';
 import FilesSource from '$lib/components/shell/sources/FilesSource.svelte';
 import SessionsSource from '$lib/components/shell/sources/SessionsSource.svelte';
 
+export interface DockSourceProps {
+	open: boolean;
+	ontoggle: () => void;
+}
+
 export interface DockSource {
 	id: string;
 	label: string;
 	icon: IconName;
-	component: Component;
+	component: Component<DockSourceProps>;
 }
 
 export const DOCK_SOURCES: DockSource[] = [

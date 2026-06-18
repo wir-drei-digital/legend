@@ -9,6 +9,8 @@
 	import { liveState } from '$lib/shell/sessionState';
 	import type { Session } from '$lib/sessions';
 
+	let { open, ontoggle }: { open: boolean; ontoggle: () => void } = $props();
+
 	let searching = $state(false);
 	let query = $state('');
 
@@ -64,29 +66,25 @@
 	});
 </script>
 
-<div class="flex h-full flex-col">
-	<!-- header -->
-	<div class="flex h-[var(--h-bar)] shrink-0 items-center gap-2 border-b border-hair pl-3 pr-1.5">
-		{#if searching}
-			<!-- svelte-ignore a11y_autofocus -->
-			<input
-				autofocus
-				bind:value={query}
-				onblur={() => {
-					if (!query) searching = false;
-				}}
-				placeholder="Filter…"
-				class="min-w-0 flex-1 bg-transparent text-ui text-ink-1 placeholder:text-ink-3 focus:outline-none"
-			/>
-		{:else}
+<div class="flex h-full min-h-0 flex-col">
+	<!-- title bar: chevron + icon + label + count + spacer + actions -->
+	<div class="flex h-[var(--h-bar)] shrink-0 items-center gap-1.5 border-b border-hair pl-2 pr-1.5">
+		<button
+			type="button"
+			onclick={ontoggle}
+			class="flex min-w-0 flex-1 items-center gap-1.5 text-left"
+			aria-expanded={open}
+		>
+			<Icon name={open ? 'chevron-down' : 'chevron-right'} size={12} class="shrink-0 text-ink-3" />
+			<Icon name="sessions" size={13} class="shrink-0 text-ink-3" />
 			<span class="text-ui font-semibold text-ink-2">Sessions</span>
-			<span class="font-mono text-meta text-ink-3">{sessionsStore.sessions.length}</span>
-			<div class="flex-1"></div>
-		{/if}
+			<span class="font-mono text-micro text-ink-3">{sessionsStore.sessions.length}</span>
+		</button>
 		<IconButton
 			icon={searching ? 'close' : 'search'}
 			size={13}
 			title="Filter sessions"
+			active={searching}
 			onclick={() => {
 				searching = !searching;
 				if (!searching) query = '';
@@ -94,29 +92,46 @@
 		/>
 	</div>
 
-	<!-- groups -->
-	<div class="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto py-2.5">
-		{#each groups as group (group.key)}
-			<div class="flex flex-col">
-				<div class="flex items-center justify-between px-3 pb-1">
-					<span
-						class="font-mono text-micro font-semibold uppercase tracking-[0.14em]"
-						style:color={group.amber ? 'var(--amber)' : 'var(--text-3)'}
-					>
-						{group.label}
-					</span>
-					<span class="font-mono text-micro text-ink-3">{group.rows.length}</span>
-				</div>
-				{#each group.rows as row (row.session.id)}
-					{@render benchRow(row)}
-				{/each}
+	{#if open}
+		{#if searching}
+			<div class="flex h-[var(--h-row)] shrink-0 items-center border-b border-hair pl-3 pr-1.5">
+				<!-- svelte-ignore a11y_autofocus -->
+				<input
+					autofocus
+					bind:value={query}
+					onblur={() => {
+						if (!query) searching = false;
+					}}
+					placeholder="Filter…"
+					class="min-w-0 flex-1 bg-transparent text-ui text-ink-1 placeholder:text-ink-3 focus:outline-none"
+				/>
 			</div>
-		{:else}
-			<p class="px-3 text-meta text-ink-3">
-				{sessionsStore.loaded ? 'No sessions match.' : 'Connecting…'}
-			</p>
-		{/each}
-	</div>
+		{/if}
+
+		<!-- groups -->
+		<div class="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto py-2.5">
+			{#each groups as group (group.key)}
+				<div class="flex flex-col">
+					<div class="flex items-center justify-between px-3 pb-1">
+						<span
+							class="font-mono text-micro font-semibold uppercase tracking-[0.14em]"
+							style:color={group.amber ? 'var(--amber)' : 'var(--text-3)'}
+						>
+							{group.label}
+						</span>
+						<span class="font-mono text-micro text-ink-3">{group.rows.length}</span>
+					</div>
+					{#each group.rows as row (row.session.id)}
+						{@render benchRow(row)}
+					{/each}
+				</div>
+			{:else}
+				<p class="px-3 text-meta text-ink-3">
+					{sessionsStore.loaded ? 'No sessions match.' : 'Connecting…'}
+				</p>
+			{/each}
+		</div>
+	{/if}
 </div>
 
 {#snippet benchRow(row: Row)}
