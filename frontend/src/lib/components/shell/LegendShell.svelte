@@ -8,7 +8,7 @@
 	import NewSessionDialog from '$lib/components/NewSessionDialog.svelte';
 	import WorkbenchLayout from './WorkbenchLayout.svelte';
 	import TileGrid from './TileGrid.svelte';
-	import SpaceEmpty from './SpaceEmpty.svelte';
+	import AsteroidsGame from './AsteroidsGame.svelte';
 	import SessionBench from '$lib/components/sessions/SessionBench.svelte';
 	import LibraryRail from '$lib/components/library/LibraryRail.svelte';
 	import LibrarySide from '$lib/components/library/LibrarySide.svelte';
@@ -94,24 +94,24 @@
 	{/snippet}
 
 	{#snippet sessionsEmpty()}
-		<SpaceEmpty>
-			<p class="text-title text-ink-2">{sessionsStore.sessions.length === 0 ? 'No sessions running.' : 'No tiles in the grid.'}</p>
-			<p class="max-w-[260px] text-ui text-ink-3">{sessionsStore.sessions.length === 0 ? 'Use New session in the top bar to launch an agent.' : 'Promote a session from the bench on the left to watch it here.'}</p>
-		</SpaceEmpty>
+		<AsteroidsGame>
+			<p class="text-ui text-ink-2">{sessionsStore.sessions.length === 0 ? 'No sessions running.' : 'No tiles in the grid.'}</p>
+			<p class="max-w-[320px] text-meta text-ink-3">{sessionsStore.sessions.length === 0 ? 'Use New session in the top bar to launch an agent.' : 'Promote a session from the bench on the left.'}</p>
+		</AsteroidsGame>
 	{/snippet}
 
 	{#snippet libraryEmpty()}
-		<SpaceEmpty>
-			<p class="text-title text-ink-2">No file open.</p>
-			<p class="max-w-[260px] text-ui text-ink-3">Pick a file from the Explorer on the left to open it here.</p>
-		</SpaceEmpty>
+		<AsteroidsGame>
+			<p class="text-ui text-ink-2">No file open.</p>
+			<p class="max-w-[320px] text-meta text-ink-3">Pick a file from the Explorer on the left to open it here.</p>
+		</AsteroidsGame>
 	{/snippet}
 
 	{#snippet customEmpty()}
-		<SpaceEmpty>
-			<p class="text-title text-ink-2">Empty space.</p>
-			<p class="max-w-[260px] text-ui text-ink-3">Open a surface from <kbd class="rounded border border-hair bg-inset px-1 font-mono text-meta">⌘K</kbd> to start tiling.</p>
-		</SpaceEmpty>
+		<AsteroidsGame>
+			<p class="text-ui text-ink-2">Empty space.</p>
+			<p class="max-w-[320px] text-meta text-ink-3">Open a surface from <kbd class="rounded border border-hair bg-inset px-1 font-mono text-meta">⌘K</kbd> to start tiling.</p>
+		</AsteroidsGame>
 	{/snippet}
 
 	<div class="flex min-h-0 flex-1">
