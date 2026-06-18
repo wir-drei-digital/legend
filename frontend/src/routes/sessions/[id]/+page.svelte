@@ -12,7 +12,8 @@
 		const id = page.params.id;
 		if (id) {
 			sessionsLayout.promote(id);
-			workspaceStore.switchSpace('sessions');
+			const auto = workspaceStore.spaces.find((s) => s.auto === 'sessions');
+			if (auto) workspaceStore.switchSpace(auto.id);
 		}
 		void goto('/');
 	});
