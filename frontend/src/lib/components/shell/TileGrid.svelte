@@ -2,6 +2,7 @@
 	import type { Snippet } from 'svelte';
 	import type { TileLayout } from '$lib/shell/tiling.svelte';
 	import type { DropSide, Rect } from '$lib/shell/tiling-core';
+	import { dockDrag } from '$lib/shell/dock-drag.svelte';
 
 	let {
 		layout,
@@ -9,7 +10,8 @@
 		empty,
 		dragLabel = (id: string) => id,
 		minColPx = 160,
-		minRowPx = 90
+		minRowPx = 90,
+		onExternalDrop
 	}: {
 		layout: TileLayout;
 		tile: Snippet<[string, (e: PointerEvent) => void]>;
@@ -17,6 +19,10 @@
 		dragLabel?: (id: string) => string;
 		minColPx?: number;
 		minRowPx?: number;
+		onExternalDrop?: (
+			payload: import('$lib/shell/dock-drag.svelte').DockDragPayload,
+			placement?: { targetId: string; side: DropSide }
+		) => void;
 	} = $props();
 
 	const SEAM = 1;
@@ -123,6 +129,24 @@
 		return null;
 	}
 
+	// External (dock) drag: highlight the i3 zone under the pointer; commit on drop.
+	const extDrop = $derived(
+		dockDrag.payload && host ? hitTestPoint(dockDrag.x, dockDrag.y) : null
+	);
+	function hitTestPoint(x: number, y: number): { id: string; side: DropSide } | null {
+		return hitTest(x, y, '__none__');
+	}
+	$effect(() => {
+		if (!onExternalDrop) return;
+		return dockDrag.setDropTarget((payload, x, y) => {
+			if (!host) return;
+			const r = host.getBoundingClientRect();
+			if (x < r.left || x > r.right || y < r.top || y > r.bottom) return; // dropped outside
+			const t = hitTest(x, y, '__none__');
+			onExternalDrop(payload, t ? { targetId: t.id, side: t.side } : undefined);
+		});
+	});
+
 	// ---- resize (flex weights become px during a drag; ratios preserved) ----
 	function beginColResize(ci: number, e: PointerEvent) {
 		if (e.button !== 0) return;
@@ -206,6 +230,14 @@
 						style:outline-offset="-2px"
 					></div>
 				{/if}
+				{#if extDrop && extDrop.id === id}
+					<div
+						class="pointer-events-none absolute z-30 {sideClass[extDrop.side]}"
+						style:background="var(--accent-soft)"
+						style:outline="2px solid var(--accent)"
+						style:outline-offset="-2px"
+					></div>
+				{/if}
 			</div>
 		{/each}
 
@@ -243,5 +275,15 @@
 				{ghost.label}
 			</div>
 		{/if}
+	{/if}
+
+	{#if dockDrag.payload}
+		<div
+			class="pointer-events-none fixed z-[100] flex -translate-x-1/2 -translate-y-[150%] items-center gap-1.5 rounded-[8px] border border-hair-strong bg-raised px-2.5 py-1 text-ui text-ink-1 shadow-drag"
+			style:left="{dockDrag.x}px"
+			style:top="{dockDrag.y}px"
+		>
+			{dockDrag.payload.label}
+		</div>
 	{/if}
 </div>
