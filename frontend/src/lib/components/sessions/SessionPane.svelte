@@ -7,6 +7,9 @@
 	import ConfirmButton from '$lib/components/shell/ConfirmButton.svelte';
 	import StatusDot from '$lib/components/shell/StatusDot.svelte';
 	import StateBadge from '$lib/components/shell/StateBadge.svelte';
+	import SidePane from '$lib/components/shell/SidePane.svelte';
+	import SidePaneSection from '$lib/components/shell/SidePaneSection.svelte';
+	import SidePaneField from '$lib/components/shell/SidePaneField.svelte';
 	import type { TileLayout } from '$lib/shell/tiling.svelte';
 	import { liveState } from '$lib/shell/sessionState';
 	import { identityFor } from '$lib/shell/identities';
@@ -64,6 +67,7 @@
 	// ---- per-pane actions menu (⋯) ----
 	let terminal = $state<ReturnType<typeof Terminal>>();
 	let menuOpen = $state(false);
+	let detailsOpen = $state(false);
 
 	/** Suspend: terminate the agent process; the session becomes resumable. */
 	function suspend() {
@@ -188,6 +192,15 @@
 			onclick={toggleFocus}
 		/>
 		<IconButton
+			icon="panel-right"
+			size={14}
+			box={20}
+			title="Details"
+			active={detailsOpen}
+			tone="accent"
+			onclick={() => (detailsOpen = !detailsOpen)}
+		/>
+		<IconButton
 			icon="close"
 			size={14}
 			box={20}
@@ -196,38 +209,56 @@
 		/>
 	</div>
 
-	<!-- stream (live terminal) -->
-	<div class="relative min-h-0 flex-1 overflow-hidden">
-		{#key resumeKey}
-			<Terminal bind:this={terminal} sessionId={session.id} fontSize={11} background="#100d1a" />
-		{/key}
+	<!-- stream (live terminal) + optional in-tile Details -->
+	<div class="flex min-h-0 flex-1">
+		<div class="relative min-w-0 flex-1 overflow-hidden">
+			{#key resumeKey}
+				<Terminal bind:this={terminal} sessionId={session.id} fontSize={11} background="#100d1a" />
+			{/key}
 
-		{#if !isLive}
-			<!-- Stopped session: keep the pane usable with a resume affordance. -->
-			<div
-				class="absolute inset-0 flex flex-col items-center justify-center gap-2.5 px-4 text-center"
-				style:background="color-mix(in oklab, var(--bg-app) 82%, transparent)"
-			>
-				<span class="font-mono text-meta uppercase tracking-[0.1em]" style:color={live.dotColor}>
-					{live.label}
-				</span>
-				{#if session.error}
-					<p class="max-w-[260px] font-mono text-meta text-ink-2">{session.error}</p>
-				{/if}
-				{#if resumeError}
-					<p class="max-w-[260px] text-meta" style:color="var(--red)">{resumeError}</p>
-				{/if}
-				<button
-					type="button"
-					onclick={resume}
-					disabled={resuming}
-					class="flex items-center gap-1.5 rounded-[9px] border border-hair-strong bg-raised px-3 py-1.5 text-ui font-medium text-ink-1 transition-colors hover:border-[color-mix(in_oklab,var(--accent-hi)_40%,var(--border-strong))] disabled:opacity-50"
+			{#if !isLive}
+				<!-- Stopped session: keep the pane usable with a resume affordance. -->
+				<div
+					class="absolute inset-0 flex flex-col items-center justify-center gap-2.5 px-4 text-center"
+					style:background="color-mix(in oklab, var(--bg-app) 82%, transparent)"
 				>
-					<Icon name="refresh" size={13} />
-					{resuming ? 'Resuming…' : resumeLabel}
-				</button>
+					<span class="font-mono text-meta uppercase tracking-[0.1em]" style:color={live.dotColor}>
+						{live.label}
+					</span>
+					{#if session.error}
+						<p class="max-w-[260px] font-mono text-meta text-ink-2">{session.error}</p>
+					{/if}
+					{#if resumeError}
+						<p class="max-w-[260px] text-meta" style:color="var(--red)">{resumeError}</p>
+					{/if}
+					<button
+						type="button"
+						onclick={resume}
+						disabled={resuming}
+						class="flex items-center gap-1.5 rounded-[9px] border border-hair-strong bg-raised px-3 py-1.5 text-ui font-medium text-ink-1 transition-colors hover:border-[color-mix(in_oklab,var(--accent-hi)_40%,var(--border-strong))] disabled:opacity-50"
+					>
+						<Icon name="refresh" size={13} />
+						{resuming ? 'Resuming…' : resumeLabel}
+					</button>
+				</div>
+			{/if}
+		</div>
+
+		{#if detailsOpen}
+			<div class="w-[260px] shrink-0 border-l border-hair">
+				<SidePane title="Details" icon="sessions" onClose={() => (detailsOpen = false)}>
+					<SidePaneSection label="Session">
+						<SidePaneField label="Name" value={session.name || '—'} />
+						<SidePaneField label="Harness" value={session.harness_id} />
+						<SidePaneField label="Runtime" value={session.runtime_id ?? 'local'} />
+						<SidePaneField label="Directory" value={session.cwd || '—'} />
+						<SidePaneField label="Status" value={live.label} />
+						{#if session.spawned_by_session_id}
+							<SidePaneField label="Spawned by" value={session.spawned_by_session_id} />
+						{/if}
+					</SidePaneSection>
+				</SidePane>
 			</div>
 		{/if}
 	</div>
-
 </div>

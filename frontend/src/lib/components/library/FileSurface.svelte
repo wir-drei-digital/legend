@@ -3,8 +3,12 @@
 	import IconButton from '$lib/components/shell/IconButton.svelte';
 	import Popover from '$lib/components/shell/Popover.svelte';
 	import ConfirmButton from '$lib/components/shell/ConfirmButton.svelte';
+	import SidePane from '$lib/components/shell/SidePane.svelte';
+	import SidePaneSection from '$lib/components/shell/SidePaneSection.svelte';
+	import SidePaneField from '$lib/components/shell/SidePaneField.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { workspaceStore } from '$lib/shell/workspace.svelte';
+	import { relativeTime, formatBytes } from '$lib/shell/format';
 	import { filesStore } from '$lib/stores/files.svelte';
 	import { libraryStore } from '$lib/stores/library.svelte';
 	import { deleteFile } from '$lib/library';
@@ -27,6 +31,7 @@
 	const crumbs = $derived(path ? path.split('/') : []);
 
 	let menuOpen = $state(false);
+	let detailsOpen = $state(false);
 
 	function toggleFocus() {
 		if (focusedMode) layout.restore();
@@ -83,6 +88,7 @@
 		<Button size="sm" class="h-7 px-2.5 text-meta" onclick={() => path && filesStore.save(path)} disabled={!dirty}>Save</Button>
 		<IconButton icon="columns" size={14} box={20} title="Split right" onclick={() => workspaceStore.splitActive()} />
 		<IconButton icon="eye" size={14} box={20} title={focusedMode ? 'Restore grid' : 'Focus pane'} active={focusedMode} tone="accent" onclick={toggleFocus} />
+		<IconButton icon="panel-right" size={14} box={20} title="Details" active={detailsOpen} tone="accent" onclick={() => (detailsOpen = !detailsOpen)} />
 		<div class="relative shrink-0">
 			<IconButton icon="more" size={14} box={20} title="More actions" active={menuOpen} onclick={() => (menuOpen = !menuOpen)} />
 			<Popover bind:open={menuOpen} class="right-0 top-[26px] w-[160px]">
@@ -97,23 +103,51 @@
 	</div>
 
 	<!-- body -->
-	<div class="relative min-h-0 flex-1 overflow-hidden">
-		{#if path && buf}
-			<textarea
-				value={buf.content}
-				oninput={(e) => filesStore.setContent(path, e.currentTarget.value)}
-				onkeydown={(e) => {
-					if ((e.metaKey || e.ctrlKey) && e.key === 's') {
-						e.preventDefault();
-						void filesStore.save(path);
-					}
-				}}
-				class="h-full w-full resize-none bg-app p-3.5 font-mono text-body leading-relaxed text-ink-1 outline-none"
-				spellcheck="false"
-			></textarea>
-		{:else}
-			<div class="flex h-full items-center justify-center">
-				<p class="text-body text-ink-3">Select a file from the tree, or create one.</p>
+	<div class="flex min-h-0 flex-1">
+		<div class="relative min-w-0 flex-1 overflow-hidden">
+			{#if path && buf}
+				<textarea
+					value={buf.content}
+					oninput={(e) => filesStore.setContent(path, e.currentTarget.value)}
+					onkeydown={(e) => {
+						if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+							e.preventDefault();
+							void filesStore.save(path);
+						}
+					}}
+					class="h-full w-full resize-none bg-app p-3.5 font-mono text-body leading-relaxed text-ink-1 outline-none"
+					spellcheck="false"
+				></textarea>
+			{:else}
+				<div class="flex h-full items-center justify-center">
+					<p class="text-body text-ink-3">Select a file from the tree, or create one.</p>
+				</div>
+			{/if}
+		</div>
+
+		{#if detailsOpen && path}
+			{@const e = libraryStore.entries.find((x) => x.path === path)}
+			<div class="w-[260px] shrink-0 border-l border-hair">
+				<SidePane title="Details" icon="file" onClose={() => (detailsOpen = false)}>
+					{#if e}
+						<SidePaneSection label="File">
+							<SidePaneField label="Type" value={e.type === 'dir' ? 'Folder' : 'Document'} />
+							<SidePaneField label="Size" value={formatBytes(e.size)} />
+							<SidePaneField label="Modified" value={relativeTime(e.mtime) || '—'} />
+							<SidePaneField label="Path" value={e.path} />
+						</SidePaneSection>
+					{/if}
+					{#snippet footer()}
+						<Button
+							size="sm"
+							variant="outline"
+							class="h-8 w-full text-meta"
+							onclick={() => navigator.clipboard?.writeText(path)}
+						>
+							<Icon name="link" size={13} class="mr-1.5" /> Copy reference
+						</Button>
+					{/snippet}
+				</SidePane>
 			</div>
 		{/if}
 	</div>
