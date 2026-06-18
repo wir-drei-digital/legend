@@ -47,9 +47,12 @@
 		workspaceStore.hydrate(localStoragePersistence.load());
 		hydrated = true;
 	});
+	let saveTimer: ReturnType<typeof setTimeout> | undefined;
 	$effect(() => {
-		const snap = workspaceStore.snapshot();
-		if (hydrated) localStoragePersistence.save(snap);
+		const snap = workspaceStore.snapshot(); // keep this read so the effect tracks workspace changes
+		if (!hydrated) return;
+		clearTimeout(saveTimer);
+		saveTimer = setTimeout(() => localStoragePersistence.save(snap), 300);
 	});
 
 	// Sessions auto-tile: keep the watch-set consistent with live sessions.
