@@ -8,7 +8,7 @@
 	import NewSessionDialog from '$lib/components/NewSessionDialog.svelte';
 	import WorkbenchLayout from './WorkbenchLayout.svelte';
 	import TileGrid from './TileGrid.svelte';
-	import Icon from './Icon.svelte';
+	import SpaceEmpty from './SpaceEmpty.svelte';
 	import SessionBench from '$lib/components/sessions/SessionBench.svelte';
 	import LibraryRail from '$lib/components/library/LibraryRail.svelte';
 	import LibrarySide from '$lib/components/library/LibrarySide.svelte';
@@ -94,27 +94,24 @@
 	{/snippet}
 
 	{#snippet sessionsEmpty()}
-		<div class="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
-			<div class="grid size-12 place-items-center rounded-2xl border border-hair bg-panel text-ink-3"><Icon name="sessions" size={22} /></div>
+		<SpaceEmpty>
 			<p class="text-title text-ink-2">{sessionsStore.sessions.length === 0 ? 'No sessions running.' : 'No tiles in the grid.'}</p>
 			<p class="max-w-[260px] text-ui text-ink-3">{sessionsStore.sessions.length === 0 ? 'Use New session in the top bar to launch an agent.' : 'Promote a session from the bench on the left to watch it here.'}</p>
-		</div>
+		</SpaceEmpty>
 	{/snippet}
 
 	{#snippet libraryEmpty()}
-		<div class="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
-			<div class="grid size-12 place-items-center rounded-2xl border border-hair bg-panel text-ink-3"><Icon name="folder" size={22} /></div>
+		<SpaceEmpty>
 			<p class="text-title text-ink-2">No file open.</p>
 			<p class="max-w-[260px] text-ui text-ink-3">Pick a file from the Explorer on the left to open it here.</p>
-		</div>
+		</SpaceEmpty>
 	{/snippet}
 
 	{#snippet customEmpty()}
-		<div class="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
-			<div class="grid size-12 place-items-center rounded-2xl border border-hair bg-panel text-ink-3"><Icon name="grid" size={22} /></div>
+		<SpaceEmpty>
 			<p class="text-title text-ink-2">Empty space.</p>
 			<p class="max-w-[260px] text-ui text-ink-3">Open a surface from <kbd class="rounded border border-hair bg-inset px-1 font-mono text-meta">⌘K</kbd> to start tiling.</p>
-		</div>
+		</SpaceEmpty>
 	{/snippet}
 
 	<div class="flex min-h-0 flex-1">
