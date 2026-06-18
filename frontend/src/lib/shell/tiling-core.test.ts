@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { addColumn, removeFrom, dropRelative, reconcileColumns, computeRects } from './tiling-core';
+import {
+	addColumn,
+	removeFrom,
+	dropRelative,
+	reconcileColumns,
+	computeRects,
+	unplacedRunning
+} from './tiling-core';
 
 describe('addColumn', () => {
 	it('appends a new right-hand column', () => {
@@ -63,5 +70,17 @@ describe('computeRects', () => {
 		const r = computeRects([['a'], ['b']], [3, 1], [], 100, 100, 0);
 		expect(r.get('a')!.width).toBe(75);
 		expect(r.get('b')!.width).toBe(25);
+	});
+});
+
+describe('unplacedRunning', () => {
+	it('returns running ids not already placed, preserving running order', () => {
+		expect(unplacedRunning(['a'], ['a', 'b', 'c'])).toEqual(['b', 'c']);
+	});
+	it('returns empty when all running are placed', () => {
+		expect(unplacedRunning(['a', 'b'], ['a', 'b'])).toEqual([]);
+	});
+	it('ignores placed ids that are not running', () => {
+		expect(unplacedRunning(['x', 'y'], ['a'])).toEqual(['a']);
 	});
 });

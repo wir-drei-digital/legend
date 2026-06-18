@@ -123,3 +123,9 @@ export function computeRects(
 	});
 	return out;
 }
+
+/** Running ids that are not already placed somewhere (running order preserved). */
+export function unplacedRunning(placed: string[], running: string[]): string[] {
+	const have = new Set(placed);
+	return running.filter((id) => !have.has(id));
+}

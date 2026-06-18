@@ -46,6 +46,17 @@ class SessionsLayout {
 		this.layout.remove(id);
 	}
 
+	isDismissed(id: string): boolean {
+		return this.#dismissed.has(id);
+	}
+	/** Auto-append a session tile to the Sessions space, respecting dismiss + cap.
+	 *  Does NOT clear the dismissed flag (unlike promote). */
+	autoAdd(id: string): void {
+		if (this.#dismissed.has(id) || this.layout.has(id)) return;
+		if (this.layout.tileCount >= MAX_TILES) return; // at cap: leave it in the dock
+		this.layout.add(id);
+	}
+
 	reconcile(candidates: string[]): void {
 		for (const id of [...this.#dismissed]) {
 			if (!candidates.includes(id)) this.#dismissed.delete(id);

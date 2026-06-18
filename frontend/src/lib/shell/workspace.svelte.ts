@@ -4,6 +4,7 @@
 // bindings are derived; all other spaces store manual bindings.
 
 import { TileLayout } from './tiling.svelte';
+import { unplacedRunning, type DropSide } from './tiling-core';
 import { sessionsLayout } from './sessions-layout.svelte';
 import { filesStore } from '$lib/stores/files.svelte';
 import { sessionsStore } from '$lib/stores/sessions.svelte';
@@ -51,6 +52,23 @@ class WorkspaceStore {
 		if (this.spaces.some((s) => s.id === id)) this.activeId = id;
 	}
 
+	/** Restore-preserving reconcile: prune Sessions-space tiles whose session no
+	 *  longer exists, then auto-append live sessions not placed in ANY space and
+	 *  not user-dismissed. The restored layout is otherwise left intact. */
+	reconcileSessions(live: string[]): void {
+		const liveSet = new Set(live);
+		const placed = this.spaces.flatMap((s) =>
+			s.layout.tiles
+				.filter((id) => this.binding(id)?.kind === 'session')
+				.map((id) => this.binding(id)!.params.sessionId as string)
+		);
+		const sess = this.#sessionsSpace;
+		for (const id of [...sess.layout.tiles]) {
+			if (this.binding(id)?.kind === 'session' && !liveSet.has(id)) sess.layout.remove(id);
+		}
+		for (const id of unplacedRunning(placed, live)) sessionsLayout.autoAdd(id);
+	}
+
 	/** Resolve a tile id to its surface binding (derived for session tiles). */
 	binding(id: string): Binding | null {
 		if (this.#sessionsSpace.layout.has(id)) return { kind: 'session', params: { sessionId: id } };
@@ -71,8 +89,13 @@ class WorkspaceStore {
 	}
 
 	// ---- generic surface opening -----------------------------------------
-	/** Open a surface into the active space, routing off the auto Sessions space. */
-	openSurface(kind: string, params: Record<string, unknown>): void {
+	/** Open a surface into the active space, routing off the auto Sessions space.
+	 *  `placement` (from a dock drag) inserts the new tile relative to a target. */
+	openSurface(
+		kind: string,
+		params: Record<string, unknown>,
+		placement?: { targetId: string; side: DropSide }
+	): void {
 		if (this.active.auto) {
 			if (kind === 'session') {
 				sessionsLayout.promote(params.sessionId as string);
@@ -80,11 +103,16 @@ class WorkspaceStore {
 			}
 			this.switchSpace(kind === 'file' ? 'library' : this.#ensureCustom());
 		}
-		this.#addOrFocus(this.active, kind, params);
+		this.#addOrFocus(this.active, kind, params, placement);
 		if (kind === 'file') void filesStore.load(params.path as string);
 	}
 
-	#addOrFocus(space: Space, kind: string, params: Record<string, unknown>): void {
+	#addOrFocus(
+		space: Space,
+		kind: string,
+		params: Record<string, unknown>,
+		placement?: { targetId: string; side: DropSide }
+	): void {
 		const k = SURFACES[kind]?.key?.(params);
 		if (k) {
 			const existing = space.layout.tiles.find((id) => {
@@ -99,6 +127,10 @@ class WorkspaceStore {
 		const id = this.#mint();
 		this.#bindings[id] = { kind, params };
 		space.layout.add(id);
+		// Precise placement from a drag: move the new tile next to the target.
+		if (placement && placement.targetId !== id && space.layout.has(placement.targetId)) {
+			space.layout.dropRelative(id, placement.targetId, placement.side);
+		}
 	}
 
 	/** Duplicate the active tile's binding into a new tile beside it. */
@@ -209,31 +241,22 @@ class WorkspaceStore {
 	// ---- persistence (snapshot / hydrate) --------------------------------
 	/**
 	 * Capture the workspace as a serializable snapshot. READS reactive state so a
-	 * `$effect` calling this tracks changes and re-saves. The auto Sessions space
-	 * is recorded as a marker only (empty layout/bindings) — it repopulates from
-	 * live sessions via the reconcile effect.
+	 * `$effect` calling this tracks changes and re-saves. EVERY space (including the
+	 * auto Sessions space) serializes its real layout + bindings so the workspace
+	 * restores exactly on reload; session tiles serialize as `{kind:'session'}`.
 	 */
 	snapshot(): WorkspaceSnapshot {
 		const spaces = this.spaces.map((space) => {
-			if (space.auto) {
-				return {
-					id: space.id,
-					name: space.name,
-					auto: space.auto,
-					rail: space.rail,
-					side: space.side,
-					layout: new TileLayout().serialize(),
-					bindings: []
-				};
-			}
 			const bindings = space.layout.tiles
-				.map((id) => ({ id, ...this.#bindings[id] }))
+				.map((id) => {
+					const b = this.binding(id);
+					return b ? { id, kind: b.kind, params: b.params } : { id, kind: '', params: {} };
+				})
 				.filter((b) => b.kind);
 			return {
 				id: space.id,
 				name: space.name,
-				rail: space.rail,
-				side: space.side,
+				auto: space.auto,
 				layout: space.layout.serialize(),
 				bindings
 			};
@@ -268,8 +291,11 @@ class WorkspaceStore {
 			const spaces: Space[] = snap.spaces.map((entry) => {
 				if (entry.auto === 'sessions') {
 					// KEEP the live sessions space — its layout MUST stay
-					// sessionsLayout.layout so the reconcile $effect keeps working.
+					// sessionsLayout.layout so the reconcile keeps working — and
+					// restore its saved layout onto it so session tiles persist.
 					noteSeq(entry.id, 'space-');
+					live.layout.deserialize(entry.layout);
+					// session tiles are derived; nothing to put in #bindings
 					return live;
 				}
 				noteSeq(entry.id, 'space-');
@@ -282,9 +308,11 @@ class WorkspaceStore {
 				return {
 					id: entry.id,
 					name: entry.name,
-					icon: (entry.rail === 'library' ? 'folder' : 'grid') as IconName,
-					rail: entry.rail,
-					side: entry.side,
+					icon: (entry.auto === 'sessions'
+						? 'sessions'
+						: entry.id === 'library'
+							? 'folder'
+							: 'grid') as IconName,
 					layout
 				};
 			});

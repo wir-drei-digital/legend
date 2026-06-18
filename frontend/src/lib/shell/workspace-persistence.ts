@@ -1,13 +1,11 @@
 import type { LayoutSnapshot } from './tiling-core';
 
-export const WORKSPACE_SCHEMA = 1;
+export const WORKSPACE_SCHEMA = 2;
 
 export interface SpaceSnapshot {
 	id: string;
 	name: string;
 	auto?: 'sessions';
-	rail?: 'library';
-	side?: 'library';
 	layout: LayoutSnapshot;
 	bindings: Array<{ id: string; kind: string; params: Record<string, unknown> }>;
 }
