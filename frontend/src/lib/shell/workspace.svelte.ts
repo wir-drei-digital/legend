@@ -22,15 +22,13 @@ export interface Space {
 	name: string;
 	icon: IconName;
 	auto?: 'sessions';
-	rail?: 'library';
-	side?: 'library';
 	layout: TileLayout;
 }
 
 class WorkspaceStore {
 	spaces = $state<Space[]>([
 		{ id: 'sessions', name: 'Sessions', icon: 'sessions', auto: 'sessions', layout: sessionsLayout.layout },
-		{ id: 'library', name: 'Library', icon: 'folder', rail: 'library', side: 'library', layout: new TileLayout() }
+		{ id: 'library', name: 'Library', icon: 'folder', layout: new TileLayout() }
 	]);
 	activeId = $state('sessions');
 
@@ -256,6 +254,7 @@ class WorkspaceStore {
 			return {
 				id: space.id,
 				name: space.name,
+				icon: space.icon,
 				auto: space.auto,
 				layout: space.layout.serialize(),
 				bindings
@@ -308,11 +307,13 @@ class WorkspaceStore {
 				return {
 					id: entry.id,
 					name: entry.name,
-					icon: (entry.auto === 'sessions'
-						? 'sessions'
-						: entry.id === 'library'
-							? 'folder'
-							: 'grid') as IconName,
+					icon:
+						entry.icon ??
+						((entry.auto === 'sessions'
+							? 'sessions'
+							: entry.id === 'library'
+								? 'folder'
+								: 'grid') as IconName),
 					layout
 				};
 			});

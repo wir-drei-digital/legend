@@ -6,12 +6,9 @@
 	import SpacesOverlay from './SpacesOverlay.svelte';
 	import SettingsModal from './SettingsModal.svelte';
 	import NewSessionDialog from '$lib/components/NewSessionDialog.svelte';
-	import WorkbenchLayout from './WorkbenchLayout.svelte';
+	import Dock from './Dock.svelte';
 	import TileGrid from './TileGrid.svelte';
 	import AsteroidsGame from './AsteroidsGame.svelte';
-	import SessionBench from '$lib/components/sessions/SessionBench.svelte';
-	import LibraryRail from '$lib/components/library/LibraryRail.svelte';
-	import LibrarySide from '$lib/components/library/LibrarySide.svelte';
 	import { shell } from '$lib/shell/shell.svelte';
 	import { workspaceStore } from '$lib/shell/workspace.svelte';
 	import { localStoragePersistence } from '$lib/shell/workspace-persistence';
@@ -19,14 +16,12 @@
 	import { sessionsLayout } from '$lib/shell/sessions-layout.svelte';
 	import { sessionsStore } from '$lib/stores/sessions.svelte';
 	import { messagesStore } from '$lib/stores/messages.svelte';
-	import { liveState } from '$lib/shell/sessionState';
 
 	let { children }: { children: Snippet } = $props();
 
 	const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
 
 	const space = $derived(workspaceStore.active);
-	const sideOpenKey = $derived(`legend:space:${space.id}:side`);
 
 	$effect(() => {
 		sessionsStore.connect();
@@ -48,17 +43,10 @@
 		saveTimer = setTimeout(() => localStoragePersistence.save(snap), 300);
 	});
 
-	// Sessions auto-tile: keep the watch-set consistent with live sessions.
-	const candidates = $derived.by(() => {
-		const rank = (st: { attention: boolean; kind: string }) =>
-			st.attention ? 0 : st.kind === 'running' ? 1 : 2;
-		return [...sessionsStore.sessions]
-			.map((s) => ({ s, st: liveState(s) }))
-			.sort((a, b) => rank(a.st) - rank(b.st))
-			.map((x) => x.s.id);
-	});
+	// Sessions auto-tile: keep the Sessions space consistent with live sessions.
+	const liveSessionIds = $derived(sessionsStore.sessions.map((s) => s.id));
 	$effect(() => {
-		sessionsLayout.reconcile(candidates);
+		workspaceStore.reconcileSessions(liveSessionIds);
 	});
 
 	function onKeydown(e: KeyboardEvent) {
@@ -93,57 +81,25 @@
 		{#if b && Surface}<Surface tileId={id} params={b.params} {grab} />{/if}
 	{/snippet}
 
-	{#snippet sessionsEmpty()}
+	{#snippet emptyState()}
 		<AsteroidsGame>
-			<p class="text-ui text-ink-2">{sessionsStore.sessions.length === 0 ? 'No sessions running.' : 'No tiles in the grid.'}</p>
-			<p class="max-w-[320px] text-meta text-ink-3">{sessionsStore.sessions.length === 0 ? 'Use New session in the top bar to launch an agent.' : 'Promote a session from the bench on the left.'}</p>
-		</AsteroidsGame>
-	{/snippet}
-
-	{#snippet libraryEmpty()}
-		<AsteroidsGame>
-			<p class="text-ui text-ink-2">No file open.</p>
-			<p class="max-w-[320px] text-meta text-ink-3">Pick a file from the Explorer on the left to open it here.</p>
-		</AsteroidsGame>
-	{/snippet}
-
-	{#snippet customEmpty()}
-		<AsteroidsGame>
-			<p class="text-ui text-ink-2">Empty space.</p>
-			<p class="max-w-[320px] text-meta text-ink-3">Open a surface from <kbd class="rounded border border-hair bg-inset px-1 font-mono text-meta">⌘K</kbd> to start tiling.</p>
+			<p class="text-ui text-ink-2">This space is empty.</p>
+			<p class="max-w-[320px] text-meta text-ink-3">Click or drag a file or session from the dock on the left to open it here.</p>
 		</AsteroidsGame>
 	{/snippet}
 
 	<div class="flex min-h-0 flex-1">
-		{#if space.auto === 'sessions'}
-			<!-- Sessions renders bench + grid directly (SessionBench owns its own
-			     178px aside + border) — matches today's shell exactly for parity. -->
-			<SessionBench />
-			<div class="min-w-0 flex-1 overflow-hidden bg-app">
-				<TileGrid layout={space.layout} dragLabel={(id) => workspaceStore.dragLabel(id)}>
-					{#snippet tile(id, grab)}{@render surfaceTile(id, grab)}{/snippet}
-					{#snippet empty()}{@render sessionsEmpty()}{/snippet}
-				</TileGrid>
-			</div>
-		{:else if space.rail === 'library'}
-			<WorkbenchLayout storageKey={sideOpenKey}>
-				{#snippet rail()}<LibraryRail />{/snippet}
-				{#snippet primary()}
-					<TileGrid layout={space.layout} dragLabel={(id) => workspaceStore.dragLabel(id)}>
-						{#snippet tile(id, grab)}{@render surfaceTile(id, grab)}{/snippet}
-						{#snippet empty()}{@render libraryEmpty()}{/snippet}
-					</TileGrid>
-				{/snippet}
-				{#snippet side()}<LibrarySide />{/snippet}
-			</WorkbenchLayout>
-		{:else}
-			<div class="min-w-0 flex-1 overflow-hidden bg-app">
-				<TileGrid layout={space.layout} dragLabel={(id) => workspaceStore.dragLabel(id)}>
-					{#snippet tile(id, grab)}{@render surfaceTile(id, grab)}{/snippet}
-					{#snippet empty()}{@render customEmpty()}{/snippet}
-				</TileGrid>
-			</div>
-		{/if}
+		<Dock />
+		<div class="min-w-0 flex-1 overflow-hidden bg-app">
+			<TileGrid
+				layout={space.layout}
+				dragLabel={(id) => workspaceStore.dragLabel(id)}
+				onExternalDrop={(p, placement) => workspaceStore.openSurface(p.kind, p.params, placement)}
+			>
+				{#snippet tile(id, grab)}{@render surfaceTile(id, grab)}{/snippet}
+				{#snippet empty()}{@render emptyState()}{/snippet}
+			</TileGrid>
+		</div>
 	</div>
 
 	<StatusBar />

@@ -1,10 +1,12 @@
 import type { LayoutSnapshot } from './tiling-core';
+import type { IconName } from '$lib/components/shell/Icon.svelte';
 
 export const WORKSPACE_SCHEMA = 2;
 
 export interface SpaceSnapshot {
 	id: string;
 	name: string;
+	icon: IconName;
 	auto?: 'sessions';
 	layout: LayoutSnapshot;
 	bindings: Array<{ id: string; kind: string; params: Record<string, unknown> }>;
