@@ -6,12 +6,14 @@
 		nodes,
 		selected,
 		dirtyPath = null,
-		onselect
+		onselect,
+		ondragstart
 	}: {
 		nodes: TreeNode[];
 		selected: string | null;
 		dirtyPath?: string | null;
 		onselect: (path: string) => void;
+		ondragstart?: (path: string, e: PointerEvent) => void;
 	} = $props();
 
 	let collapsed = $state<Record<string, boolean>>({});
@@ -48,6 +50,7 @@
 			style:background={active ? 'var(--accent-soft)' : undefined}
 			style:color={active ? 'var(--text-1)' : 'var(--text-2)'}
 			onclick={() => onselect(n.path)}
+			onpointerdown={(e) => ondragstart?.(n.path, e)}
 		>
 			<span
 				class="absolute left-0 top-0 h-full w-[2px]"
