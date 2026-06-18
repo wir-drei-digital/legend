@@ -16,7 +16,7 @@ Tailwind/shadcn:
    onto them* so every shadcn component inherits the palette for free.
 2. **Primitive layer** (`components/shell/`) — small Svelte 5 components that bake
    the tokens into the recurring shapes (icon buttons, surfaces, popovers, menu rows,
-   side panes, the workbench split). Feature code composes these, not raw classes.
+   side panes, the tiling grid, the source dock). Feature code composes these, not raw classes.
 
 ---
 
@@ -225,7 +225,9 @@ The full side-pane scaffold: a `--h-bar` header (icon + truncating title + optio
 actions / pin / close), a scrolling body, an optional footer. Background `bg-shell`.
 - Props: `title: string` (req), `icon?: IconName`, `onClose?()`, `onPin?()`,
   `pinned = false`, `actions?: Snippet`, `children: Snippet` (req), `footer?: Snippet`.
-- Use when: any right-hand detail/inspector pane.
+- Use when: any right-hand detail/inspector pane — including a tile's own in-window
+  **Details** panel (`FileSurface`, `SessionPane` render a `SidePane` inside the tile,
+  toggled from the tile header), not only a space-level inspector.
 
 ### `SidePaneSection`
 A labeled section inside a `SidePane` body: a `SectionLabel` over its children, with the
@@ -237,14 +239,18 @@ A label/value row inside a section — label left (`text-ink-3`), value right (t
 `text-ink-1`, `title` tooltip), `text-ui`.
 - Props: `label: string` (req), `value: string` (req).
 
-### `WorkbenchLayout`
-The three-region split — rail | primary | side — with a draggable resize seam on the side
-region and optional `localStorage` persistence of its width + open state.
-- Props: `rail: Snippet` (req), `primary: Snippet` (req), `side: Snippet` (req),
-  `sideOpen = $bindable(true)`, `sideWidth = $bindable(320)`, `railWidth = 178`,
-  `storageKey?` (persist width/open under this key). Side width clamps to 240px–40% of
-  the window.
-- Use when: a top-level view needs the standard rail/primary/inspector layout.
+### `Dock`
+The persistent left **source dock** — one shell-wide column rendering pluggable
+`DockSource` sections (Sessions, Files) from the `DOCK_SOURCES` registry
+(`$lib/shell/dock-sources.ts`). Each section is a collapsible group; the whole dock
+collapses to a 36px icon rail. **Click** a dock item to open it into the active space;
+**drag** it into the grid (pointer drag via the `dockDrag` shared state) for precise
+placement. Open/collapsed state persists in `localStorage` (`legend:dock`).
+- Props: none — it reads `DOCK_SOURCES` and owns its own collapse state.
+- Use when: nowhere else — it's a singleton mounted once by `LegendShell` to the left of
+  the `TileGrid`. Add a new source by registering a `DockSource`, not by editing `Dock`.
+- Replaced the per-space `WorkbenchLayout` rail/primary/side split (retired with the dock,
+  alongside `SessionBench` / `LibraryRail` / `LibrarySide`).
 
 ### `TileGrid`
 The windowing primitive: a tiling layout of *surfaces*. Renders each tile **once** in a
@@ -264,16 +270,12 @@ drag-to-re-tile (i3-style directional split) ghost + drop overlay.
   rect-from-tree contract is the rule: do not key tiles by position or remount on re-tile.
 
 ### Space-frame composition
-A *space* is a named `TileGrid` plus an optional chrome frame; `LegendShell` picks the frame
-from the active space's shape. Three frames, all composing primitives above:
-- **Auto Sessions** (`space.auto === 'sessions'`) — `SessionBench` + the grid rendered
-  **directly** (the bench owns its own 178px aside + border); matches the pre-tiling shell
-  for parity.
-- **Library** (`space.rail === 'library'`) — the grid wrapped in `WorkbenchLayout`
-  (rail = `LibraryRail`, side = `LibrarySide`, side-open persisted per space).
-- **Custom** — the bare grid (`bg-app`), no rail/side.
-Each frame supplies its own `empty` snippet (the centered "no tiles / no file / empty space"
-state). Reach for these compositions, not a bespoke layout, when adding a space kind.
+Every *space* is now the **same uniform frame**: the persistent `Dock` on the left, a single
+`TileGrid` filling the rest (`bg-app`). `LegendShell` renders this one shape for every space —
+Sessions, Library, and custom alike differ only in their tile contents, not their chrome. The
+old per-space frames (the `SessionBench` aside, the `WorkbenchLayout` rail/side around Library)
+were retired with the dock; there is no longer a frame to pick. The grid supplies its own
+`empty` snippet ("drag a file or session from the dock").
 
 ---
 
