@@ -18,7 +18,7 @@
 	const q = $derived(query.trim().toLowerCase());
 	const matchText = (s: string) => !q || s.toLowerCase().includes(q);
 
-	const isCustom = (s: Space) => !s.auto && s.id !== 'library';
+	const isCustom = (s: Space) => !s.auto;
 
 	const spaces = $derived(workspaceStore.spaces.filter((s) => matchText(s.name)));
 	const sessions = $derived(sessionsStore.sessions.filter((s) => matchText(s.name || s.harness_id)));
@@ -32,15 +32,6 @@
 	}
 	const openRows: OpenRow[] = [
 		{ id: 'new-session', label: 'New session', icon: 'plus', run: () => shell.openNewSession() },
-		{
-			id: 'open-file',
-			label: 'Open file',
-			icon: 'folder',
-			run: () => {
-				workspaceStore.switchSpace('library');
-				shell.closeSpaces();
-			}
-		},
 		{
 			id: 'messages',
 			label: 'Messages',

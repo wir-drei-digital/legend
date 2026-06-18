@@ -27,10 +27,9 @@ export interface Space {
 
 class WorkspaceStore {
 	spaces = $state<Space[]>([
-		{ id: 'sessions', name: 'Sessions', icon: 'sessions', auto: 'sessions', layout: sessionsLayout.layout },
-		{ id: 'library', name: 'Library', icon: 'folder', layout: new TileLayout() }
+		{ id: 'workspace', name: 'Workspace', icon: 'sessions', auto: 'sessions', layout: sessionsLayout.layout }
 	]);
-	activeId = $state('sessions');
+	activeId = $state('workspace');
 
 	/** manual tile bindings (tileId → {kind,params}); session tiles are derived */
 	#bindings = $state<Record<string, Binding>>({});
@@ -38,9 +37,6 @@ class WorkspaceStore {
 
 	get active(): Space {
 		return this.spaces.find((s) => s.id === this.activeId) ?? this.spaces[0];
-	}
-	get library(): Space {
-		return this.spaces.find((s) => s.id === 'library')!;
 	}
 	get #sessionsSpace(): Space {
 		return this.spaces.find((s) => s.auto === 'sessions')!;
@@ -87,19 +83,19 @@ class WorkspaceStore {
 	}
 
 	// ---- generic surface opening -----------------------------------------
-	/** Open a surface into the active space, routing off the auto Sessions space.
+	/** Open a surface into the active space. Session tiles on the auto space are
+	 *  promoted (their ids ARE session ids); everything else — files, messages,
+	 *  even on the auto space — opens as a manual tile (reconcileSessions only
+	 *  prunes/appends SESSION tiles, so mixed surfaces are safe there).
 	 *  `placement` (from a dock drag) inserts the new tile relative to a target. */
 	openSurface(
 		kind: string,
 		params: Record<string, unknown>,
 		placement?: { targetId: string; side: DropSide }
 	): void {
-		if (this.active.auto) {
-			if (kind === 'session') {
-				sessionsLayout.promote(params.sessionId as string);
-				return;
-			}
-			this.switchSpace(kind === 'file' ? 'library' : this.#ensureCustom());
+		if (this.active.auto && kind === 'session') {
+			sessionsLayout.promote(params.sessionId as string);
+			return;
 		}
 		this.#addOrFocus(this.active, kind, params, placement);
 		if (kind === 'file') void filesStore.load(params.path as string);
@@ -146,15 +142,6 @@ class WorkspaceStore {
 		space.layout.add(id);
 	}
 
-	/** Re-point the active tile's params (Library tree-click model). */
-	setActiveTileParams(params: Record<string, unknown>): void {
-		const space = this.active;
-		const id = space.layout.activeId;
-		if (!id) return;
-		const b = this.#bindings[id];
-		if (b) this.#bindings[id] = { ...b, params };
-	}
-
 	closeTile(id: string): void {
 		if (this.#sessionsSpace.layout.has(id)) {
 			sessionsLayout.evict(id);
@@ -172,42 +159,15 @@ class WorkspaceStore {
 		}
 	}
 
-	// ---- Library file ops (tree-click model from Phase 1, on the Library space)
+	// ---- file tile helpers (the dock's FilesSource opens via openSurface) ----
 	tilePath(id: string): string | null {
 		const b = this.binding(id);
 		return b?.kind === 'file' ? (b.params.path as string) : null;
 	}
+	/** The active file is the active tile of the ACTIVE space if it's a file. */
 	get activePath(): string | null {
-		const id = this.library.layout.activeId;
+		const id = this.active.layout.activeId;
 		return id ? this.tilePath(id) : null;
-	}
-
-	/** Tree-click: re-point the active Library tile, or open the first tile. */
-	openFile(path: string): void {
-		const lib = this.library;
-		this.switchSpace('library');
-		const existing = lib.layout.tiles.find((id) => this.#tilePathIn(id) === path);
-		if (existing) {
-			lib.layout.setActive(existing);
-			void filesStore.load(path);
-			return;
-		}
-		const active = lib.layout.activeId;
-		if (active && this.#bindings[active]?.kind === 'file') {
-			this.#bindings[active] = { kind: 'file', params: { path } };
-		} else {
-			const id = this.#mint();
-			this.#bindings[id] = { kind: 'file', params: { path } };
-			lib.layout.add(id);
-		}
-		void filesStore.load(path);
-	}
-	#tilePathIn(id: string): string | null {
-		const b = this.#bindings[id];
-		return b?.kind === 'file' ? (b.params.path as string) : null;
-	}
-	setActiveFile(path: string): void {
-		this.openFile(path);
 	}
 
 	// ---- custom space management -----------------------------------------
@@ -222,14 +182,10 @@ class WorkspaceStore {
 	}
 	deleteSpace(id: string): void {
 		const sp = this.spaces.find((s) => s.id === id);
-		if (!sp || sp.auto || sp.id === 'library') return; // never delete seeded spaces
+		if (!sp || sp.auto) return; // never delete the default auto space
 		for (const t of sp.layout.tiles) delete this.#bindings[t];
 		this.spaces = this.spaces.filter((s) => s.id !== id);
-		if (this.activeId === id) this.activeId = 'sessions';
-	}
-	#ensureCustom(): string {
-		const custom = this.spaces.find((s) => !s.auto && s.id !== 'library');
-		return custom ? custom.id : this.createSpace();
+		if (this.activeId === id) this.activeId = this.#sessionsSpace.id;
 	}
 
 	#mint(): string {
@@ -307,20 +263,16 @@ class WorkspaceStore {
 				return {
 					id: entry.id,
 					name: entry.name,
-					icon:
-						entry.icon ??
-						((entry.auto === 'sessions'
-							? 'sessions'
-							: entry.id === 'library'
-								? 'folder'
-								: 'grid') as IconName),
+					icon: entry.icon ?? ((entry.auto === 'sessions' ? 'sessions' : 'grid') as IconName),
 					layout
 				};
 			});
 
 			this.spaces = spaces;
 			this.#bindings = bindings;
-			this.activeId = spaces.some((s) => s.id === snap.activeId) ? snap.activeId : 'sessions';
+			this.activeId = spaces.some((s) => s.id === snap.activeId)
+				? snap.activeId
+				: this.#sessionsSpace.id;
 			sessionsLayout.restoreDismissed(snap.dismissed ?? []);
 
 			// Collision guard: advance #seq past the largest restored numeric suffix
