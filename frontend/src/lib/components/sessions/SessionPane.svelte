@@ -57,6 +57,8 @@
 	let resumeKey = $state(0);
 	let resuming = $state(false);
 	let resumeError = $state('');
+	let switching = $state(false);
+	let switchError = $state('');
 
 	// The Composer's queued prompts must outlive the `{#key resumeKey}` remount that a
 	// resume or transport toggle triggers. Holding the queue HERE — outside the {#key} —
@@ -79,9 +81,17 @@
 	const canSwitch = $derived((harness?.transports?.length ?? 0) > 1);
 
 	async function switchTransport(t: 'terminal' | 'acp') {
-		if (t === session.transport) return;
-		await setTransport(session.id, t);
-		resumeKey += 1; // remount the body against the new transport
+		if (t === session.transport || switching) return;
+		switching = true;
+		switchError = '';
+		try {
+			await setTransport(session.id, t);
+			resumeKey += 1; // remount the body against the new transport
+		} catch (e) {
+			switchError = e instanceof Error ? e.message : 'switch failed';
+		} finally {
+			switching = false;
+		}
 	}
 
 	async function resume() {
@@ -197,29 +207,38 @@
 
 		{#if canSwitch}
 			<!-- transport toggle: only when the harness speaks both rich + term -->
-			<div
-				class="flex shrink-0 overflow-hidden rounded-[7px] border border-hair-strong text-micro"
-			>
-				<button
-					type="button"
-					title="Rich (ACP) conversation"
-					class="px-2 py-0.5 font-bold {session.transport === 'acp'
-						? 'bg-brand text-app'
-						: 'text-ink-2'}"
-					onclick={() => switchTransport('acp')}
+			<div class="flex shrink-0 items-center gap-1.5">
+				{#if switchError}
+					<span class="text-micro" style:color="var(--red)" title={switchError}>
+						{switchError}
+					</span>
+				{/if}
+				<div
+					class="flex overflow-hidden rounded-[7px] border border-hair-strong text-micro"
 				>
-					rich
-				</button>
-				<button
-					type="button"
-					title="Terminal"
-					class="px-2 py-0.5 font-bold {session.transport === 'terminal'
-						? 'bg-brand text-app'
-						: 'text-ink-2'}"
-					onclick={() => switchTransport('terminal')}
-				>
-					term
-				</button>
+					<button
+						type="button"
+						title="Rich (ACP) conversation"
+						disabled={switching}
+						class="px-2 py-0.5 font-bold disabled:opacity-50 {session.transport === 'acp'
+							? 'bg-brand text-app'
+							: 'text-ink-2'}"
+						onclick={() => switchTransport('acp')}
+					>
+						rich
+					</button>
+					<button
+						type="button"
+						title="Terminal"
+						disabled={switching}
+						class="px-2 py-0.5 font-bold disabled:opacity-50 {session.transport === 'terminal'
+							? 'bg-brand text-app'
+							: 'text-ink-2'}"
+						onclick={() => switchTransport('terminal')}
+					>
+						term
+					</button>
+				</div>
 			</div>
 		{/if}
 
