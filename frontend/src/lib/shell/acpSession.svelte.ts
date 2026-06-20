@@ -33,9 +33,6 @@ export function createAcpSession(sessionId: string) {
 
   chan.join().receive('ok', (reply: { transport: string; items?: AcpItem[]; cursor?: number; status: SessionStatus; busy?: boolean }) => {
     state.status = reply.status;
-    // Seed busy from the authoritative server-side turn-in-flight flag on EVERY
-    // join/rejoin — fixes mid-turn reattach showing a falsely idle composer.
-    state.busy = reply.busy ?? false;
     // Reconcile the snapshot on EVERY join — including Phoenix's silent auto-rejoin
     // after a transient socket reconnect. Feeding each item through `upsert` (NOT a
     // raw byId.set / byId.clear) makes re-applying idempotent: the `seq <= cursor &&
@@ -51,6 +48,13 @@ export function createAcpSession(sessionId: string) {
       // fully-reconciled set (cheap; no-op if nothing changed).
       rebuild();
     }
+    // Seed busy from the authoritative server-side turn-in-flight flag AFTER the
+    // snapshot reconcile, so the server flag is the final word on EVERY join/rejoin.
+    // The reconcile loop's `upsert` clears busy when it applies a completed `turn`
+    // item; on an auto-rejoin where a finished turn sits in the snapshot while a NEW
+    // turn is in flight (server busy = true), seeding first would let the loop falsely
+    // clear it → idle composer mid-turn. Seeding last keeps the server flag authoritative.
+    state.busy = reply.busy ?? false;
   });
 
   return {
