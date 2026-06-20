@@ -27,9 +27,14 @@
 	);
 
 	const resolved = $derived(item.resolved === true);
-	// Surface the chosen option's label when resolved (if the reducer recorded it).
-	const chosenId = $derived(typeof item.selectedOptionId === 'string' ? item.selectedOptionId : '');
-	const chosen = $derived(options.find((o) => o.optionId === chosenId));
+	// Surface the chosen option's label when resolved. The backend records the chosen
+	// optionId under `selected` (see SessionServer.handle_cast({:acp_permission, …}),
+	// which appends %{"resolved" => true, "selected" => opt}); map it to the option
+	// name when the options list is present, otherwise fall back to the raw id.
+	const chosenId = $derived(typeof item.selected === 'string' ? item.selected : '');
+	const chosen = $derived(
+		chosenId ? (options.find((o) => o.optionId === chosenId)?.name ?? chosenId) : ''
+	);
 
 	// "reject"/"deny" style options get a danger tone; the rest read as the default.
 	const isDanger = (kind: string) => kind === 'reject' || kind === 'reject_once' || kind === 'reject_always';
@@ -53,7 +58,7 @@
 		{#if resolved}
 			<span class="text-meta text-ink-3">
 				{#if chosen}
-					Resolved — {chosen.name}
+					Resolved — {chosen}
 				{:else}
 					Resolved
 				{/if}

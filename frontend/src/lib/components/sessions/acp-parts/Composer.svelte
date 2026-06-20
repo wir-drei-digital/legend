@@ -23,6 +23,7 @@
 
 	let text = $state('');
 	let queue = $state<string[]>([]);
+	let wasBusy = $state(false);
 
 	function submit() {
 		const value = text.trim();
@@ -32,13 +33,19 @@
 		text = '';
 	}
 
-	// Flush the next queued prompt when the agent goes idle.
+	// Flush EXACTLY ONE queued prompt per busy true→false transition. Tracking the
+	// previous busy value with a falling-edge guard is what keeps this honest: writing
+	// `queue` re-runs this effect within the same flush, but `wasBusy` is now false on
+	// the self-retrigger, so it won't drain the rest of the queue. The flushed prompt
+	// re-busies the agent; the next item waits for the NEXT falling edge.
 	$effect(() => {
-		if (!busy && queue.length) {
+		const b = busy;
+		if (wasBusy && !b && queue.length > 0) {
 			const [next, ...rest] = queue;
 			queue = rest;
 			onPrompt(next);
 		}
+		wasBusy = b;
 	});
 
 	function onKeydown(e: KeyboardEvent) {
