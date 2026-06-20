@@ -35,3 +35,16 @@ defmodule Legend.Core.Agents.Scrollback do
     end
   end
 end
+
+defimpl Legend.Core.Agents.Transcript, for: Legend.Core.Agents.Scrollback do
+  alias Legend.Core.Agents.Scrollback
+
+  # Bytes carry their pre-append offset as the cursor (the SessionServer already
+  # tracks the running offset, but the protocol form keeps both transports uniform).
+  def append(%Scrollback{} = sb, data) when is_binary(data) do
+    offset = sb.bytes
+    {Scrollback.append(sb, data), [{offset, data}]}
+  end
+
+  def snapshot(%Scrollback{} = sb), do: {Scrollback.to_binary(sb), sb.bytes}
+end
