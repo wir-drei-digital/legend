@@ -16,6 +16,8 @@ defmodule Legend.Core.Agents.SessionServer do
 
   use GenServer, restart: :temporary
 
+  require Logger
+
   alias Legend.Core.Agents
   alias Legend.Core.Agents.Notifications
   alias Legend.Core.Agents.Scrollback
@@ -24,6 +26,12 @@ defmodule Legend.Core.Agents.SessionServer do
 
   @nudge_debounce_ms Application.compile_env(:legend, :nudge_debounce_ms, 2_000)
   @nudge_submit_delay_ms Application.compile_env(:legend, :nudge_submit_delay_ms, 150)
+
+  # ACP-only handshake watchdog: a spawned-but-silent adapter (hung / wrong
+  # binary / protocol stall) would otherwise stay :running forever with an empty
+  # timeline. Armed when the launch writes its init frames, disarmed by the
+  # {:session_ready} effect; if it fires first the session is marked :failed.
+  @acp_handshake_timeout_ms Application.compile_env(:legend, :acp_handshake_timeout_ms, 30_000)
 
   ## Client API
 
@@ -137,6 +145,12 @@ defmodule Legend.Core.Agents.SessionServer do
           # writing the connection's opening frames to the freshly started pipe.
           transport_state = start_transport(session, runtime, handle, caps, base_url)
 
+          # ACP only: arm the handshake watchdog now that the init frames are out.
+          # A silent/hung adapter that never completes the handshake would stay
+          # :running forever; the timer fires :acp_handshake_timeout to fail it.
+          # {:session_ready} cancels it (apply_effect/2).
+          transport_state = maybe_arm_handshake_watchdog(transport_state)
+
           # Terminal: pin the shared conversation handle to the session id on a
           # fresh launch so a later transport switch resumes the SAME conversation
           # (--session-id session.id was already used at this launch). ACP captures
@@ -230,6 +244,9 @@ defmodule Legend.Core.Agents.SessionServer do
       # coalesced nudge line (or nil) is deferred to wake the agent post-turn.
       acp_prompt_queue: [],
       pending_nudge: nil,
+      # Handshake watchdog timer ref; armed in launch/7, cancelled by
+      # {:session_ready}/{:handshake_failed}. nil = disarmed (or terminal).
+      acp_handshake_timer: nil,
       scrollback: nil,
       offset: nil
     }
@@ -242,6 +259,7 @@ defmodule Legend.Core.Agents.SessionServer do
       timeline: nil,
       acp_prompt_queue: [],
       pending_nudge: nil,
+      acp_handshake_timer: nil,
       scrollback: Scrollback.new(),
       offset: 0
     }
@@ -555,6 +573,16 @@ defmodule Legend.Core.Agents.SessionServer do
      }}
   end
 
+  # ACP (io: :pipes) delivers stderr as a SEPARATE erlexec stream (LocalPty tags
+  # it {:runtime_stderr} so it never corrupts the stdout JSON-RPC frames). Log it
+  # for observability — never feed it to Acp.Connection.handle_bytes/2. Terminal
+  # (io: :pty) merges stderr into stdout at the kernel, so this never fires there.
+  def handle_info({:runtime_stderr, data}, state) do
+    snippet = data |> to_string() |> String.slice(0, 500)
+    Logger.warning("[acp #{state.session.id}] stderr: #{snippet}")
+    {:noreply, state}
+  end
+
   def handle_info({:new_message, _summary}, %{exited?: true} = state), do: {:noreply, state}
 
   def handle_info({:new_message, summary}, state) do
@@ -637,6 +665,19 @@ defmodule Legend.Core.Agents.SessionServer do
     {:noreply, %{state | session: session, exited?: true, tunnel: nil}}
   end
 
+  # Already ready (timer cancelled → nil) or already exited: stale timeout, no-op.
+  def handle_info(:acp_handshake_timeout, %{exited?: true} = state), do: {:noreply, state}
+
+  def handle_info(:acp_handshake_timeout, %{acp_handshake_timer: nil} = state),
+    do: {:noreply, state}
+
+  # The handshake never completed in time — treat the silent adapter as a
+  # failure. Mirror the runtime-exit finalize: stop the runtime, close the
+  # tunnel, mark :failed, broadcast + notify.
+  def handle_info(:acp_handshake_timeout, state) do
+    {:noreply, finalize_handshake_failure(state, "ACP handshake timed out")}
+  end
+
   # Runtime helper processes exit normally after forwarding runtime_exit.
   def handle_info({:EXIT, _pid, :normal}, state), do: {:noreply, state}
 
@@ -679,6 +720,19 @@ defmodule Legend.Core.Agents.SessionServer do
   end
 
   defp maybe_pin_terminal_conversation_id(session, _mode), do: session
+
+  # Handshake completed (session/new or session/load succeeded): disarm the
+  # watchdog so it can't fire a spurious failure later.
+  defp apply_effect({:session_ready}, state), do: cancel_handshake_watchdog(state)
+
+  # Handshake failed (ERROR response to initialize/session_new/session_load) —
+  # fatal per spec. Cancel the watchdog and finalize as a failure (mirror the
+  # runtime-exit finalize).
+  defp apply_effect({:handshake_failed, reason}, state) do
+    state
+    |> cancel_handshake_watchdog()
+    |> finalize_handshake_failure(reason)
+  end
 
   # ACP launch effects: the captured conversation id is the durable handle to
   # resume this conversation under :load — persist it on the record.
@@ -738,6 +792,38 @@ defmodule Legend.Core.Agents.SessionServer do
 
   defp reset_nudge(state) do
     %{state | nudge_count: 0, nudge_froms: MapSet.new(), nudge_timer: nil}
+  end
+
+  # ACP-only: arm the handshake watchdog. Terminal sessions have no handshake,
+  # so leave the (nil) timer untouched.
+  defp maybe_arm_handshake_watchdog(%{transport: :acp} = state) do
+    ref = Process.send_after(self(), :acp_handshake_timeout, @acp_handshake_timeout_ms)
+    %{state | acp_handshake_timer: ref}
+  end
+
+  defp maybe_arm_handshake_watchdog(state), do: state
+
+  # Disarm the watchdog (idempotent: nil ref / already-fired timer are no-ops).
+  defp cancel_handshake_watchdog(%{acp_handshake_timer: nil} = state), do: state
+
+  defp cancel_handshake_watchdog(%{acp_handshake_timer: ref} = state) do
+    Process.cancel_timer(ref)
+    %{state | acp_handshake_timer: nil}
+  end
+
+  # Finalize a handshake failure: stop the runtime, close the tunnel, mark the
+  # session :failed, broadcast + notify. Mirrors the {:runtime_exit} finalize so
+  # a never-handshaked session can't linger as :running. No-op if already exited.
+  defp finalize_handshake_failure(%{exited?: true} = state, _reason), do: state
+
+  defp finalize_handshake_failure(state, reason) do
+    Logger.warning("[acp #{state.session.id}] #{reason}")
+    state.runtime.stop(state.handle)
+    maybe_close_tunnel(state.tunnel)
+    session = Agents.fail_session!(state.session, %{error: reason})
+    broadcast(session.id, {:session_status, :failed})
+    Notifications.sessions_changed()
+    %{state | session: session, exited?: true, tunnel: nil, acp_handshake_timer: nil}
   end
 
   defp notify_spawner_of_exit(%{spawned_by_session_id: nil}, _code), do: :ok

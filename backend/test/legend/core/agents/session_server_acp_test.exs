@@ -325,6 +325,94 @@ defmodule Legend.Core.Agents.SessionServerAcpTest do
     assert Process.alive?(Agents.SessionServer.whereis(s.id))
   end
 
+  test "I1: a runtime_stderr message never reaches the timeline or decoder" do
+    {:ok, s} =
+      Agents.start_session(%{harness_id: "claude_code", runtime_id: "test", transport: :acp})
+
+    Phoenix.PubSub.subscribe(Legend.PubSub, "session:#{s.id}")
+    drive_to_live(s.id)
+    drain_test_runtime_writes()
+
+    pid = Agents.SessionServer.whereis(s.id)
+
+    # A stderr write that would corrupt a JSON-RPC frame if spliced into stdout.
+    send(pid, {:runtime_stderr, "node: some diagnostic noise\n{partial-json"})
+
+    # It must NOT produce a timeline item (it never reaches Acp.Connection).
+    refute_receive {:session_event, _seq, _item}, 200
+
+    # A valid frame delivered AFTER the stderr still parses cleanly — proving the
+    # stderr did not corrupt the decoder's line buffer.
+    send_output(s.id, %{
+      "jsonrpc" => "2.0",
+      "method" => "session/update",
+      "params" => %{
+        "sessionId" => "sess-xyz",
+        "update" => %{
+          "sessionUpdate" => "agent_message_chunk",
+          "content" => %{"type" => "text", "text" => "after-stderr"}
+        }
+      }
+    })
+
+    assert_receive {:session_event, _seq, %{"type" => "message", "text" => "after-stderr"}}, 1_000
+    assert Process.alive?(pid)
+  end
+
+  test "I6: an error response to initialize marks the session :failed" do
+    {:ok, s} =
+      Agents.start_session(%{harness_id: "claude_code", runtime_id: "test", transport: :acp})
+
+    Phoenix.PubSub.subscribe(Legend.PubSub, "session:#{s.id}")
+
+    assert_receive {:test_runtime, :write, init}, 1_000
+    init_id = Jason.decode!(init)["id"]
+
+    # The adapter answers initialize with a JSON-RPC ERROR — fatal per spec.
+    send_output(s.id, %{
+      "jsonrpc" => "2.0",
+      "id" => init_id,
+      "error" => %{"code" => -32_600, "message" => "unsupported protocol version"}
+    })
+
+    assert_receive {:session_status, :failed}, 1_000
+    assert eventually(fn -> Agents.get_session!(s.id).status == :failed end)
+    assert Agents.get_session!(s.id).error =~ "unsupported protocol version"
+  end
+
+  test "I6: the handshake watchdog marks the session :failed if no handshake completes" do
+    {:ok, s} =
+      Agents.start_session(%{harness_id: "claude_code", runtime_id: "test", transport: :acp})
+
+    Phoenix.PubSub.subscribe(Legend.PubSub, "session:#{s.id}")
+
+    # Server wrote the initialize request but the adapter stays silent.
+    assert_receive {:test_runtime, :write, _init}, 1_000
+
+    # Simulate the watchdog firing (timer is armed → not a stale no-op).
+    send(Agents.SessionServer.whereis(s.id), :acp_handshake_timeout)
+
+    assert_receive {:session_status, :failed}, 1_000
+    assert eventually(fn -> Agents.get_session!(s.id).status == :failed end)
+    assert Agents.get_session!(s.id).error =~ "handshake timed out"
+  end
+
+  test "I6: a completed handshake cancels the watchdog (no spurious failure)" do
+    {:ok, s} =
+      Agents.start_session(%{harness_id: "claude_code", runtime_id: "test", transport: :acp})
+
+    Phoenix.PubSub.subscribe(Legend.PubSub, "session:#{s.id}")
+    drive_to_live(s.id)
+
+    # Handshake completed → {:session_ready} disarmed the watchdog. A stale
+    # timeout message must be a no-op and leave the session :running.
+    send(Agents.SessionServer.whereis(s.id), :acp_handshake_timeout)
+
+    refute_receive {:session_status, :failed}, 200
+    assert Agents.get_session!(s.id).status == :running
+    assert Process.alive?(Agents.SessionServer.whereis(s.id))
+  end
+
   # Poll briefly: the conversation id is persisted from the server process, so it
   # may lag the synchronous response we just fed in.
   defp eventually(fun, attempts \\ 50)

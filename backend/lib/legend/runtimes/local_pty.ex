@@ -78,10 +78,12 @@ defmodule Legend.Runtimes.LocalPty do
   defp run_and_relay(caller, ref, owner, argv, spec, opts) do
     # `:stdin` opens the write pipe `:exec.send/2` targets; without it the
     # child sees EOF immediately and exits. Terminal harnesses (`io: :pty`)
-    # run under a real PTY (stderr merged into stdout); `:pty_echo` re-enables
+    # run under a real PTY (stderr merged into stdout at the kernel, so no
+    # separate stderr message is ever delivered); `:pty_echo` re-enables
     # terminal echo, which erlexec 2.3 disables by default. ACP harnesses
     # (`io: :pipes`) speak JSON-RPC over plain stdio with no PTY — stderr is
-    # delivered separately and relayed as output (see relay_loop/2).
+    # delivered as a SEPARATE, unordered erlexec stream and must NOT be spliced
+    # into the stdout JSON-RPC byte stream (see relay_loop/2).
     io_opts =
       case spec.io do
         :pipes -> [:stdin, {:stdout, self()}, :stderr]
@@ -116,11 +118,14 @@ defmodule Legend.Runtimes.LocalPty do
         send(owner, {:runtime_output, data})
         relay_loop(owner, os_pid)
 
-      # `:pipes` mode keeps stderr separate; forward it as output too so ACP
-      # adapters' diagnostics aren't lost. PTY mode merges stderr into stdout,
-      # so this clause simply never matches there.
+      # `:pipes` mode keeps stderr as an INDEPENDENT, unordered erlexec stream.
+      # It must never be merged into `{:runtime_output}` — a stderr write
+      # interleaved with a partial stdout JSON-RPC line would corrupt the frame
+      # and silently drop a real ACP message. Forward it as a DISTINCT message
+      # so the owner can log it without feeding the decoder. PTY mode merges
+      # stderr into stdout at the kernel, so this clause never matches there.
       {:stderr, ^os_pid, data} ->
-        send(owner, {:runtime_output, data})
+        send(owner, {:runtime_stderr, data})
         relay_loop(owner, os_pid)
 
       {:DOWN, ^os_pid, :process, _pid, reason} ->

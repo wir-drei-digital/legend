@@ -5,6 +5,8 @@ defmodule Legend.Core.Acp.Connection do
   Pure functions: the SessionServer owns the process and the runtime IO.
   """
 
+  require Logger
+
   @protocol_version 1
 
   # Cap each tool entry's accumulated "output" so a long-running / chatty tool
@@ -68,7 +70,12 @@ defmodule Legend.Core.Acp.Connection do
           {st, items ++ i, replies ++ r, effects ++ e}
 
         {:error, _} ->
-          # Malformed frame: skip, never crash the session.
+          # Malformed frame: skip, never crash the session. Log it so framing
+          # corruption (e.g. stderr spliced into the JSON-RPC stream) is
+          # observable rather than silently lost.
+          prefix = binary_part(line, 0, min(byte_size(line), 200))
+          Logger.warning("[acp] dropped undecodable frame: #{inspect(prefix)}")
+
           {st, items, replies, effects}
       end
     end)
@@ -195,15 +202,35 @@ defmodule Legend.Core.Acp.Connection do
     {tag, pending} = Map.pop(state.pending, id)
     # Surface as a soft error item; do not crash.
     item = %{"id" => "error-#{id}", "type" => "error", "text" => inspect(err)}
-    # A failed prompt must still complete the turn lifecycle — otherwise the
-    # server stays "busy" forever and the prompt queue never drains. Other tags
-    # (initialize/session_new/session_load/set_mode) keep just the error item.
-    effects = if tag == :prompt, do: [{:turn, "error"}], else: []
+    # Effects by tag:
+    #   * :prompt — a failed prompt must still complete the turn lifecycle,
+    #     otherwise the server stays "busy" forever and the queue never drains.
+    #   * handshake tags (:initialize/:session_new/:session_load) — an ERROR
+    #     here is fatal per spec: emit {:handshake_failed, reason} so the
+    #     SessionServer transitions the session to :failed (the soft error item
+    #     alone has no effect and would leave it :running forever).
+    #   * anything else (e.g. :set_mode) — keep just the error item.
+    effects =
+      cond do
+        tag == :prompt ->
+          [{:turn, "error"}]
+
+        tag in [:initialize, :session_new, :session_load] ->
+          [{:handshake_failed, error_message(err)}]
+
+        true ->
+          []
+      end
+
     {%{state | pending: pending}, [item], [], effects}
   end
 
   # session/update notifications + agent->client requests handled in Tasks 6 & 7.
   defp dispatch(state, msg), do: dispatch_incoming(state, msg)
+
+  # Best-effort human-readable reason from a JSON-RPC error object.
+  defp error_message(%{"message" => m}) when is_binary(m), do: m
+  defp error_message(err), do: inspect(err)
 
   defp handle_response(state, :initialize, result) do
     caps = result["agentCapabilities"] || %{}
@@ -241,13 +268,16 @@ defmodule Legend.Core.Acp.Connection do
     cid = result["sessionId"]
     state = %{state | session_id: cid}
     {state, replies, effects} = maybe_initial_prompt(state)
-    {state, [], replies, [{:conversation_id, cid} | effects]}
+    # {:session_ready} is the "handshake completed" signal that disarms the
+    # SessionServer's handshake watchdog. {:conversation_id} persists the id.
+    {state, [], replies, [{:session_ready}, {:conversation_id, cid} | effects]}
   end
 
   defp handle_response(state, :session_load, _result) do
     # session/load has no sessionId in the result — keep the launch conversation_id.
     # History replays as session/update notifications (handled in Task 6).
-    {%{state | session_id: state.launch[:conversation_id]}, [], [], []}
+    # {:session_ready} signals the SessionServer that the handshake completed.
+    {%{state | session_id: state.launch[:conversation_id]}, [], [], [{:session_ready}]}
   end
 
   defp handle_response(state, :prompt, result) do
