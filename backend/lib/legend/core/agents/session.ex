@@ -261,9 +261,12 @@ defmodule Legend.Core.Agents.Session do
       public?: true,
       constraints: [one_of: [:terminal, :acp]]
 
-    # The agent's durable conversation handle. Pinned to the session id for terminal
-    # (--session-id), captured from the adapter for ACP (session/new). nil until the
-    # first launch resolves it.
+    # The agent's durable conversation handle, SHARED across transports so a
+    # transport switch resumes the same conversation. nil until the first launch
+    # resolves it: terminal pins it to the session id (already used as
+    # --session-id at first launch); ACP captures the adapter's id from
+    # session/new. Either way, later launches pass it as --session-id/--resume
+    # (terminal) or session/load (ACP).
     attribute :conversation_id, :string, public?: true
 
     attribute :exit_code, :integer, public?: true

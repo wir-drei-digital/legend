@@ -244,6 +244,21 @@ defmodule Legend.Core.Agents.SessionServerTest do
     refute "--resume" in spec.args
   end
 
+  test "a terminal fresh launch pins conversation_id to the session id", %{session: session} do
+    # Setup's auto-started server already ran this pin logic, so the record may
+    # carry it. Clear it back to nil and re-read so the struct we boot has the
+    # genuine fresh-launch starting condition (conversation_id == nil).
+    Agents.set_session_conversation_id!(session, %{conversation_id: nil})
+    session = Agents.get_session!(session.id)
+    assert session.conversation_id == nil
+
+    boot!(session)
+    assert_receive {:test_runtime, :start, _spec, _opts}
+
+    # The shared cross-transport handle is now durably pinned to the session id.
+    assert eventually(fn -> Agents.get_session!(session.id).conversation_id == session.id end)
+  end
+
   test "resume start passes resume mode to the harness", %{session: session} do
     {:ok, _pid} = SessionServer.start_session(session, :resume)
     assert_receive {:test_runtime, :start, spec, _opts}

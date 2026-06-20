@@ -137,6 +137,12 @@ defmodule Legend.Core.Agents.SessionServer do
           # writing the connection's opening frames to the freshly started pipe.
           transport_state = start_transport(session, runtime, handle, caps, base_url)
 
+          # Terminal: pin the shared conversation handle to the session id on a
+          # fresh launch so a later transport switch resumes the SAME conversation
+          # (--session-id session.id was already used at this launch). ACP captures
+          # its own id from session/new via apply_effect/2, so skip it here.
+          session = maybe_pin_terminal_conversation_id(session, mode)
+
           # Catch-up: messages that arrived while this session had no live server
           # (downtime, or sent during :starting) are sitting unread — re-feed them
           # through the normal debounced-nudge path so the agent gets one knock.
@@ -353,7 +359,10 @@ defmodule Legend.Core.Agents.SessionServer do
   defp build_opts(session, mode, %{library: :api}, base_url) do
     %{
       mode: mode,
-      session_id: session.id,
+      # The shared cross-transport handle: terminal passes it as
+      # --session-id/--resume. Nil at first launch → resolves to session.id
+      # (unchanged terminal behavior).
+      session_id: session.conversation_id || session.id,
       library: %{primer: Legend.Core.Library.primer(:api)},
       messaging: %{primer: Signals.messaging_primer(session), instructions: session.instructions}
     }
@@ -368,7 +377,10 @@ defmodule Legend.Core.Agents.SessionServer do
         instructions: session.instructions
       },
       mode: mode,
-      session_id: session.id
+      # The shared cross-transport handle: terminal passes it as
+      # --session-id/--resume. Nil at first launch → resolves to session.id
+      # (unchanged terminal behavior).
+      session_id: session.conversation_id || session.id
     }
 
     case session.mcp_token do
@@ -483,20 +495,27 @@ defmodule Legend.Core.Agents.SessionServer do
   def handle_cast({:acp_permission, _req, _opt}, %{exited?: true} = state), do: {:noreply, state}
 
   def handle_cast({:acp_permission, req, opt}, %{transport: :acp} = state) do
-    {acp, frames} = Legend.Core.Acp.Connection.answer_permission(state.acp, req, opt)
-    Enum.each(frames, &state.runtime.write(state.handle, &1))
+    case Legend.Core.Acp.Connection.answer_permission(state.acp, req, opt) do
+      # No reply frames means the request id is unknown/already-answered — do not
+      # write to the runtime or append a spurious resolved item.
+      {_acp, []} ->
+        {:noreply, state}
 
-    # Mark the permission item resolved on the timeline so reattach/late readers
-    # see the decision rather than a pending request.
-    state =
-      append_acp_item(%{state | acp: acp}, %{
-        "id" => req,
-        "type" => "permission",
-        "resolved" => true,
-        "selected" => opt
-      })
+      {acp, frames} ->
+        Enum.each(frames, &state.runtime.write(state.handle, &1))
 
-    {:noreply, state}
+        # Mark the permission item resolved on the timeline so reattach/late readers
+        # see the decision rather than a pending request.
+        state =
+          append_acp_item(%{state | acp: acp}, %{
+            "id" => req,
+            "type" => "permission",
+            "resolved" => true,
+            "selected" => opt
+          })
+
+        {:noreply, state}
+    end
   end
 
   # An ACP cast that reached a terminal session (or vice versa) is a no-op.
@@ -608,6 +627,20 @@ defmodule Legend.Core.Agents.SessionServer do
     broadcast(state.session.id, {:session_event, item_with_seq["seq"], item_with_seq})
     %{state | timeline: timeline}
   end
+
+  # Terminal fresh launch: persist conversation_id = session.id (the handle this
+  # launch already passed as --session-id) so a later transport switch resumes the
+  # SAME conversation. No-op on :resume or when an id is already set; ACP captures
+  # its own id from session/new (apply_effect/2), so this is terminal-only.
+  defp maybe_pin_terminal_conversation_id(
+         %{transport: :terminal, conversation_id: nil} = session,
+         mode
+       )
+       when mode != :resume do
+    Agents.set_session_conversation_id!(session, %{conversation_id: session.id})
+  end
+
+  defp maybe_pin_terminal_conversation_id(session, _mode), do: session
 
   # ACP launch effects: the captured conversation id is the durable handle to
   # resume this conversation under :load — persist it on the record.

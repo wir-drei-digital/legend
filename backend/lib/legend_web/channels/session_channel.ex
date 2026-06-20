@@ -76,7 +76,8 @@ defmodule LegendWeb.SessionChannel do
 
   # --- ACP inbound (ignored on terminal sessions by the SessionServer guards) ---
 
-  def handle_in("prompt", %{"content" => content}, socket) do
+  def handle_in("prompt", %{"content" => content}, socket)
+      when is_binary(content) or is_list(content) do
     SessionServer.acp_prompt(socket.assigns.session_id, content)
     {:noreply, socket}
   end
@@ -108,9 +109,11 @@ defmodule LegendWeb.SessionChannel do
   end
 
   # ACP outbound: reuse the `offset` assign as the ACP `seq` cursor so events
-  # already contained in the join-time snapshot are dropped.
+  # already contained in the join-time snapshot are dropped. The cursor is the
+  # snapshot's LAST seq (inclusive), so the gate is half-open (`seq > offset`)
+  # to avoid re-pushing the boundary item already in the snapshot.
   def handle_info({:session_event, seq, item}, socket) do
-    if seq >= socket.assigns.offset do
+    if seq > socket.assigns.offset do
       push(socket, "event", %{seq: seq, item: item})
       {:noreply, assign(socket, :offset, seq)}
     else

@@ -98,6 +98,44 @@ defmodule LegendWeb.SessionChannelAcpTest do
     assert decoded_mode["params"]["modeId"] == "plan"
   end
 
+  test "non-string/non-list prompt content does not crash the session" do
+    {:ok, s} = Agents.start_session(@valid)
+    drive_handshake(s.id)
+
+    {_reply, _socket} = join!(s)
+
+    server = SessionServer.whereis(s.id)
+    assert is_pid(server) and Process.alive?(server)
+
+    # Defense in depth: bad content that bypasses the channel guard (e.g. an
+    # internal caller) still must not crash the restart: :temporary SessionServer —
+    # to_blocks/1's catch-all returns [] (an empty prompt) instead of raising a
+    # FunctionClauseError that would permanently kill the session.
+    for bad <- [42, %{"oops" => true}, true, nil] do
+      SessionServer.acp_prompt(s.id, bad)
+    end
+
+    # A subsequent valid prompt still flows through — proves the server survived.
+    SessionServer.acp_prompt(s.id, "still here")
+
+    assert eventually_receives_prompt([%{"type" => "text", "text" => "still here"}])
+    assert Process.alive?(server)
+  end
+
+  # Drain session/prompt frames until one carries the expected prompt blocks
+  # (the bad-content prompts emit empty-prompt frames first).
+  defp eventually_receives_prompt(expected) do
+    receive do
+      {:test_runtime, :write, frame} ->
+        case Jason.decode!(frame) do
+          %{"method" => "session/prompt", "params" => %{"prompt" => ^expected}} -> true
+          _ -> eventually_receives_prompt(expected)
+        end
+    after
+      1_000 -> false
+    end
+  end
+
   test "session events are pushed as event frames with a seq cursor" do
     {:ok, s} = Agents.start_session(@valid)
     drive_handshake(s.id)

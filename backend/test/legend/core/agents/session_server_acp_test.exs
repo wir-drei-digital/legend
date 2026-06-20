@@ -156,6 +156,44 @@ defmodule Legend.Core.Agents.SessionServerAcpTest do
     assert decoded["params"]["sessionId"] == "sess-xyz"
   end
 
+  test "answering an unknown permission request id is a no-op" do
+    {:ok, s} =
+      Agents.start_session(%{harness_id: "claude_code", runtime_id: "test", transport: :acp})
+
+    Phoenix.PubSub.subscribe(Legend.PubSub, "session:#{s.id}")
+
+    # Drive the handshake to a live session.
+    assert_receive {:test_runtime, :write, init}, 1_000
+    init_id = Jason.decode!(init)["id"]
+
+    send_output(s.id, %{
+      "jsonrpc" => "2.0",
+      "id" => init_id,
+      "result" => %{"protocolVersion" => 1, "agentCapabilities" => %{"loadSession" => true}}
+    })
+
+    assert_receive {:test_runtime, :write, new_req}, 1_000
+    new_id = Jason.decode!(new_req)["id"]
+
+    send_output(s.id, %{
+      "jsonrpc" => "2.0",
+      "id" => new_id,
+      "result" => %{"sessionId" => "sess-xyz"}
+    })
+
+    drain_test_runtime_writes()
+
+    # No permission request was ever issued — answering a stale/unknown id must
+    # not write a reply frame to the runtime nor broadcast a resolved item.
+    Agents.SessionServer.acp_permission(s.id, "perm-does-not-exist", "allow")
+
+    refute_receive {:test_runtime, :write, _}, 200
+    refute_receive {:session_event, _seq, _item}, 200
+
+    # The server is still alive and healthy.
+    assert Process.alive?(Agents.SessionServer.whereis(s.id))
+  end
+
   # Poll briefly: the conversation id is persisted from the server process, so it
   # may lag the synchronous response we just fed in.
   defp eventually(fun, attempts \\ 50)

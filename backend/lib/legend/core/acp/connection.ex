@@ -83,6 +83,8 @@ defmodule Legend.Core.Acp.Connection do
 
   defp to_blocks(text) when is_binary(text), do: [%{"type" => "text", "text" => text}]
   defp to_blocks(blocks) when is_list(blocks), do: blocks
+  # Defense in depth: a non-string/non-list content must never crash the session.
+  defp to_blocks(_), do: []
 
   @spec cancel(t()) :: {t(), [binary()]}
   def cancel(state),
@@ -315,8 +317,14 @@ defmodule Legend.Core.Acp.Connection do
       |> Enum.filter(&(&1["type"] in ["content", "text"]))
       |> Enum.map_join("", &(get_in(&1, ["content", "text"]) || &1["text"] || ""))
 
+    # Only overwrite "diff" when THIS update carries one — a later content-only
+    # update must not erase a diff set by an earlier tool_call(_update).
     item
-    |> Map.put("diff", diff && Map.take(diff, ["path", "oldText", "newText"]))
+    |> then(fn item ->
+      if diff,
+        do: Map.put(item, "diff", Map.take(diff, ["path", "oldText", "newText"])),
+        else: item
+    end)
     |> Map.update("output", text, &(&1 <> text))
   end
 

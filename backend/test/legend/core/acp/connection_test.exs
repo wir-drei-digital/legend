@@ -148,6 +148,38 @@ defmodule Legend.Core.Acp.ConnectionTest do
     assert t2["diff"]["newText"] == "b"
   end
 
+  test "a later content-only tool_call_update preserves a previously-set diff" do
+    state = connected_state()
+
+    # First update sets a diff.
+    {state, [_t1], _, _} =
+      Connection.handle_bytes(
+        state,
+        update("tool_call", %{
+          "toolCallId" => "tc1",
+          "status" => "in_progress",
+          "content" => [
+            %{"type" => "diff", "path" => "auth.ex", "oldText" => "a", "newText" => "b"}
+          ]
+        })
+      )
+
+    # Second update carries content (text output) but NO diff block.
+    {_state, [t2], _, _} =
+      Connection.handle_bytes(
+        state,
+        update("tool_call_update", %{
+          "toolCallId" => "tc1",
+          "status" => "completed",
+          "content" => [%{"type" => "text", "text" => "done"}]
+        })
+      )
+
+    # The diff from the first update survives; output accumulates.
+    assert t2["diff"]["newText"] == "b"
+    assert t2["output"] == "done"
+  end
+
   test "prompt sends session/prompt with the agent session id and bumps the turn" do
     state = connected_state()
     {_state, [frame]} = Connection.prompt(state, "do the thing")
