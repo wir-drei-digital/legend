@@ -12,6 +12,8 @@ export interface Session {
 	status: SessionStatus;
 	exit_code: number | null;
 	error: string | null;
+	transport: 'terminal' | 'acp';
+	conversation_id: string | null;
 }
 
 export interface HarnessSetup {
@@ -25,7 +27,7 @@ export interface Harness {
 	id: string;
 	name: string;
 	description: string;
-	kind: 'terminal' | 'acp' | 'native';
+	transports: ('terminal' | 'acp' | 'native')[];
 	resumable: boolean;
 	provisionable: boolean;
 	setup: HarnessSetup;
@@ -80,6 +82,7 @@ export async function createSession(attrs: {
 	runtime_id?: string;
 	name?: string;
 	cwd?: string;
+	transport?: 'terminal' | 'acp';
 }): Promise<Session> {
 	const res = await fetch(`${apiBase}/api/sessions`, {
 		method: 'POST',
@@ -97,6 +100,15 @@ export async function resumeSession(id: string): Promise<void> {
 		body: JSON.stringify({ data: { type: 'session', id, attributes: {} } })
 	});
 	if (!res.ok) throw new Error(await errorMessage(res, 'resuming session failed'));
+}
+
+export async function setTransport(id: string, transport: 'terminal' | 'acp'): Promise<void> {
+	const res = await fetch(`${apiBase}/api/sessions/${id}/transport`, {
+		method: 'PATCH',
+		headers: { 'Content-Type': JSONAPI, Accept: JSONAPI },
+		body: JSON.stringify({ data: { type: 'session', id, attributes: { transport } } })
+	});
+	if (!res.ok) throw new Error(await errorMessage(res, 'switching transport failed'));
 }
 
 export async function deleteSession(id: string): Promise<void> {
