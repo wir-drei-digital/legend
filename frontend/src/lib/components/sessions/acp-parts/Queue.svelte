@@ -1,7 +1,8 @@
 <script lang="ts">
-	// Renders the sticky queued-messages list. The queue state itself lives in
-	// `Composer` (a $state<string[]>); this part is purely presentational + emits
-	// row actions back up. `onEdit(i)` pulls the row back into the composer input.
+	// Renders the sticky queued-messages list. The queue state itself is owned by
+	// SessionPane (passed down as `queueState.items` so it survives the `{#key}`
+	// remount) and reaches the Composer as a prop; this part is purely presentational
+	// + emits row actions back up. `onEdit(i)` pulls the row back into the composer input.
 	let {
 		queue,
 		onSendNow,

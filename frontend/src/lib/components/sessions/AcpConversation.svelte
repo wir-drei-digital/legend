@@ -6,7 +6,11 @@
 	import PlanBar from './acp-parts/PlanBar.svelte';
 	import Composer from './acp-parts/Composer.svelte';
 
-	let { sessionId }: { sessionId: string } = $props();
+	// `queueState` is owned by SessionPane (above the `{#key resumeKey}` remount) so the
+	// Composer's queued prompts survive a transport toggle / resume; we just thread it
+	// through to the Composer unchanged.
+	let { sessionId, queueState }: { sessionId: string; queueState: { items: string[] } } =
+		$props();
 
 	// The store joins one `session:<id>` channel for the component's lifetime;
 	// capturing the initial sessionId once is intended (no re-subscribe on change).
@@ -83,6 +87,7 @@
 			busy={acp.busy}
 			{commands}
 			{mode}
+			{queueState}
 			onPrompt={acp.prompt}
 			onCancel={acp.cancel}
 			onSetMode={acp.setMode}

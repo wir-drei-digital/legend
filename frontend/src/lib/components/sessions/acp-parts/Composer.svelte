@@ -2,13 +2,16 @@
 	import Queue from './Queue.svelte';
 
 	// The composer's PRIMARY job is sending a TEXT prompt via onPrompt(text).
-	// When the agent is busy, the text is pushed onto a local queue ($state<string[]>)
-	// that flushes (one item) when `busy` flips back to false. The queue lives here and
-	// renders through the <Queue> part.
+	// When the agent is busy, the text is pushed onto a queue that flushes (one item)
+	// when `busy` flips back to false. The queue is OWNED BY SessionPane (passed in as
+	// `queueState`, above the `{#key resumeKey}` remount) so queued prompts survive a
+	// transport toggle / resume; this component only mutates `queueState.items` and
+	// renders it through the <Queue> part.
 	let {
 		busy,
 		commands,
 		mode,
+		queueState,
 		onPrompt,
 		onCancel,
 		onSetMode
@@ -16,19 +19,19 @@
 		busy: boolean;
 		commands: string[];
 		mode: string | null;
+		queueState: { items: string[] };
 		onPrompt: (text: string) => void;
 		onCancel: () => void;
 		onSetMode: (mode: string) => void;
 	} = $props();
 
 	let text = $state('');
-	let queue = $state<string[]>([]);
 	let wasBusy = $state(false);
 
 	function submit() {
 		const value = text.trim();
 		if (!value) return;
-		if (busy) queue = [...queue, value];
+		if (busy) queueState.items = [...queueState.items, value];
 		else onPrompt(value);
 		text = '';
 	}
@@ -40,9 +43,9 @@
 	// re-busies the agent; the next item waits for the NEXT falling edge.
 	$effect(() => {
 		const b = busy;
-		if (wasBusy && !b && queue.length > 0) {
-			const [next, ...rest] = queue;
-			queue = rest;
+		if (wasBusy && !b && queueState.items.length > 0) {
+			const [next, ...rest] = queueState.items;
+			queueState.items = rest;
 			onPrompt(next);
 		}
 		wasBusy = b;
@@ -59,19 +62,19 @@
 	// Send-now: pull a queued row out and prompt it immediately. ACP queues
 	// server-side per turn, so this is allowed even while busy.
 	function sendNow(index: number) {
-		const value = queue[index];
+		const value = queueState.items[index];
 		if (value === undefined) return;
-		queue = queue.filter((_, i) => i !== index);
+		queueState.items = queueState.items.filter((_, i) => i !== index);
 		onPrompt(value);
 	}
 	function removeAt(index: number) {
-		queue = queue.filter((_, i) => i !== index);
+		queueState.items = queueState.items.filter((_, i) => i !== index);
 	}
 	// Edit pulls the row back into the input (replacing whatever is unsent there).
 	function editAt(index: number) {
-		const value = queue[index];
+		const value = queueState.items[index];
 		if (value === undefined) return;
-		queue = queue.filter((_, i) => i !== index);
+		queueState.items = queueState.items.filter((_, i) => i !== index);
 		text = value;
 	}
 
@@ -88,7 +91,7 @@
 
 <div>
 	<!-- sticky queue above the composer -->
-	<Queue {queue} onSendNow={sendNow} onRemove={removeAt} onEdit={editAt} />
+	<Queue queue={queueState.items} onSendNow={sendNow} onRemove={removeAt} onEdit={editAt} />
 
 	<div class="bg-shell px-3 pb-3 pt-2.5">
 		<div

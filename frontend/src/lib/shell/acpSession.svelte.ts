@@ -26,7 +26,6 @@ export function createAcpSession(sessionId: string) {
 
   const chan = getSocket().channel(`session:${sessionId}`);
   channel = chan;
-  let joined = false;
 
   chan.on('event', ({ seq, item }: { seq: number; item: AcpItem }) => upsert({ ...item, seq }));
   chan.on('status', ({ status }: { status: SessionStatus }) => { state.status = status; });
@@ -37,13 +36,21 @@ export function createAcpSession(sessionId: string) {
     // Seed busy from the authoritative server-side turn-in-flight flag on EVERY
     // join/rejoin — fixes mid-turn reattach showing a falsely idle composer.
     state.busy = reply.busy ?? false;
-    if (!joined && reply.items) {
-      byId.clear();
-      cursor = reply.cursor ?? 0;
-      for (const it of reply.items) byId.set(it.id, it);
+    // Reconcile the snapshot on EVERY join — including Phoenix's silent auto-rejoin
+    // after a transient socket reconnect. Feeding each item through `upsert` (NOT a
+    // raw byId.set / byId.clear) makes re-applying idempotent: the `seq <= cursor &&
+    // byId.has` dedup drops items we already have, while items that broadcast during
+    // the disconnect (seq > cursor, where the backend advanced its offset) are applied
+    // and advance the cursor via `max`. Never clear — that would drop live items.
+    if (reply.items) {
+      for (const it of reply.items) upsert(it);
+      // Belt for the cursor: upsert's per-item max covers applied items; this guards
+      // the case where the snapshot's cursor sits ahead of every item's seq.
+      cursor = Math.max(cursor, reply.cursor ?? 0);
+      // upsert already rebuilds per item, but ensure the sorted view reflects the
+      // fully-reconciled set (cheap; no-op if nothing changed).
       rebuild();
     }
-    joined = true;
   });
 
   return {

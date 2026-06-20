@@ -58,6 +58,12 @@
 	let resuming = $state(false);
 	let resumeError = $state('');
 
+	// The Composer's queued prompts must outlive the `{#key resumeKey}` remount that a
+	// resume or transport toggle triggers. Holding the queue HERE — outside the {#key} —
+	// keeps a stable reference across remounts: the re-created Composer re-binds to the
+	// same object, so queued prompts survive a transport switch / resume (CC#2).
+	const queueState = $state<{ items: string[] }>({ items: [] });
+
 	// There is no global harness store, so fetch the list once and find this
 	// session's harness to learn its transports. The toggle only appears when
 	// the harness speaks more than one transport.
@@ -273,7 +279,7 @@
 		<div class="relative min-w-0 flex-1 overflow-hidden">
 			{#key resumeKey}
 				{#if session.transport === 'acp'}
-					<AcpConversation bind:this={acpView} sessionId={session.id} />
+					<AcpConversation bind:this={acpView} sessionId={session.id} {queueState} />
 				{:else}
 					<Terminal bind:this={terminal} sessionId={session.id} fontSize={11} background="#100d1a" />
 				{/if}
