@@ -54,7 +54,16 @@ defmodule Legend.Runtimes.LocalPty do
 
   @impl true
   def resize(%{os_pid: os_pid}, cols, rows) do
-    :exec.winsz(os_pid, rows, cols)
+    # :winsz only applies to PTY-backed processes; on a `:pipes` process
+    # erlexec errors, so make resize a tolerant no-op there.
+    try do
+      :exec.winsz(os_pid, rows, cols)
+    rescue
+      _ -> :ok
+    catch
+      _, _ -> :ok
+    end
+
     :ok
   end
 
@@ -67,21 +76,26 @@ defmodule Legend.Runtimes.LocalPty do
   end
 
   defp run_and_relay(caller, ref, owner, argv, spec, opts) do
+    # `:stdin` opens the write pipe `:exec.send/2` targets; without it the
+    # child sees EOF immediately and exits. Terminal harnesses (`io: :pty`)
+    # run under a real PTY (stderr merged into stdout); `:pty_echo` re-enables
+    # terminal echo, which erlexec 2.3 disables by default. ACP harnesses
+    # (`io: :pipes`) speak JSON-RPC over plain stdio with no PTY — stderr is
+    # delivered separately and relayed as output (see relay_loop/2).
+    io_opts =
+      case spec.io do
+        :pipes -> [:stdin, {:stdout, self()}, :stderr]
+        _ -> [:stdin, :pty, :pty_echo, {:stdout, self()}]
+      end
+
     run_opts =
-      [
-        # `:stdin` opens the write pipe `:exec.send/2` targets; without it the
-        # child sees EOF immediately and exits. `:pty` runs under a real PTY
-        # (stderr merged into stdout); `:pty_echo` re-enables terminal echo,
-        # which erlexec 2.3 disables by default.
-        :stdin,
-        :pty,
-        :pty_echo,
-        {:stdout, self()},
-        :monitor,
-        {:env, Map.to_list(spec.env)},
-        {:winsz, {opts[:rows] || 24, opts[:cols] || 80}},
-        {:kill_timeout, 5}
-      ] ++ cd_opt(opts)
+      io_opts ++
+        [
+          :monitor,
+          {:env, Map.to_list(spec.env)},
+          {:winsz, {opts[:rows] || 24, opts[:cols] || 80}},
+          {:kill_timeout, 5}
+        ] ++ cd_opt(opts)
 
     case :exec.run(argv, run_opts) do
       {:ok, _pid, os_pid} ->
@@ -99,6 +113,13 @@ defmodule Legend.Runtimes.LocalPty do
   defp relay_loop(owner, os_pid) do
     receive do
       {:stdout, ^os_pid, data} ->
+        send(owner, {:runtime_output, data})
+        relay_loop(owner, os_pid)
+
+      # `:pipes` mode keeps stderr separate; forward it as output too so ACP
+      # adapters' diagnostics aren't lost. PTY mode merges stderr into stdout,
+      # so this clause simply never matches there.
+      {:stderr, ^os_pid, data} ->
         send(owner, {:runtime_output, data})
         relay_loop(owner, os_pid)
 

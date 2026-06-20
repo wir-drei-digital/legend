@@ -34,6 +34,15 @@ defmodule Legend.Runtimes.LocalPtyTest do
     assert_receive {:runtime_exit, 3}, 10_000
   end
 
+  test "pipes mode echoes stdin to stdout without a PTY" do
+    spec = %CommandSpec{cmd: "cat", io: :pipes}
+    {:ok, handle} = LocalPty.start(spec, %{owner: self()})
+    :ok = LocalPty.write(handle, "hello\n")
+    assert_receive {:runtime_output, "hello\n"}, 2_000
+    LocalPty.stop(handle)
+    assert_receive {:runtime_exit, _}, 2_000
+  end
+
   defp collect_output(acc \\ "") do
     receive do
       {:runtime_output, data} ->
