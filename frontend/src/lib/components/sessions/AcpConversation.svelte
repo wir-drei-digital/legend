@@ -25,6 +25,9 @@
 	// markdown renderer — whitespace-pre-wrap preserves line breaks instead.
 	// `AcpItem.text` is typed `unknown` via the index signature, so we coerce here.
 	const asText = (value: unknown) => (typeof value === 'string' ? value : '');
+	// nudge.count arrives as a number; coerce string-or-number for plain interpolation.
+	const asCount = (value: unknown) =>
+		typeof value === 'number' || typeof value === 'string' ? String(value) : '';
 
 	// The reducer emits at most one `commands` and one `mode` singleton; derive
 	// them from the stream for the composer.
@@ -62,6 +65,12 @@
 				<ToolCall {item} />
 			{:else if item.type === 'permission'}
 				<PermissionCard {item} onAnswer={acp.answerPermission} />
+			{:else if item.type === 'nudge'}
+				<!-- queued mail notice: the agent picks these up on its next turn -->
+				<div class="text-meta text-ink-3">
+					📬 {asCount(item.count)} unread from {asText(item.from)} — the agent will check on its
+					next turn
+				</div>
 			{/if}
 			<!-- plan/commands/mode are dock singletons, rendered below the stream -->
 		{/each}
