@@ -65,6 +65,23 @@ defmodule LegendWeb.SessionChannelTest do
     assert_push "exit", %{exit_code: nil}
   end
 
+  # CR-1: an unknown event, or a known event whose payload matches no clause,
+  # must NOT crash the per-viewer channel (FunctionClauseError on an
+  # unauthenticated socket). The catch-all handle_in/3 absorbs them.
+  test "unknown or malformed events do not crash the channel", %{session: session} do
+    {_reply, socket} = join!(session)
+
+    # Unknown event name.
+    push(socket, "bogus", %{"anything" => true})
+    # Known event with a payload that matches no specific clause.
+    push(socket, "prompt", %{"unexpected" => 1})
+    push(socket, "input", %{"data" => 123})
+
+    # The channel is still alive: a valid event still reaches the runtime.
+    push(socket, "input", %{"data" => "ls\n"})
+    assert_receive {:test_runtime, :write, "ls\n"}
+  end
+
   test "joining a dead session falls back to the record", %{session: session} do
     SessionServer.ensure_stopped(session.id)
     Legend.Core.Agents.Janitor.run()

@@ -549,6 +549,8 @@ defmodule Legend.Core.Agents.SessionServer do
   def handle_cast({:acp_permission, _req, _opt}, state), do: {:noreply, state}
 
   @impl true
+  def handle_info({:runtime_output, _data}, %{exited?: true} = state), do: {:noreply, state}
+
   def handle_info({:runtime_output, data}, %{transport: :acp} = state) do
     {acp, items, replies, effects} = Legend.Core.Acp.Connection.handle_bytes(state.acp, data)
     Enum.each(replies, &state.runtime.write(state.handle, &1))

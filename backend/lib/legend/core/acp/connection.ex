@@ -16,6 +16,16 @@ defmodule Legend.Core.Acp.Connection do
   @max_tool_output 65_536
   @tool_output_truncation_marker "…[output truncated]…\n"
 
+  # Cap the incomplete-line buffer so a newline-less flood from the agent cannot
+  # grow state.buf without bound (the inbound analog to the terminal Scrollback
+  # cap). When exceeded we RESET buf and emit a soft error item so a malformed /
+  # oversized frame can't exhaust memory; subsequent valid frames still parse.
+  @max_line_bytes 1_048_576
+
+  @doc "Inbound incomplete-line buffer byte cap. Exposed for tests/inspection."
+  @spec max_line_bytes() :: pos_integer()
+  def max_line_bytes, do: @max_line_bytes
+
   defstruct buf: "",
             next_id: 1,
             pending: %{},
@@ -61,9 +71,9 @@ defmodule Legend.Core.Acp.Connection do
   @spec handle_bytes(t(), binary()) :: {t(), [map()], [binary()], [tuple()]}
   def handle_bytes(state, bytes) do
     {lines, buf} = split_lines(state.buf <> bytes)
-    state = %{state | buf: buf}
+    {state, overflow_items} = cap_buf(%{state | buf: buf})
 
-    Enum.reduce(lines, {state, [], [], []}, fn line, {st, items, replies, effects} ->
+    Enum.reduce(lines, {state, overflow_items, [], []}, fn line, {st, items, replies, effects} ->
       case Jason.decode(line) do
         {:ok, msg} ->
           {st, i, r, e} = dispatch(st, msg)
@@ -80,6 +90,21 @@ defmodule Legend.Core.Acp.Connection do
       end
     end)
   end
+
+  # Guard against an unbounded incomplete-line buffer: if the leftover buf after
+  # consuming complete lines exceeds @max_line_bytes, RESET it and surface a soft
+  # error item. Returns the (possibly reset) state plus any overflow items.
+  defp cap_buf(%{buf: buf} = state) when byte_size(buf) > @max_line_bytes do
+    item = %{
+      "id" => "error-buf",
+      "type" => "error",
+      "text" => "frame exceeded #{@max_line_bytes} bytes; buffer reset"
+    }
+
+    {%{state | buf: ""}, [item]}
+  end
+
+  defp cap_buf(state), do: {state, []}
 
   # --- outbound client->agent operations ---
 
@@ -133,8 +158,13 @@ defmodule Legend.Core.Acp.Connection do
   defp to_blocks(_), do: []
 
   @spec cancel(t()) :: {t(), [binary()]}
-  def cancel(state),
-    do: {state, [notify("session/cancel", %{"sessionId" => state.session_id})]}
+  def cancel(state) do
+    # Clearing perms expires the cancelled turn's pending permission requests: a
+    # later human answer for one of those ids becomes a no-op (no stale reply to
+    # an already-cancelled request). The map is the must-have; the agent will not
+    # accept a request_permission response after session/cancel anyway.
+    {%{state | perms: %{}}, [notify("session/cancel", %{"sessionId" => state.session_id})]}
+  end
 
   @spec set_mode(t(), String.t()) :: {t(), [binary()]}
   def set_mode(state, mode_id) do
@@ -317,6 +347,21 @@ defmodule Legend.Core.Acp.Connection do
     }
 
     {%{state | perms: Map.put(state.perms, "perm-#{id}", id)}, [item], [], []}
+  end
+
+  # Any other inbound agent->client REQUEST (has both "id" and "method") targets a
+  # client capability we never advertised (e.g. fs/read_text_file, terminal/create).
+  # Reply with JSON-RPC -32601 so the agent gets a response instead of hanging.
+  # Notifications (no "id") fall through to session/update handling and the catch-all.
+  defp dispatch_incoming(state, %{"id" => id, "method" => _method}) do
+    reply =
+      Jason.encode!(%{
+        "jsonrpc" => "2.0",
+        "id" => id,
+        "error" => %{"code" => -32_601, "message" => "Method not found"}
+      }) <> "\n"
+
+    {state, [], [reply], []}
   end
 
   # --- session/update reduction (agent->client notifications) ---

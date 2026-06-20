@@ -26,7 +26,17 @@ defimpl Legend.Core.Agents.Transcript, for: Legend.Core.Agents.AcpTimeline do
 
   def append(%AcpTimeline{} = t, %{"id" => id} = item) do
     seq = t.seq + 1
-    item = Map.put(item, "seq", seq)
+    # MERGE onto an existing same-id item rather than replace: a PARTIAL update
+    # (e.g. a resolved permission carrying only resolved/selected) must preserve
+    # prior keys like title/command/options while overwriting shared ones + seq.
+    # Safe for every other type — the connection emits FULL items for
+    # message/thought/tool/plan/commands/mode/nudge, so merge ≈ replace there.
+    item =
+      case Map.get(t.items, id) do
+        nil -> Map.put(item, "seq", seq)
+        existing -> existing |> Map.merge(item) |> Map.put("seq", seq)
+      end
+
     order = if Map.has_key?(t.items, id), do: t.order, else: t.order ++ [id]
     t = %{t | items: Map.put(t.items, id, item), order: order, seq: seq} |> trim()
     {t, [item]}

@@ -569,4 +569,86 @@ defmodule Legend.Core.Acp.ConnectionTest do
     # assert the old user-1 entry is gone from reduce by re-creating it cleanly.
     refute Connection.reduce_has_key?(state, "user-1")
   end
+
+  # ACP-2: a newline-less flood must not grow buf unbounded.
+  test "buf exceeding the cap resets and emits an error item; valid frames still parse" do
+    state = connected_state()
+    cap = Connection.max_line_bytes()
+
+    flood = String.duplicate("x", cap + 1)
+    {state, items, _replies, _effects} = Connection.handle_bytes(state, flood)
+
+    assert %{"id" => "error-buf", "type" => "error", "text" => text} =
+             Enum.find(items, &(&1["id"] == "error-buf"))
+
+    assert text =~ "buffer reset"
+    # buf was reset, so a subsequent valid frame parses cleanly.
+    {_state, [item], _, _} =
+      Connection.handle_bytes(
+        state,
+        update("agent_message_chunk", %{"content" => %{"type" => "text", "text" => "ok"}})
+      )
+
+    assert item["type"] == "message" and item["text"] == "ok"
+  end
+
+  # ACP-1: an inbound agent REQUEST we don't handle gets a -32601 reply (not silence).
+  test "unhandled agent request yields a -32601 Method not found reply" do
+    state = connected_state()
+
+    req =
+      Jason.encode!(%{
+        "jsonrpc" => "2.0",
+        "id" => 99,
+        "method" => "fs/read_text_file",
+        "params" => %{"path" => "/etc/passwd"}
+      }) <> "\n"
+
+    {_state, items, replies, _effects} = Connection.handle_bytes(state, req)
+
+    assert items == []
+    assert [%{"jsonrpc" => "2.0", "id" => 99, "error" => err}] = decode_lines(replies)
+    assert err["code"] == -32_601
+    assert err["message"] == "Method not found"
+  end
+
+  # ACP-1: a notification (no id) must still fall through to existing handling.
+  test "session/update notification is unaffected by the -32601 clause" do
+    state = connected_state()
+
+    {_state, [item], replies, _effects} =
+      Connection.handle_bytes(
+        state,
+        update("agent_message_chunk", %{"content" => %{"type" => "text", "text" => "hi"}})
+      )
+
+    assert replies == []
+    assert item["type"] == "message" and item["text"] == "hi"
+  end
+
+  # ACP-5: cancel clears pending perms so a later answer for that id is a no-op.
+  test "cancel expires pending permission requests" do
+    state = connected_state()
+
+    perm_req =
+      Jason.encode!(%{
+        "jsonrpc" => "2.0",
+        "id" => 7,
+        "method" => "session/request_permission",
+        "params" => %{
+          "toolCall" => %{"title" => "Run command"},
+          "options" => [%{"optionId" => "allow", "name" => "Allow"}]
+        }
+      }) <> "\n"
+
+    {state, [perm_item], _, _} = Connection.handle_bytes(state, perm_req)
+    assert perm_item["id"] == "perm-7"
+
+    # Before cancel, answering would produce a reply frame.
+    {_state, [_reply]} = Connection.answer_permission(state, "perm-7", "allow")
+
+    # After cancel, the pending entry is cleared -> answering is a no-op.
+    {state, [_cancel_frame]} = Connection.cancel(state)
+    assert {^state, []} = Connection.answer_permission(state, "perm-7", "allow")
+  end
 end

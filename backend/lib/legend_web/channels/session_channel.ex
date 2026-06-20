@@ -100,6 +100,10 @@ defmodule LegendWeb.SessionChannel do
     {:noreply, socket}
   end
 
+  # Catch-all: an unknown event, or a known event whose payload matches no clause
+  # above, must not crash the per-viewer channel with a FunctionClauseError.
+  def handle_in(_event, _payload, socket), do: {:noreply, socket}
+
   @impl true
   def handle_info({:session_output, chunk_offset, data}, socket) do
     if chunk_offset >= socket.assigns.offset do
