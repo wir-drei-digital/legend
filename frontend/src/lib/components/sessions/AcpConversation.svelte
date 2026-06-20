@@ -14,6 +14,12 @@
 	const acp = createAcpSession(sessionId);
 	onDestroy(() => acp.dispose());
 
+	// Suspend parity with Terminal: kill the ACP adapter process via the
+	// transport-agnostic channel `stop`. Bound by SessionPane for the menu.
+	export function requestStop() {
+		acp.stop();
+	}
+
 	// Agent output is untrusted: every text field below is rendered with plain
 	// Svelte interpolation ({asText(...)}), which auto-escapes. No {@html}, no
 	// markdown renderer — whitespace-pre-wrap preserves line breaks instead.

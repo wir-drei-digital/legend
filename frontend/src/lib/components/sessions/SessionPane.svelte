@@ -1,5 +1,7 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
 	import Terminal from '$lib/components/Terminal.svelte';
+	import AcpConversation from '$lib/components/sessions/AcpConversation.svelte';
 	import Icon from '$lib/components/shell/Icon.svelte';
 	import IconButton from '$lib/components/shell/IconButton.svelte';
 	import Popover from '$lib/components/shell/Popover.svelte';
@@ -15,7 +17,14 @@
 	import { identityFor } from '$lib/shell/identities';
 	import { relativeTime, basename } from '$lib/shell/format';
 	import { messagesStore } from '$lib/stores/messages.svelte';
-	import { deleteSession, resumeSession, type Session } from '$lib/sessions';
+	import {
+		deleteSession,
+		listHarnesses,
+		resumeSession,
+		setTransport,
+		type Harness,
+		type Session
+	} from '$lib/sessions';
 
 	// `grab` is the grid's pointer-drag starter — fired when the header is pressed.
 	let {
@@ -49,6 +58,26 @@
 	let resuming = $state(false);
 	let resumeError = $state('');
 
+	// There is no global harness store, so fetch the list once and find this
+	// session's harness to learn its transports. The toggle only appears when
+	// the harness speaks more than one transport.
+	let harness = $state<Harness>();
+	onMount(async () => {
+		try {
+			const harnesses = await listHarnesses();
+			harness = harnesses.find((h) => h.id === session.harness_id);
+		} catch {
+			// No toggle if the harness list can't be fetched — the body still renders.
+		}
+	});
+	const canSwitch = $derived((harness?.transports?.length ?? 0) > 1);
+
+	async function switchTransport(t: 'terminal' | 'acp') {
+		if (t === session.transport) return;
+		await setTransport(session.id, t);
+		resumeKey += 1; // remount the body against the new transport
+	}
+
 	async function resume() {
 		if (resuming) return;
 		resuming = true;
@@ -66,12 +95,14 @@
 
 	// ---- per-pane actions menu (⋯) ----
 	let terminal = $state<ReturnType<typeof Terminal>>();
+	let acpView = $state<ReturnType<typeof AcpConversation>>();
 	let menuOpen = $state(false);
 	let detailsOpen = $state(false);
 
 	/** Suspend: terminate the agent process; the session becomes resumable. */
 	function suspend() {
-		terminal?.requestStop();
+		if (session.transport === 'acp') acpView?.requestStop();
+		else terminal?.requestStop();
 		menuOpen = false;
 	}
 
@@ -158,6 +189,34 @@
 			<span class="shrink-0 font-mono text-micro text-ink-3">{time}</span>
 		{/if}
 
+		{#if canSwitch}
+			<!-- transport toggle: only when the harness speaks both rich + term -->
+			<div
+				class="flex shrink-0 overflow-hidden rounded-[7px] border border-hair-strong text-micro"
+			>
+				<button
+					type="button"
+					title="Rich (ACP) conversation"
+					class="px-2 py-0.5 font-bold {session.transport === 'acp'
+						? 'bg-brand text-app'
+						: 'text-ink-2'}"
+					onclick={() => switchTransport('acp')}
+				>
+					rich
+				</button>
+				<button
+					type="button"
+					title="Terminal"
+					class="px-2 py-0.5 font-bold {session.transport === 'terminal'
+						? 'bg-brand text-app'
+						: 'text-ink-2'}"
+					onclick={() => switchTransport('terminal')}
+				>
+					term
+				</button>
+			</div>
+		{/if}
+
 		<!-- per-pane actions menu -->
 		<div class="relative shrink-0">
 			<IconButton
@@ -213,7 +272,11 @@
 	<div class="flex min-h-0 flex-1">
 		<div class="relative min-w-0 flex-1 overflow-hidden">
 			{#key resumeKey}
-				<Terminal bind:this={terminal} sessionId={session.id} fontSize={11} background="#100d1a" />
+				{#if session.transport === 'acp'}
+					<AcpConversation bind:this={acpView} sessionId={session.id} />
+				{:else}
+					<Terminal bind:this={terminal} sessionId={session.id} fontSize={11} background="#100d1a" />
+				{/if}
 			{/key}
 
 			{#if !isLive}

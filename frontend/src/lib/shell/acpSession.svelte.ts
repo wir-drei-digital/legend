@@ -47,6 +47,7 @@ export function createAcpSession(sessionId: string) {
     cancel: () => chan.push('cancel', {}),
     setMode: (mode: string) => chan.push('set_mode', { mode }),
     answerPermission: (request_id: string, option_id: string) => chan.push('permission', { request_id, option_id }),
+    stop: () => chan.push('stop', {}),
     dispose: () => { chan.leave(); channel = undefined; }
   };
 }

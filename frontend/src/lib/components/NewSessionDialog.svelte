@@ -29,9 +29,23 @@
 	let cwd = $state('');
 	let error = $state('');
 	let creating = $state(false);
+	let transport = $state<'terminal' | 'acp' | 'native'>('terminal');
 
 	const selectedHarness = $derived(harnesses.find((h) => h.id === harnessId));
 	const selectedRuntime = $derived(runtimes.find((r) => r.id === runtimeId));
+
+	// Transports are harness-specific; default to the harness's first (its
+	// preferred transport) whenever the selection changes, and only show the
+	// picker when the harness speaks more than one.
+	const transportOptions = $derived(selectedHarness?.transports ?? []);
+	const canPickTransport = $derived(transportOptions.length > 1);
+	$effect(() => {
+		const first = selectedHarness?.transports?.[0];
+		if (first) transport = first;
+	});
+
+	const transportLabel = (t: 'terminal' | 'acp' | 'native') =>
+		t === 'acp' ? 'Rich (ACP)' : t === 'native' ? 'Native' : 'Terminal';
 
 	const incompatible = $derived(
 		!!selectedRuntime?.capabilities?.provisions &&
@@ -121,7 +135,10 @@
 				harness_id: harnessId,
 				...(runtimeId ? { runtime_id: runtimeId } : {}),
 				...(name.trim() ? { name: name.trim() } : {}),
-				...(cwd.trim() ? { cwd: cwd.trim() } : {})
+				...(cwd.trim() ? { cwd: cwd.trim() } : {}),
+				// Single-transport harnesses use the backend default; only send an
+				// explicit transport when the user could actually pick.
+				...(canPickTransport && transport !== 'native' ? { transport } : {})
 			});
 			open = false;
 			name = '';
@@ -176,6 +193,22 @@
 					</Select.Content>
 				</Select.Root>
 			</div>
+
+			{#if canPickTransport}
+				<div class="flex flex-col gap-2">
+					<SectionLabel><label for="transport">Transport</label></SectionLabel>
+					<Select.Root type="single" bind:value={transport}>
+						<Select.Trigger id="transport" class="w-full">
+							{transportLabel(transport)}
+						</Select.Trigger>
+						<Select.Content>
+							{#each transportOptions as t (t)}
+								<Select.Item value={t} label={transportLabel(t)} />
+							{/each}
+						</Select.Content>
+					</Select.Root>
+				</div>
+			{/if}
 
 			{#if setupNeeded && selectedHarness}
 				<div class="flex flex-col gap-2 rounded-md border border-hair bg-inset p-3 text-ui text-ink-1">
