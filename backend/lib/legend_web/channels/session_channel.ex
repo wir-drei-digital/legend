@@ -25,12 +25,13 @@ defmodule LegendWeb.SessionChannel do
 
   defp attach_reply(session) do
     case SessionServer.attach(session.id) do
-      {:ok, %{transport: :acp, items: items, cursor: cursor, status: status}} ->
+      {:ok, %{transport: :acp, items: items, cursor: cursor, status: status, busy: busy}} ->
         {%{
            status: to_string(status),
            transport: "acp",
            items: items,
            cursor: cursor,
+           busy: busy,
            exit_code: session.exit_code,
            error: session.error
          }, cursor}
@@ -51,6 +52,7 @@ defmodule LegendWeb.SessionChannel do
            buffer: "",
            items: [],
            cursor: 0,
+           busy: false,
            exit_code: session.exit_code,
            error: session.error
          }, 0}

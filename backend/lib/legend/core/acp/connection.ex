@@ -72,6 +72,16 @@ defmodule Legend.Core.Acp.Connection do
      }, [frame]}
   end
 
+  @doc """
+  True when a `session/prompt` request is still awaiting its response — i.e. a
+  turn is in flight. Single source of truth for "a turn is running" (covers the
+  launch initial-instructions prompt as well, since it's tagged `:prompt`).
+  """
+  @spec turn_in_flight?(t()) :: boolean()
+  def turn_in_flight?(state) do
+    Enum.any?(state.pending, fn {_id, tag} -> tag == :prompt end)
+  end
+
   defp prompt_frame(state, blocks) do
     Jason.encode!(%{
       "jsonrpc" => "2.0",
@@ -153,10 +163,14 @@ defmodule Legend.Core.Acp.Connection do
   end
 
   defp dispatch(state, %{"id" => id, "error" => err}) when is_map_key(state.pending, id) do
-    {_tag, pending} = Map.pop(state.pending, id)
+    {tag, pending} = Map.pop(state.pending, id)
     # Surface as a soft error item; do not crash.
     item = %{"id" => "error-#{id}", "type" => "error", "text" => inspect(err)}
-    {%{state | pending: pending}, [item], [], []}
+    # A failed prompt must still complete the turn lifecycle — otherwise the
+    # server stays "busy" forever and the prompt queue never drains. Other tags
+    # (initialize/session_new/session_load/set_mode) keep just the error item.
+    effects = if tag == :prompt, do: [{:turn, "error"}], else: []
+    {%{state | pending: pending}, [item], [], effects}
   end
 
   # session/update notifications + agent->client requests handled in Tasks 6 & 7.

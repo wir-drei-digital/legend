@@ -189,6 +189,68 @@ defmodule Legend.Core.Acp.ConnectionTest do
     assert [%{"type" => "text", "text" => "do the thing"}] = msg["params"]["prompt"]
   end
 
+  test "turn_in_flight? tracks an outstanding session/prompt" do
+    state = connected_state()
+    refute Connection.turn_in_flight?(state)
+
+    {state, [frame]} = Connection.prompt(state, "go")
+    assert Connection.turn_in_flight?(state)
+
+    prompt_id = Jason.decode!(frame)["id"]
+
+    {state, _items, _replies, _effects} =
+      Connection.handle_bytes(
+        state,
+        Jason.encode!(%{
+          "jsonrpc" => "2.0",
+          "id" => prompt_id,
+          "result" => %{"stopReason" => "end_turn"}
+        }) <> "\n"
+      )
+
+    refute Connection.turn_in_flight?(state)
+  end
+
+  test "an error response to a prompt completes the turn lifecycle" do
+    state = connected_state()
+    {state, [frame]} = Connection.prompt(state, "go")
+    prompt_id = Jason.decode!(frame)["id"]
+
+    {state, [item], _replies, effects} =
+      Connection.handle_bytes(
+        state,
+        Jason.encode!(%{
+          "jsonrpc" => "2.0",
+          "id" => prompt_id,
+          "error" => %{"code" => -32_000, "message" => "boom"}
+        }) <> "\n"
+      )
+
+    assert item["type"] == "error"
+    # The turn must complete even on failure so the lifecycle/queue can drain.
+    assert Enum.any?(effects, &match?({:turn, _}, &1))
+    refute Connection.turn_in_flight?(state)
+  end
+
+  test "an error response to a non-prompt request does NOT fire a turn effect" do
+    # An initialize error must surface a soft error item but no {:turn} effect.
+    {state, [init]} = Connection.new(%{cwd: "/tmp", mcp_servers: [], mode: :new})
+    init_id = Jason.decode!(init)["id"]
+
+    {_state, [item], _replies, effects} =
+      Connection.handle_bytes(
+        state,
+        Jason.encode!(%{
+          "jsonrpc" => "2.0",
+          "id" => init_id,
+          "error" => %{"code" => -32_000, "message" => "nope"}
+        }) <> "\n"
+      )
+
+    assert item["type"] == "error"
+    refute Enum.any?(effects, &match?({:turn, _}, &1))
+  end
+
   test "permission request becomes an item; answer responds to the agent" do
     state = connected_state()
 

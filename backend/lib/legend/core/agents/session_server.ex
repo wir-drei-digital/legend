@@ -225,6 +225,11 @@ defmodule Legend.Core.Agents.SessionServer do
       transport: :acp,
       acp: acp,
       timeline: Legend.Core.Agents.AcpTimeline.new(),
+      # Server-side one-turn-at-a-time queue: prompts cast while a turn is in
+      # flight are held here (FIFO) and flushed one per turn-complete. A
+      # coalesced nudge line (or nil) is deferred to wake the agent post-turn.
+      acp_prompt_queue: [],
+      pending_nudge: nil,
       scrollback: nil,
       offset: nil
     }
@@ -235,6 +240,8 @@ defmodule Legend.Core.Agents.SessionServer do
       transport: :terminal,
       acp: nil,
       timeline: nil,
+      acp_prompt_queue: [],
+      pending_nudge: nil,
       scrollback: Scrollback.new(),
       offset: 0
     }
@@ -422,7 +429,8 @@ defmodule Legend.Core.Agents.SessionServer do
       status: state.session.status,
       transport: :acp,
       items: items,
-      cursor: cursor
+      cursor: cursor,
+      busy: Legend.Core.Acp.Connection.turn_in_flight?(state.acp)
     }
 
     {:reply, {:ok, reply}, state}
@@ -471,9 +479,7 @@ defmodule Legend.Core.Agents.SessionServer do
   def handle_cast({:acp_prompt, _content}, %{exited?: true} = state), do: {:noreply, state}
 
   def handle_cast({:acp_prompt, content}, %{transport: :acp} = state) do
-    {acp, frames} = Legend.Core.Acp.Connection.prompt(state.acp, content)
-    Enum.each(frames, &state.runtime.write(state.handle, &1))
-    {:noreply, %{state | acp: acp}}
+    {:noreply, send_or_queue_prompt(state, content)}
   end
 
   def handle_cast(:acp_cancel, %{exited?: true} = state), do: {:noreply, state}
@@ -528,8 +534,13 @@ defmodule Legend.Core.Agents.SessionServer do
   def handle_info({:runtime_output, data}, %{transport: :acp} = state) do
     {acp, items, replies, effects} = Legend.Core.Acp.Connection.handle_bytes(state.acp, data)
     Enum.each(replies, &state.runtime.write(state.handle, &1))
-    state = Enum.reduce(effects, %{state | acp: acp}, &apply_effect/2)
-    state = Enum.reduce(items, state, &append_acp_item(&2, &1))
+    # I5: items FIRST, then effects. When a single pipe read carries both the
+    # final agent_message_chunk and the session/prompt stopReason response, the
+    # message item must land with a LOWER seq than the {:turn} item the response
+    # emits. Reducing effects first would invert that ordering. Non-item effects
+    # (:conversation_id, :load_capable) are order-insensitive.
+    state = Enum.reduce(items, %{state | acp: acp}, &append_acp_item(&2, &1))
+    state = Enum.reduce(effects, state, &apply_effect/2)
     {:noreply, state}
   end
 
@@ -563,12 +574,39 @@ defmodule Legend.Core.Agents.SessionServer do
 
   # ACP has no PTY — deliver the inbox knock as a real prompt frame (the body is
   # still pulled via read_messages; this is just the "you have mail" nudge).
+  # NEVER send a session/prompt mid-turn: that would corrupt the live turn and
+  # double-drive the agent. Always surface a UI item; send now only if idle and
+  # the handshake has captured a session id, otherwise defer to post-turn.
   def handle_info(:nudge_flush, %{transport: :acp} = state) do
     from = state.nudge_froms |> MapSet.to_list() |> Enum.sort() |> Enum.join(", ")
-    line = Terminal.nudge_line(state.harness, state.nudge_count, from)
-    {acp, frames} = Legend.Core.Acp.Connection.prompt(state.acp, line)
-    Enum.each(frames, &state.runtime.write(state.handle, &1))
-    {:noreply, reset_nudge(%{state | acp: acp})}
+    count = state.nudge_count
+    line = Terminal.nudge_line(state.harness, count, from)
+
+    # Upsert a structured unread item (stable id "nudge") so the human sees it
+    # without spamming the timeline — it reflects the latest unread state.
+    state =
+      append_acp_item(state, %{
+        "id" => "nudge",
+        "type" => "nudge",
+        "text" => line,
+        "count" => count,
+        "from" => from
+      })
+
+    state =
+      cond do
+        # SI-5: a prompt with a null sessionId must never be sent — and never
+        # send mid-turn. In both cases defer the (coalesced) line to post-turn.
+        Legend.Core.Acp.Connection.turn_in_flight?(state.acp) or state.acp.session_id == nil ->
+          %{state | pending_nudge: line}
+
+        true ->
+          {acp, frames} = Legend.Core.Acp.Connection.prompt(state.acp, line)
+          Enum.each(frames, &state.runtime.write(state.handle, &1))
+          %{state | acp: acp}
+      end
+
+    {:noreply, reset_nudge(state)}
   end
 
   def handle_info(:nudge_flush, state) do
@@ -654,16 +692,49 @@ defmodule Legend.Core.Agents.SessionServer do
   # A finished turn (agent answered session/prompt with a stopReason) becomes a
   # timeline item so live clients flip their busy flag off and reattachers see it
   # in the snapshot. Use the connection's current turn counter for a stable id.
+  # Then flush ONE pending prompt — a queued user prompt first, else a deferred
+  # nudge line — to keep the one-turn-at-a-time invariant.
   defp apply_effect({:turn, stop}, state) do
-    append_acp_item(state, %{
+    state
+    |> append_acp_item(%{
       "id" => "turn-#{state.acp.turn}",
       "type" => "turn",
       "stop_reason" => stop
     })
+    |> flush_after_turn()
   end
 
   # Defensive: an unknown future effect must not crash the session.
   defp apply_effect(_effect, state), do: state
+
+  # One-turn-at-a-time gate for ACP prompts. Mid-turn prompts queue (FIFO) and
+  # drain one per turn-complete via flush_after_turn/1; otherwise send now.
+  defp send_or_queue_prompt(state, content) do
+    if Legend.Core.Acp.Connection.turn_in_flight?(state.acp) do
+      %{state | acp_prompt_queue: state.acp_prompt_queue ++ [content]}
+    else
+      {acp, frames} = Legend.Core.Acp.Connection.prompt(state.acp, content)
+      Enum.each(frames, &state.runtime.write(state.handle, &1))
+      %{state | acp: acp}
+    end
+  end
+
+  # Post-turn drain: send at most ONE prompt (one turn at a time). Prefer a
+  # queued user prompt; otherwise wake the agent with a deferred nudge line.
+  defp flush_after_turn(%{acp_prompt_queue: [content | rest]} = state) do
+    {acp, frames} = Legend.Core.Acp.Connection.prompt(state.acp, content)
+    Enum.each(frames, &state.runtime.write(state.handle, &1))
+    %{state | acp: acp, acp_prompt_queue: rest}
+  end
+
+  defp flush_after_turn(%{acp_prompt_queue: [], pending_nudge: line} = state)
+       when is_binary(line) do
+    {acp, frames} = Legend.Core.Acp.Connection.prompt(state.acp, line)
+    Enum.each(frames, &state.runtime.write(state.handle, &1))
+    %{state | acp: acp, pending_nudge: nil}
+  end
+
+  defp flush_after_turn(state), do: state
 
   defp reset_nudge(state) do
     %{state | nudge_count: 0, nudge_froms: MapSet.new(), nudge_timer: nil}

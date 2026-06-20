@@ -70,6 +70,9 @@ defmodule LegendWeb.SessionChannelAcpTest do
     assert reply.transport == "acp"
     assert is_list(reply.items)
     assert is_integer(reply.cursor)
+    # The join reply seeds the client's busy state authoritatively. No turn is
+    # in flight right after the handshake, so busy is false.
+    assert reply.busy == false
     # No terminal scrollback on an ACP join.
     refute Map.has_key?(reply, :buffer)
 
@@ -79,6 +82,19 @@ defmodule LegendWeb.SessionChannelAcpTest do
     decoded = Jason.decode!(frame)
     assert decoded["method"] == "session/prompt"
     assert decoded["params"]["prompt"] == [%{"type" => "text", "text" => "hello"}]
+  end
+
+  test "acp join reply reports busy: true while a turn is in flight" do
+    {:ok, s} = Agents.start_session(@valid)
+    drive_handshake(s.id)
+
+    # Put a turn in flight (no stopReason response yet).
+    SessionServer.acp_prompt(s.id, "go")
+    assert_receive {:test_runtime, :write, frame}, 1_000
+    assert Jason.decode!(frame)["method"] == "session/prompt"
+
+    {reply, _socket} = join!(s)
+    assert reply.busy == true
   end
 
   test "cancel/set_mode/permission forward to the runtime as ACP frames" do
@@ -110,26 +126,59 @@ defmodule LegendWeb.SessionChannelAcpTest do
     # Defense in depth: bad content that bypasses the channel guard (e.g. an
     # internal caller) still must not crash the restart: :temporary SessionServer —
     # to_blocks/1's catch-all returns [] (an empty prompt) instead of raising a
-    # FunctionClauseError that would permanently kill the session.
+    # FunctionClauseError that would permanently kill the session. The first such
+    # prompt is sent now (it puts a turn in flight); the rest queue behind it.
     for bad <- [42, %{"oops" => true}, true, nil] do
       SessionServer.acp_prompt(s.id, bad)
     end
 
-    # A subsequent valid prompt still flows through — proves the server survived.
+    # The first bad prompt was sent immediately (empty prompt frame) — capture
+    # its request id so we can complete its turn and drain the server-side queue.
+    bad_id = first_prompt_id()
+
+    # A subsequent valid prompt is queued behind the in-flight turn.
     SessionServer.acp_prompt(s.id, "still here")
 
-    assert eventually_receives_prompt([%{"type" => "text", "text" => "still here"}])
+    # Complete each in-flight turn; the one-turn-at-a-time queue drains one prompt
+    # per completion until the valid prompt flows through — proving the server
+    # survived the bad content and the queue is intact.
+    assert drain_until_prompt(s.id, bad_id, [%{"type" => "text", "text" => "still here"}])
     assert Process.alive?(server)
   end
 
-  # Drain session/prompt frames until one carries the expected prompt blocks
-  # (the bad-content prompts emit empty-prompt frames first).
-  defp eventually_receives_prompt(expected) do
+  # The id of the first session/prompt frame on the wire.
+  defp first_prompt_id do
     receive do
       {:test_runtime, :write, frame} ->
         case Jason.decode!(frame) do
-          %{"method" => "session/prompt", "params" => %{"prompt" => ^expected}} -> true
-          _ -> eventually_receives_prompt(expected)
+          %{"method" => "session/prompt", "id" => id} -> id
+          _ -> first_prompt_id()
+        end
+    after
+      1_000 -> flunk("no session/prompt frame observed")
+    end
+  end
+
+  # Complete the in-flight turn (by id), then either accept the next prompt as
+  # the expected one or recurse — draining the FIFO queue one turn at a time.
+  defp drain_until_prompt(id, in_flight_id, expected) do
+    send_output(id, %{
+      "jsonrpc" => "2.0",
+      "id" => in_flight_id,
+      "result" => %{"stopReason" => "end_turn"}
+    })
+
+    receive do
+      {:test_runtime, :write, frame} ->
+        case Jason.decode!(frame) do
+          %{"method" => "session/prompt", "params" => %{"prompt" => ^expected}} ->
+            true
+
+          %{"method" => "session/prompt", "id" => next_id} ->
+            drain_until_prompt(id, next_id, expected)
+
+          _ ->
+            drain_until_prompt(id, in_flight_id, expected)
         end
     after
       1_000 -> false
