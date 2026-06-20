@@ -179,6 +179,59 @@ defmodule Legend.Core.Agents.SessionServerAcpTest do
     assert Jason.decode!(p2)["params"]["prompt"] == [%{"type" => "text", "text" => "second"}]
   end
 
+  test "the mid-turn prompt queue is bounded: overflow prompts are dropped and logged" do
+    import ExUnit.CaptureLog
+
+    {:ok, s} =
+      Agents.start_session(%{harness_id: "claude_code", runtime_id: "test", transport: :acp})
+
+    drive_to_live(s.id)
+    drain_test_runtime_writes()
+
+    cap = 50
+
+    # Start turn 1 (sent immediately — does not occupy the queue).
+    Agents.SessionServer.acp_prompt(s.id, "first")
+    assert_receive {:test_runtime, :write, p1}, 1_000
+    d1 = Jason.decode!(p1)
+    assert d1["params"]["prompt"] == [%{"type" => "text", "text" => "first"}]
+    first_id = d1["id"]
+
+    # Fill the queue to exactly the cap while the turn is in flight. None of
+    # these write a frame (one-turn-at-a-time).
+    for i <- 1..cap do
+      Agents.SessionServer.acp_prompt(s.id, "queued-#{i}")
+    end
+
+    refute_receive {:test_runtime, :write, _}, 200
+
+    # Two more prompts past the cap must be dropped (newest-first) and logged —
+    # the queue must not grow beyond the cap.
+    log =
+      capture_log(fn ->
+        Agents.SessionServer.acp_prompt(s.id, "overflow-1")
+        Agents.SessionServer.acp_prompt(s.id, "overflow-2")
+        # Let the casts be processed before reading state/log.
+        _ = :sys.get_state(Agents.SessionServer.whereis(s.id))
+      end)
+
+    assert log =~ "prompt queue full"
+
+    state = :sys.get_state(Agents.SessionServer.whereis(s.id))
+    assert length(state.acp_prompt_queue) == cap
+
+    # The dropped (newest) prompts must never be sent. Complete the turn → the
+    # FIRST queued prompt (oldest accepted) flushes; the overflow ones are gone.
+    send_output(s.id, %{
+      "jsonrpc" => "2.0",
+      "id" => first_id,
+      "result" => %{"stopReason" => "end_turn"}
+    })
+
+    assert_receive {:test_runtime, :write, p2}, 1_000
+    assert Jason.decode!(p2)["params"]["prompt"] == [%{"type" => "text", "text" => "queued-1"}]
+  end
+
   test "a mid-turn nudge defers: a UI nudge item appears but no prompt is sent until the turn ends" do
     {:ok, s} =
       Agents.start_session(%{harness_id: "claude_code", runtime_id: "test", transport: :acp})

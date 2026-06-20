@@ -33,6 +33,12 @@ defmodule Legend.Core.Agents.SessionServer do
   # {:session_ready} effect; if it fires first the session is marked :failed.
   @acp_handshake_timeout_ms Application.compile_env(:legend, :acp_handshake_timeout_ms, 30_000)
 
+  # Cap on the server-side mid-turn prompt queue (drained one-per-turn). If
+  # prompts arrive faster than turns complete the queue would grow without
+  # bound; at the cap the NEWEST (incoming) prompt is dropped — already-accepted
+  # prompts keep their order — and the drop is logged for observability.
+  @max_acp_prompt_queue 50
+
   ## Client API
 
   def start_session(%Agents.Session{} = session, mode \\ :fresh) do
@@ -764,10 +770,20 @@ defmodule Legend.Core.Agents.SessionServer do
   defp apply_effect(_effect, state), do: state
 
   # One-turn-at-a-time gate for ACP prompts. Mid-turn prompts queue (FIFO) and
-  # drain one per turn-complete via flush_after_turn/1; otherwise send now.
+  # drain one per turn-complete via flush_after_turn/1; otherwise send now. The
+  # queue is bounded (@max_acp_prompt_queue): at the cap the incoming prompt is
+  # dropped (newest-first, preserving already-accepted order) and logged.
   defp send_or_queue_prompt(state, content) do
     if Legend.Core.Acp.Connection.turn_in_flight?(state.acp) do
-      %{state | acp_prompt_queue: state.acp_prompt_queue ++ [content]}
+      if length(state.acp_prompt_queue) >= @max_acp_prompt_queue do
+        Logger.warning(
+          "[acp #{state.session.id}] prompt queue full (#{@max_acp_prompt_queue}); dropping incoming prompt"
+        )
+
+        state
+      else
+        %{state | acp_prompt_queue: state.acp_prompt_queue ++ [content]}
+      end
     else
       {acp, frames} = Legend.Core.Acp.Connection.prompt(state.acp, content)
       Enum.each(frames, &state.runtime.write(state.handle, &1))
