@@ -86,7 +86,10 @@
 		switchError = '';
 		try {
 			await setTransport(session.id, t);
-			resumeKey += 1; // remount the body against the new transport
+			// No resumeKey bump: when the switch lands, `session.transport` updates
+			// (via the lobby refetch → the session prop) and the {#if} body-swap mounts
+			// the new transport's component fresh. Bumping resumeKey here would remount
+			// the OLD body (against the not-yet-updated transport) — a wrong-transport flash.
 		} catch (e) {
 			switchError = e instanceof Error ? e.message : 'switch failed';
 		} finally {
