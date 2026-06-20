@@ -15,7 +15,7 @@ defmodule Legend.Harnesses.Hermes do
       id: "hermes",
       name: "Hermes",
       description: "Hermes agent CLI",
-      kind: :terminal
+      transports: [:terminal]
     }
   end
 

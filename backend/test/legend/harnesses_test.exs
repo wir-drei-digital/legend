@@ -10,7 +10,7 @@ defmodule Legend.HarnessesTest do
   end
 
   test "claude_code definition and default command" do
-    assert %Legend.Core.Harness.Definition{id: "claude_code", kind: :terminal} =
+    assert %Legend.Core.Harness.Definition{id: "claude_code", transports: [:acp, :terminal]} =
              Legend.Harnesses.ClaudeCode.definition()
 
     assert %CommandSpec{cmd: "claude", args: [], io: :pty, env: env} =
@@ -20,7 +20,7 @@ defmodule Legend.HarnessesTest do
   end
 
   test "hermes definition and default command" do
-    assert %Legend.Core.Harness.Definition{id: "hermes", kind: :terminal} =
+    assert %Legend.Core.Harness.Definition{id: "hermes", transports: [:terminal]} =
              Legend.Harnesses.Hermes.definition()
 
     assert %CommandSpec{cmd: "hermes", args: []} = Legend.Harnesses.Hermes.build_command(%{})
@@ -207,7 +207,7 @@ defmodule Legend.HarnessesTest do
           do: %Legend.Core.Harness.Definition{
             id: "with_setup",
             name: "With Setup",
-            kind: :terminal
+            transports: [:terminal]
           }
 
         @impl Legend.Core.Harness

@@ -10,7 +10,7 @@ defmodule Legend.RegistryTest do
         id: "fake",
         name: "Fake",
         description: "test harness",
-        kind: :terminal
+        transports: [:terminal]
       }
     end
   end
@@ -38,7 +38,7 @@ defmodule Legend.RegistryTest do
     end
 
     test "list/0 returns definitions" do
-      assert [%Legend.Core.Harness.Definition{id: "fake", kind: :terminal}] =
+      assert [%Legend.Core.Harness.Definition{id: "fake", transports: [:terminal]}] =
                Legend.Core.Harness.Registry.list()
     end
 

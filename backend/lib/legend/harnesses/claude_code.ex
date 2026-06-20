@@ -14,7 +14,7 @@ defmodule Legend.Harnesses.ClaudeCode do
       id: "claude_code",
       name: "Claude Code",
       description: "Anthropic's agentic coding CLI",
-      kind: :terminal,
+      transports: [:acp, :terminal],
       resumable: true
     }
   end

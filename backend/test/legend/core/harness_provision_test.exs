@@ -7,7 +7,7 @@ defmodule Legend.Core.HarnessProvisionTest do
     defmodule Bare do
       @behaviour Legend.Core.Harness
       def definition,
-        do: %Legend.Core.Harness.Definition{id: "bare", name: "Bare", kind: :terminal}
+        do: %Legend.Core.Harness.Definition{id: "bare", name: "Bare", transports: [:terminal]}
     end
 
     assert Harness.provision_for(Bare) == nil

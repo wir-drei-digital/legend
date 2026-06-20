@@ -1,7 +1,9 @@
 defmodule Legend.Core.Harness do
   @moduledoc """
-  An agent type Legend can run. `kind` determines the transport and UI:
-  `:terminal` (PTY + xterm, implemented), `:acp` and `:native` (reserved).
+  An agent type Legend can run. `transports` lists the transports the harness
+  can speak, in priority order — the first entry is the default transport (a
+  session's active transport lives on the session record). `:terminal`
+  (PTY + xterm, implemented), `:acp` and `:native` (reserved).
   Terminal harnesses additionally implement `Legend.Core.Harness.Terminal`.
 
   Harnesses may export the optional setup callbacks when they need one-time
@@ -11,15 +13,16 @@ defmodule Legend.Core.Harness do
   """
 
   defmodule Definition do
-    @enforce_keys [:id, :name, :kind]
-    defstruct [:id, :name, :kind, description: "", resumable: false]
+    @enforce_keys [:id, :name]
+    defstruct [:id, :name, description: "", resumable: false, transports: [:terminal]]
 
+    @type transport :: :terminal | :acp | :native
     @type t :: %__MODULE__{
             id: String.t(),
             name: String.t(),
             description: String.t(),
-            kind: :terminal | :acp | :native,
-            resumable: boolean()
+            resumable: boolean(),
+            transports: [transport()]
           }
   end
 

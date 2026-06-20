@@ -10,7 +10,10 @@ defmodule LegendWeb.HarnessControllerTest do
 
     claude = Enum.find(harnesses, &(&1["id"] == "claude_code"))
     assert claude["name"] == "Claude Code"
-    assert claude["kind"] == "terminal"
+    assert claude["transports"] == ["acp", "terminal"]
+
+    hermes = Enum.find(harnesses, &(&1["id"] == "hermes"))
+    assert hermes["transports"] == ["terminal"]
   end
 
   test "harness payload includes resumable", %{conn: conn} do
