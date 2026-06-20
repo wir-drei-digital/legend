@@ -150,5 +150,6 @@ Recorded in the specs so today's contracts don't need rework:
 - `docs/superpowers/specs/2026-06-14-sprites-runtime-design.md` — Sprites runtime, Runtime optional callbacks, harness provisioning, `:provisioning`/`runtime_ref`, reattach-to-live (Spec 2a)
 - `docs/superpowers/specs/2026-06-14-sprites-library-messaging-over-tunnel-design.md` — tunnel bring-up, `library_*` MCP tools, SessionServer tunnel wiring + `base_url` MCP rewrite (Spec 2b)
 - `docs/superpowers/specs/2026-06-15-cloud-tunnel-hardening-design.md` — tunnel boundary narrowing (per-session listener, TunnelPlug/TunnelAuth, Legend.Core.MCP), close-on-exit, spawn policy, mux limits, carrier readiness gate, bridge versioning, UI compatibility guard (Spec 3)
+- `docs/superpowers/specs/2026-06-20-acp-rich-sessions-design.md` — ACP (`:acp`) rich sessions: `Definition.transports` replaces `kind`, `session.transport`/`conversation_id`, `Transcript` abstraction + `AcpTimeline`, `Acp.Connection` JSON-RPC codec, SessionServer generalization, live transport switching, in-memory timeline + `session/load`, cloud over `:pipes`, Codex/Gemini (phased)
 - `docs/superpowers/plans/2026-06-15-cloud-tunnel-hardening.md` — implementation plan for Spec 3 (12 tasks, 3 phases)
 - `docs/superpowers/specs/2026-06-10-legend-scaffold-design.md` — original stack/scaffold decisions
