@@ -409,9 +409,22 @@ defmodule Legend.Core.Acp.Connection do
 
   defp cap_output(output) do
     keep = @max_tool_output - byte_size(@tool_output_truncation_marker)
-    tail = binary_part(output, byte_size(output) - keep, keep)
+
+    tail =
+      output
+      |> binary_part(byte_size(output) - keep, keep)
+      |> trim_to_codepoint_boundary()
+
     @tool_output_truncation_marker <> tail
   end
+
+  # Byte-slicing UTF-8 can land mid-codepoint; drop leading continuation bytes
+  # (0b10xxxxxx) so the kept tail starts on a valid boundary and the result is
+  # always valid UTF-8 (and therefore JSON-encodable over the channel).
+  defp trim_to_codepoint_boundary(<<0b10::2, _::6, rest::binary>>),
+    do: trim_to_codepoint_boundary(rest)
+
+  defp trim_to_codepoint_boundary(tail), do: tail
 
   defp plan_entries(nil), do: []
 

@@ -369,7 +369,7 @@ defmodule Legend.Core.Acp.ConnectionTest do
   test "I4: live prompt turn bump is unaffected and resets the boundary flag" do
     state = connected_state()
 
-    # An agent reply on turn 1 (prompt bumps 0 -> 1) ... wait: prompt bumps here.
+    # An agent reply on turn 1 (prompt bumps 0 -> 1).
     {state, [_frame]} = Connection.prompt(state, "go")
 
     {state, [m1], _, _} =
@@ -501,6 +501,48 @@ defmodule Legend.Core.Acp.ConnectionTest do
 
     assert byte_size(item["output"]) <= cap
     # The tail (most recent output) is retained.
+    assert String.ends_with?(item["output"], "tail-marker")
+  end
+
+  test "I9: capped tool output is valid UTF-8 even when the cut straddles a multibyte char" do
+    state = connected_state()
+    cap = Connection.max_tool_output()
+
+    # "→" is a 3-byte UTF-8 char (E2 86 92). Pad so that the kept tail's byte
+    # cut lands in the MIDDLE of one of these chars: a naive binary_part would
+    # then produce an invalid binary that Jason.encode! raises on.
+    multibyte = String.duplicate("→", div(cap, 3) + 1000)
+
+    state =
+      Enum.reduce(1..2, state, fn _i, st ->
+        {st, [_item], _, _} =
+          Connection.handle_bytes(
+            st,
+            update("tool_call_update", %{
+              "toolCallId" => "tc1",
+              "status" => "in_progress",
+              "content" => [%{"type" => "text", "text" => multibyte}]
+            })
+          )
+
+        st
+      end)
+
+    {_state, [item], _, _} =
+      Connection.handle_bytes(
+        state,
+        update("tool_call_update", %{
+          "toolCallId" => "tc1",
+          "status" => "in_progress",
+          "content" => [%{"type" => "text", "text" => "tail-marker"}]
+        })
+      )
+
+    assert byte_size(item["output"]) <= cap
+    # The result must be valid UTF-8...
+    assert String.valid?(item["output"])
+    # ...and therefore encode over the Phoenix channel without raising.
+    assert is_binary(Jason.encode!(item))
     assert String.ends_with?(item["output"], "tail-marker")
   end
 
