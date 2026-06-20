@@ -1,10 +1,17 @@
 defmodule Legend.Core.Agents.SessionServer do
   @moduledoc """
-  One process per live session. Resolves harness -> command spec -> runtime,
-  owns the scrollback buffer, broadcasts output on PubSub topic
-  `session:<id>` as `{:session_output, chunk_offset, data}`, and keeps the
-  session record in sync. Stays alive after runtime exit (status :exited) so
-  scrollback remains viewable until the session is deleted.
+  One process per live session. Resolves harness -> command spec -> runtime and
+  keeps the session record in sync. Stays alive after runtime exit (status
+  :exited) so the snapshot remains viewable until the session is deleted.
+
+  Two transports, branched on `session.transport`:
+
+    * `:terminal` — owns a byte scrollback; broadcasts `{:session_output,
+      chunk_offset, data}` on `session:<id>`; accepts `write`/`resize` casts.
+    * `:acp` — runs the Agent Client Protocol handshake over an `io: :pipes`
+      adapter via `Acp.Connection`; reduces runtime output into render items
+      appended to an `AcpTimeline`; broadcasts `{:session_event, seq, item}`;
+      accepts `acp_prompt`/`acp_cancel`/`acp_set_mode`/`acp_permission` casts.
   """
 
   use GenServer, restart: :temporary
@@ -32,17 +39,31 @@ defmodule Legend.Core.Agents.SessionServer do
   end
 
   @doc """
-  Returns {:ok, %{status, buffer, offset}} or {:error, :not_running}.
+  Returns `{:error, :not_running}`, or `{:ok, snapshot}` whose shape is
+  transport-dependent:
 
-  The returned `offset` is both the byte length of the snapshot and the offset
-  at which live `{:session_output, chunk_offset, data}` chunks resume — channel
-  consumers drop chunks with `chunk_offset < offset`.
+    * terminal — `%{status, transport: :terminal, buffer, offset}`. The `offset`
+      is both the byte length of the snapshot and the offset at which live
+      `{:session_output, chunk_offset, data}` chunks resume — channel consumers
+      drop chunks with `chunk_offset < offset`.
+    * acp — `%{status, transport: :acp, items, cursor}`. `items` is the reduced
+      timeline replay and `cursor` is the seq at which live
+      `{:session_event, seq, item}` broadcasts resume — consumers drop events
+      with `seq <= cursor`.
   """
   def attach(id), do: call(id, :attach)
 
   def write(id, data), do: cast(id, {:write, data})
   def resize(id, cols, rows), do: cast(id, {:resize, cols, rows})
   def stop(id), do: cast(id, :stop)
+
+  # ACP client operations (no-ops on a terminal session).
+  def acp_prompt(id, content), do: cast(id, {:acp_prompt, content})
+  def acp_cancel(id), do: cast(id, :acp_cancel)
+  def acp_set_mode(id, mode), do: cast(id, {:acp_set_mode, mode})
+
+  def acp_permission(id, request_id, option_id),
+    do: cast(id, {:acp_permission, request_id, option_id})
 
   @doc "Terminates the server (and its runtime) if alive. Used by destroy."
   def ensure_stopped(id) do
@@ -102,8 +123,7 @@ defmodule Legend.Core.Agents.SessionServer do
   end
 
   defp launch(session, mode, harness, runtime, caps, tunnel, base_url) do
-    spec = harness.build_command(build_opts(session, mode, caps, base_url))
-    spec = %{spec | env: Map.merge(spec.env, platform_env(session, caps, base_url))}
+    spec = build_spec(session, mode, harness, caps, base_url)
 
     case start_or_attach(runtime, spec, session, mode) do
       {:ok, handle, ref} ->
@@ -113,6 +133,10 @@ defmodule Legend.Core.Agents.SessionServer do
           Notifications.sessions_changed()
           Phoenix.PubSub.subscribe(Legend.PubSub, Signals.Notifications.inbox_topic(session.id))
 
+          # ACP: drive the launch handshake (initialize → session/new|load) by
+          # writing the connection's opening frames to the freshly started pipe.
+          transport_state = start_transport(session, runtime, handle, caps, base_url)
+
           # Catch-up: messages that arrived while this session had no live server
           # (downtime, or sent during :starting) are sitting unread — re-feed them
           # through the normal debounced-nudge path so the agent gets one knock.
@@ -121,19 +145,17 @@ defmodule Legend.Core.Agents.SessionServer do
           end
 
           {:ok,
-           %{
+           Map.merge(transport_state, %{
              session: session,
              harness: harness,
              runtime: runtime,
              handle: handle,
              tunnel: tunnel,
-             scrollback: Scrollback.new(),
-             offset: 0,
              exited?: false,
              nudge_count: 0,
              nudge_froms: MapSet.new(),
              nudge_timer: nil
-           }}
+           })}
         rescue
           e ->
             # The record write failed (e.g. deleted concurrently) — don't leak
@@ -158,6 +180,84 @@ defmodule Legend.Core.Agents.SessionServer do
         Notifications.sessions_changed()
         :ignore
     end
+  end
+
+  # Transport-aware command build. Terminal merges platform_env onto the
+  # harness's CLI spec; ACP spawns the adapter subprocess (io: :pipes) with the
+  # same platform_env — the protocol wiring (cwd/mcpServers/instructions) is
+  # driven generically by Acp.Connection, not via CLI flags.
+  defp build_spec(session, mode, harness, caps, base_url) do
+    case session.transport do
+      :acp ->
+        harness.acp_command(%{env: platform_env(session, caps, base_url)})
+
+      _terminal ->
+        spec = harness.build_command(build_opts(session, mode, caps, base_url))
+        %{spec | env: Map.merge(spec.env, platform_env(session, caps, base_url))}
+    end
+  end
+
+  # Returns the transport-specific slice of process state. For ACP this also
+  # initializes the Acp.Connection and writes its opening frames to the runtime,
+  # and may persist a captured conversation id (none yet at launch). Terminal
+  # keeps the byte scrollback; ACP keeps the reduced-item timeline.
+  defp start_transport(%{transport: :acp} = session, runtime, handle, caps, base_url) do
+    mode = if session.conversation_id, do: :load, else: :new
+
+    {acp, frames} =
+      Legend.Core.Acp.Connection.new(%{
+        cwd: session.cwd,
+        mcp_servers: acp_mcp_servers(session, caps, base_url),
+        mode: mode,
+        conversation_id: session.conversation_id,
+        instructions: if(mode == :new, do: session.instructions)
+      })
+
+    Enum.each(frames, &runtime.write(handle, &1))
+
+    %{
+      transport: :acp,
+      acp: acp,
+      timeline: Legend.Core.Agents.AcpTimeline.new(),
+      scrollback: nil,
+      offset: nil
+    }
+  end
+
+  defp start_transport(_session, _runtime, _handle, _caps, _base_url) do
+    %{
+      transport: :terminal,
+      acp: nil,
+      timeline: nil,
+      scrollback: Scrollback.new(),
+      offset: 0
+    }
+  end
+
+  # ACP mcpServers entry — same loopback http target the terminal path turns into
+  # CLI --mcp-config flags (Phase 1 local: the tunnel base url or the endpoint).
+  defp acp_mcp_servers(%{mcp_token: nil}, _caps, _base_url), do: []
+
+  defp acp_mcp_servers(session, %{library: :api}, base_url) when is_binary(base_url) do
+    [
+      %{
+        "name" => "legend",
+        "type" => "http",
+        "url" => base_url <> "/api/mcp",
+        "headers" => %{"Authorization" => "Bearer #{session.mcp_token}"}
+      }
+    ]
+  end
+
+  defp acp_mcp_servers(session, _caps, _base_url) do
+    [
+      %{
+        "name" => "legend",
+        "type" => "http",
+        "url" => mcp_url(),
+        "headers" => %{"Authorization" => "Bearer #{session.mcp_token}"}
+      }
+    ]
   end
 
   defp fetch_registered(registry, id) do
@@ -303,9 +403,23 @@ defmodule Legend.Core.Agents.SessionServer do
   defp maybe_put(map, key, value), do: Map.put(map, key, value)
 
   @impl true
+  def handle_call(:attach, _from, %{transport: :acp} = state) do
+    {items, cursor} = Legend.Core.Agents.Transcript.snapshot(state.timeline)
+
+    reply = %{
+      status: state.session.status,
+      transport: :acp,
+      items: items,
+      cursor: cursor
+    }
+
+    {:reply, {:ok, reply}, state}
+  end
+
   def handle_call(:attach, _from, state) do
     reply = %{
       status: state.session.status,
+      transport: :terminal,
       buffer: Scrollback.to_binary(state.scrollback),
       offset: state.offset
     }
@@ -316,17 +430,22 @@ defmodule Legend.Core.Agents.SessionServer do
   @impl true
   def handle_cast({:write, _data}, %{exited?: true} = state), do: {:noreply, state}
 
-  def handle_cast({:write, data}, state) do
+  # Raw byte writes are a terminal concept — never inject into an ACP pipe.
+  def handle_cast({:write, data}, %{transport: :terminal} = state) do
     state.runtime.write(state.handle, data)
     {:noreply, state}
   end
 
+  def handle_cast({:write, _data}, state), do: {:noreply, state}
+
   def handle_cast({:resize, _c, _r}, %{exited?: true} = state), do: {:noreply, state}
 
-  def handle_cast({:resize, cols, rows}, state) do
+  def handle_cast({:resize, cols, rows}, %{transport: :terminal} = state) do
     state.runtime.resize(state.handle, cols, rows)
     {:noreply, state}
   end
+
+  def handle_cast({:resize, _c, _r}, state), do: {:noreply, state}
 
   def handle_cast(:stop, %{exited?: true} = state), do: {:noreply, state}
 
@@ -335,7 +454,66 @@ defmodule Legend.Core.Agents.SessionServer do
     {:noreply, state}
   end
 
+  # --- ACP inbound casts (no-ops after exit; ignored on a terminal session) ---
+
+  def handle_cast({:acp_prompt, _content}, %{exited?: true} = state), do: {:noreply, state}
+
+  def handle_cast({:acp_prompt, content}, %{transport: :acp} = state) do
+    {acp, frames} = Legend.Core.Acp.Connection.prompt(state.acp, content)
+    Enum.each(frames, &state.runtime.write(state.handle, &1))
+    {:noreply, %{state | acp: acp}}
+  end
+
+  def handle_cast(:acp_cancel, %{exited?: true} = state), do: {:noreply, state}
+
+  def handle_cast(:acp_cancel, %{transport: :acp} = state) do
+    {acp, frames} = Legend.Core.Acp.Connection.cancel(state.acp)
+    Enum.each(frames, &state.runtime.write(state.handle, &1))
+    {:noreply, %{state | acp: acp}}
+  end
+
+  def handle_cast({:acp_set_mode, _mode}, %{exited?: true} = state), do: {:noreply, state}
+
+  def handle_cast({:acp_set_mode, mode}, %{transport: :acp} = state) do
+    {acp, frames} = Legend.Core.Acp.Connection.set_mode(state.acp, mode)
+    Enum.each(frames, &state.runtime.write(state.handle, &1))
+    {:noreply, %{state | acp: acp}}
+  end
+
+  def handle_cast({:acp_permission, _req, _opt}, %{exited?: true} = state), do: {:noreply, state}
+
+  def handle_cast({:acp_permission, req, opt}, %{transport: :acp} = state) do
+    {acp, frames} = Legend.Core.Acp.Connection.answer_permission(state.acp, req, opt)
+    Enum.each(frames, &state.runtime.write(state.handle, &1))
+
+    # Mark the permission item resolved on the timeline so reattach/late readers
+    # see the decision rather than a pending request.
+    state =
+      append_acp_item(%{state | acp: acp}, %{
+        "id" => req,
+        "type" => "permission",
+        "resolved" => true,
+        "selected" => opt
+      })
+
+    {:noreply, state}
+  end
+
+  # An ACP cast that reached a terminal session (or vice versa) is a no-op.
+  def handle_cast({:acp_prompt, _content}, state), do: {:noreply, state}
+  def handle_cast(:acp_cancel, state), do: {:noreply, state}
+  def handle_cast({:acp_set_mode, _mode}, state), do: {:noreply, state}
+  def handle_cast({:acp_permission, _req, _opt}, state), do: {:noreply, state}
+
   @impl true
+  def handle_info({:runtime_output, data}, %{transport: :acp} = state) do
+    {acp, items, replies, effects} = Legend.Core.Acp.Connection.handle_bytes(state.acp, data)
+    Enum.each(replies, &state.runtime.write(state.handle, &1))
+    state = Enum.reduce(effects, %{state | acp: acp}, &apply_effect/2)
+    state = Enum.reduce(items, state, &append_acp_item(&2, &1))
+    {:noreply, state}
+  end
+
   def handle_info({:runtime_output, data}, state) do
     broadcast(state.session.id, {:session_output, state.offset, data})
 
@@ -363,6 +541,16 @@ defmodule Legend.Core.Agents.SessionServer do
 
   def handle_info(:nudge_flush, %{exited?: true} = state), do: {:noreply, reset_nudge(state)}
   def handle_info(:nudge_flush, %{nudge_count: 0} = state), do: {:noreply, reset_nudge(state)}
+
+  # ACP has no PTY — deliver the inbox knock as a real prompt frame (the body is
+  # still pulled via read_messages; this is just the "you have mail" nudge).
+  def handle_info(:nudge_flush, %{transport: :acp} = state) do
+    from = state.nudge_froms |> MapSet.to_list() |> Enum.sort() |> Enum.join(", ")
+    line = Terminal.nudge_line(state.harness, state.nudge_count, from)
+    {acp, frames} = Legend.Core.Acp.Connection.prompt(state.acp, line)
+    Enum.each(frames, &state.runtime.write(state.handle, &1))
+    {:noreply, reset_nudge(%{state | acp: acp})}
+  end
 
   def handle_info(:nudge_flush, state) do
     from = state.nudge_froms |> MapSet.to_list() |> Enum.sort() |> Enum.join(", ")
@@ -413,6 +601,23 @@ defmodule Legend.Core.Agents.SessionServer do
     maybe_close_tunnel(Map.get(state, :tunnel))
     :ok
   end
+
+  # Append a reduced ACP item to the timeline and broadcast it for live attach.
+  defp append_acp_item(state, item) do
+    {timeline, [item_with_seq]} = Legend.Core.Agents.Transcript.append(state.timeline, item)
+    broadcast(state.session.id, {:session_event, item_with_seq["seq"], item_with_seq})
+    %{state | timeline: timeline}
+  end
+
+  # ACP launch effects: the captured conversation id is the durable handle to
+  # resume this conversation under :load — persist it on the record.
+  defp apply_effect({:conversation_id, cid}, state) do
+    session = Agents.set_session_conversation_id!(state.session, %{conversation_id: cid})
+    %{state | session: session}
+  end
+
+  defp apply_effect({:load_capable, _}, state), do: state
+  defp apply_effect({:turn, _stop}, state), do: state
 
   defp reset_nudge(state) do
     %{state | nudge_count: 0, nudge_froms: MapSet.new(), nudge_timer: nil}

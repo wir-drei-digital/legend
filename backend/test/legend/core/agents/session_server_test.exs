@@ -4,7 +4,10 @@ defmodule Legend.Core.Agents.SessionServerTest do
   alias Legend.Core.Agents
   alias Legend.Core.Agents.SessionServer
 
-  @valid %{harness_id: "claude_code", runtime_id: "test", cwd: "/tmp"}
+  # These tests exercise the TERMINAL transport path (byte scrollback,
+  # {:session_output}, raw write/resize, PTY nudges). claude_code now DEFAULTS to
+  # :acp (Task 3), so pin :terminal to keep the original meaning of these tests.
+  @valid %{harness_id: "claude_code", runtime_id: "test", cwd: "/tmp", transport: :terminal}
 
   setup do
     on_exit(fn ->

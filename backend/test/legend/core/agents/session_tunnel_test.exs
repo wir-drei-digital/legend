@@ -92,11 +92,19 @@ defmodule Legend.Core.Agents.SessionTunnelTest do
   test "a runtime that fails to start closes the tunnel (no leak)" do
     TestRuntime.set_capabilities(%{provisions?: false, library: :api, tunnel: "test_tunnel"})
     # Make the harness emit cmd "fail", which the Test runtime rejects at start.
+    # Override the TERMINAL command + pin :terminal: claude_code now defaults to
+    # :acp (Task 3), whose adapter command isn't the one we're stubbing to fail.
     original = Application.get_env(:legend, :harness_commands, [])
     Application.put_env(:legend, :harness_commands, claude_code: "fail")
     on_exit(fn -> Application.put_env(:legend, :harness_commands, original) end)
 
-    {:ok, s} = Agents.start_session(%{name: "x", harness_id: "claude_code", runtime_id: "test"})
+    {:ok, s} =
+      Agents.start_session(%{
+        name: "x",
+        harness_id: "claude_code",
+        runtime_id: "test",
+        transport: :terminal
+      })
 
     assert_receive {:test_tunnel, :open, _}, 1000
     # The fix: the tunnel opened before start_or_attach, so a start failure must

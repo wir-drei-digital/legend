@@ -1,0 +1,69 @@
+defmodule Legend.Core.Agents.SessionServerAcpTest do
+  use Legend.DataCase, async: false
+  alias Legend.Core.Agents
+  alias Legend.Runtimes.Test, as: TestRuntime
+
+  setup do
+    TestRuntime.subscribe()
+
+    on_exit(fn ->
+      for {_, pid, _, _} <- DynamicSupervisor.which_children(Legend.Core.Agents.SessionSupervisor) do
+        DynamicSupervisor.terminate_child(Legend.Core.Agents.SessionSupervisor, pid)
+      end
+    end)
+
+    :ok
+  end
+
+  test "acp session: handshake, conversation id capture, message broadcast" do
+    {:ok, s} =
+      Agents.start_session(%{harness_id: "claude_code", runtime_id: "test", transport: :acp})
+
+    Phoenix.PubSub.subscribe(Legend.PubSub, "session:#{s.id}")
+
+    # Server wrote the initialize request:
+    assert_receive {:test_runtime, :write, init}, 1_000
+    init_id = Jason.decode!(init)["id"]
+
+    # Reply initialize → server writes session/new
+    send_output(s.id, %{
+      "jsonrpc" => "2.0",
+      "id" => init_id,
+      "result" => %{"protocolVersion" => 1, "agentCapabilities" => %{"loadSession" => true}}
+    })
+
+    assert_receive {:test_runtime, :write, new_req}, 1_000
+    assert Jason.decode!(new_req)["method"] == "session/new"
+
+    # Reply session/new → conversation id persisted
+    new_id = Jason.decode!(new_req)["id"]
+
+    send_output(s.id, %{
+      "jsonrpc" => "2.0",
+      "id" => new_id,
+      "result" => %{"sessionId" => "sess-xyz"}
+    })
+
+    # A message chunk broadcasts an item
+    send_output(s.id, %{
+      "jsonrpc" => "2.0",
+      "method" => "session/update",
+      "params" => %{
+        "sessionId" => "sess-xyz",
+        "update" => %{
+          "sessionUpdate" => "agent_message_chunk",
+          "content" => %{"type" => "text", "text" => "hi"}
+        }
+      }
+    })
+
+    assert_receive {:session_event, _seq, %{"type" => "message", "text" => "hi"}}, 1_000
+
+    assert Agents.get_session!(s.id).conversation_id == "sess-xyz"
+  end
+
+  defp send_output(id, msg) do
+    pid = Legend.Core.Agents.SessionServer.whereis(id)
+    send(pid, {:runtime_output, Jason.encode!(msg) <> "\n"})
+  end
+end

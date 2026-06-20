@@ -4,7 +4,10 @@ defmodule Legend.Core.Agents.SessionLifecycleTest do
   alias Legend.Core.Agents
   alias Legend.Core.Agents.SessionServer
 
-  @valid %{harness_id: "claude_code", runtime_id: "test", cwd: "/tmp"}
+  # claude_code now DEFAULTS to :acp (Task 3); the "failing spawn" test relies on
+  # the terminal command (cmd "fail"), so pin :terminal to keep these tests'
+  # original meaning. The other cases here are transport-agnostic.
+  @valid %{harness_id: "claude_code", runtime_id: "test", cwd: "/tmp", transport: :terminal}
 
   setup do
     Legend.Runtimes.Test.subscribe()

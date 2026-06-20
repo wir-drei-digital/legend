@@ -4,7 +4,10 @@ defmodule LegendWeb.SessionChannelTest do
   alias Legend.Core.Agents
   alias Legend.Core.Agents.SessionServer
 
-  @valid %{harness_id: "claude_code", runtime_id: "test", cwd: "/tmp"}
+  # SessionChannel is the TERMINAL IO surface (base64 scrollback, input/resize).
+  # claude_code now defaults to :acp (Task 3); the ACP channel surface lands in a
+  # later task, so pin :terminal to keep these tests exercising what they test.
+  @valid %{harness_id: "claude_code", runtime_id: "test", cwd: "/tmp", transport: :terminal}
 
   setup do
     Legend.Runtimes.Test.subscribe()
