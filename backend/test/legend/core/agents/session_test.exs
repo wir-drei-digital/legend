@@ -153,6 +153,19 @@ defmodule Legend.Core.Agents.SessionTest do
     end
   end
 
+  describe "transport + conversation_id" do
+    test "start defaults transport from the harness (claude_code → :acp)" do
+      {:ok, s} = Agents.start_session(%{harness_id: "claude_code", runtime_id: "test"})
+      assert s.transport == :acp
+    end
+
+    test "set_session_conversation_id persists the agent handle" do
+      {:ok, s} = Agents.start_session(%{harness_id: "claude_code", runtime_id: "test"})
+      {:ok, s} = Agents.set_session_conversation_id(s, %{conversation_id: "abc-123"})
+      assert s.conversation_id == "abc-123"
+    end
+  end
+
   describe "resume" do
     test "resume from :interrupted restarts the process and clears the run fields" do
       session =

@@ -13,6 +13,7 @@ defmodule Legend.Core.Agents do
         get :read
         post :start
         patch :resume, route: "/:id/resume"
+        patch :set_transport, route: "/:id/transport"
         delete :destroy
       end
     end
@@ -30,6 +31,8 @@ defmodule Legend.Core.Agents do
       define :fail_session, action: :fail
       define :interrupt_session, action: :interrupt
       define :resume_session, action: :resume
+      define :set_session_conversation_id, action: :set_conversation_id
+      define :set_session_transport, action: :set_transport
       define :destroy_session, action: :destroy
     end
   end

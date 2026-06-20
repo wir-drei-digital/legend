@@ -37,7 +37,15 @@ defmodule Legend.Core.Agents.Session do
     end
 
     create :start do
-      accept [:name, :harness_id, :runtime_id, :cwd, :spawned_by_session_id, :instructions]
+      accept [
+        :name,
+        :harness_id,
+        :runtime_id,
+        :cwd,
+        :spawned_by_session_id,
+        :instructions,
+        :transport
+      ]
 
       validate {KnownRegistryId, attribute: :harness_id, registry: Legend.Core.Harness.Registry}
       validate {KnownRegistryId, attribute: :runtime_id, registry: Legend.Core.Runtime.Registry}
@@ -51,6 +59,23 @@ defmodule Legend.Core.Agents.Session do
 
       validate string_length(:name, max: 120) do
         where present(:name)
+      end
+
+      # Default transport from the harness when the picker didn't supply one.
+      # The attribute carries default: :terminal, so a fresh changeset already
+      # reports :terminal — check the action input (params), not the resolved
+      # attribute, to tell "picker chose terminal" from "nobody chose".
+      change fn changeset, _context ->
+        supplied? =
+          Map.has_key?(changeset.params, :transport) or
+            Map.has_key?(changeset.params, "transport")
+
+        if supplied? do
+          changeset
+        else
+          hid = Ash.Changeset.get_attribute(changeset, :harness_id)
+          Ash.Changeset.force_change_attribute(changeset, :transport, default_transport(hid))
+        end
       end
 
       # after_transaction (not after_action): SessionServer.start_session/1
@@ -154,6 +179,42 @@ defmodule Legend.Core.Agents.Session do
              end)
     end
 
+    update :set_conversation_id do
+      require_atomic? false
+      accept [:conversation_id]
+    end
+
+    update :set_transport do
+      require_atomic? false
+      accept [:transport]
+
+      # Relaunch into the same conversation under the new transport, if live.
+      change before_action(fn changeset, _context ->
+               Legend.Core.Agents.SessionServer.ensure_stopped(changeset.data.id)
+               changeset
+             end)
+
+      change after_transaction(fn
+               _changeset, {:ok, session}, _context ->
+                 case Legend.Core.Agents.SessionServer.start_session(session, :resume) do
+                   {:ok, _pid} ->
+                     {:ok, Legend.Core.Agents.get_session!(session.id)}
+
+                   :ignore ->
+                     {:ok, Legend.Core.Agents.get_session!(session.id)}
+
+                   {:error, {:already_started, _}} ->
+                     {:ok, Legend.Core.Agents.get_session!(session.id)}
+
+                   {:error, reason} ->
+                     {:ok, Legend.Core.Agents.fail_session!(session, %{error: inspect(reason)})}
+                 end
+
+               _changeset, {:error, _} = error, _context ->
+                 error
+             end)
+    end
+
     destroy :destroy do
       primary? true
       require_atomic? false
@@ -194,6 +255,17 @@ defmodule Legend.Core.Agents.Session do
     # (e.g. %{"sprite" => name, "exec_id" => id}). nil for runtimes that don't reattach.
     attribute :runtime_ref, :map, public?: true
 
+    attribute :transport, :atom,
+      allow_nil?: false,
+      default: :terminal,
+      public?: true,
+      constraints: [one_of: [:terminal, :acp]]
+
+    # The agent's durable conversation handle. Pinned to the session id for terminal
+    # (--session-id), captured from the adapter for ACP (session/new). nil until the
+    # first launch resolves it.
+    attribute :conversation_id, :string, public?: true
+
     attribute :exit_code, :integer, public?: true
     attribute :error, :string, public?: true
     attribute :started_at, :utc_datetime, public?: true
@@ -212,6 +284,16 @@ defmodule Legend.Core.Agents.Session do
       default: &Legend.Core.Agents.Session.generate_token/0
 
     timestamps public?: true
+  end
+
+  @doc false
+  def default_transport(harness_id) do
+    with {:ok, mod} <- Legend.Core.Harness.Registry.fetch(harness_id),
+         [first | _] <- mod.definition().transports do
+      first
+    else
+      _ -> :terminal
+    end
   end
 
   @doc false
