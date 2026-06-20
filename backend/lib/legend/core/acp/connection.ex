@@ -153,7 +153,87 @@ defmodule Legend.Core.Acp.Connection do
 
   defp maybe_initial_prompt(state), do: {state, [], []}
 
-  # do_prompt/dispatch_incoming defined in Tasks 6 & 7; stub for now:
+  # do_prompt defined in Task 7; stub for now:
   defp do_prompt(state, _text), do: {state, [], []}
+
+  # --- session/update reduction (agent->client notifications) ---
+
+  defp dispatch_incoming(state, %{"method" => "session/update", "params" => %{"update" => u}}) do
+    {state, item} = reduce_update(state, u, u["sessionUpdate"])
+    if item, do: {state, [item], [], []}, else: {state, [], [], []}
+  end
+
   defp dispatch_incoming(state, _msg), do: {state, [], [], []}
+
+  defp reduce_update(state, u, "agent_message_chunk"),
+    do: accumulate(state, "msg-#{state.turn}", "message", %{"role" => "assistant"}, text(u))
+
+  defp reduce_update(state, u, "agent_thought_chunk"),
+    do: accumulate(state, "thought-#{state.turn}", "thought", %{}, text(u))
+
+  defp reduce_update(state, u, "user_message_chunk"),
+    do: accumulate(state, "user-#{state.turn}", "message", %{"role" => "user"}, text(u))
+
+  defp reduce_update(state, u, kind) when kind in ["tool_call", "tool_call_update"] do
+    id = u["toolCallId"]
+    prev = Map.get(state.reduce, id, %{"id" => id, "type" => "tool"})
+
+    item =
+      prev
+      |> merge_present(u, "title")
+      |> merge_present(u, "kind")
+      |> merge_present(u, "status")
+      |> put_tool_content(u["content"])
+
+    {%{state | reduce: Map.put(state.reduce, id, item)}, item}
+  end
+
+  defp reduce_update(state, u, "plan"),
+    do: {state, %{"id" => "plan", "type" => "plan", "entries" => plan_entries(u["entries"])}}
+
+  defp reduce_update(state, u, "available_commands_update"),
+    do:
+      {state,
+       %{"id" => "commands", "type" => "commands", "commands" => u["availableCommands"] || []}}
+
+  defp reduce_update(state, u, "current_mode_update"),
+    do: {state, %{"id" => "mode", "type" => "mode", "mode" => u["currentModeId"]}}
+
+  defp reduce_update(state, _u, _other), do: {state, nil}
+
+  defp accumulate(state, id, type, base, chunk) do
+    prev = Map.get(state.reduce, id, Map.merge(%{"id" => id, "type" => type, "text" => ""}, base))
+    item = %{prev | "text" => prev["text"] <> chunk}
+    {%{state | reduce: Map.put(state.reduce, id, item)}, item}
+  end
+
+  defp text(%{"content" => %{"text" => t}}) when is_binary(t), do: t
+  defp text(_), do: ""
+
+  defp merge_present(item, u, key) do
+    case u[key] do
+      nil -> item
+      v -> Map.put(item, key, v)
+    end
+  end
+
+  defp put_tool_content(item, nil), do: item
+
+  defp put_tool_content(item, content) when is_list(content) do
+    diff = Enum.find(content, &(&1["type"] == "diff"))
+
+    text =
+      content
+      |> Enum.filter(&(&1["type"] in ["content", "text"]))
+      |> Enum.map_join("", &(get_in(&1, ["content", "text"]) || &1["text"] || ""))
+
+    item
+    |> Map.put("diff", diff && Map.take(diff, ["path", "oldText", "newText"]))
+    |> Map.update("output", text, &(&1 <> text))
+  end
+
+  defp plan_entries(nil), do: []
+
+  defp plan_entries(entries),
+    do: Enum.map(entries, &%{"text" => &1["content"] || &1["title"], "status" => &1["status"]})
 end
