@@ -3,6 +3,7 @@ defmodule Legend.Harnesses.ClaudeCode do
 
   @behaviour Legend.Core.Harness
   @behaviour Legend.Core.Harness.Terminal
+  @behaviour Legend.Core.Harness.Acp
 
   alias Legend.Core.Harness.Definition
   alias Legend.Core.Harness.Terminal
@@ -43,6 +44,12 @@ defmodule Legend.Harnesses.ClaudeCode do
       env: Map.merge(%{"TERM" => "xterm-256color"}, opts[:env] || %{}),
       io: :pty
     }
+  end
+
+  @impl Legend.Core.Harness.Acp
+  def acp_command(opts) do
+    [cmd | args] = configured_command(:claude_code_acp, "claude-code-acp")
+    %CommandSpec{cmd: cmd, args: args, env: opts[:env] || %{}, io: :pipes}
   end
 
   defp primer_args(opts) do
