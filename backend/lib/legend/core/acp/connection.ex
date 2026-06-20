@@ -7,16 +7,35 @@ defmodule Legend.Core.Acp.Connection do
 
   @protocol_version 1
 
+  # Cap each tool entry's accumulated "output" so a long-running / chatty tool
+  # cannot grow state.reduce without bound. We keep the TAIL (most recent output
+  # is the most relevant) plus a leading truncation marker. The AcpTimeline holds
+  # the canonical copy by id; this only bounds the per-update reducer working set.
+  @max_tool_output 65_536
+  @tool_output_truncation_marker "…[output truncated]…\n"
+
   defstruct buf: "",
             next_id: 1,
             pending: %{},
             launch: nil,
             turn: 0,
+            # Whether the CURRENT turn has seen any agent-side output yet. Drives
+            # session/load replay turn-boundary detection: a user chunk that
+            # follows agent output begins a new turn (see reduce_update/3).
+            turn_seen_response: false,
             reduce: %{},
             session_id: nil,
             perms: %{}
 
   @type t :: %__MODULE__{}
+
+  @doc "Per-tool accumulated-output byte cap. Exposed for tests/inspection."
+  @spec max_tool_output() :: pos_integer()
+  def max_tool_output, do: @max_tool_output
+
+  @doc "Test/inspection helper: whether a key is present in the reducer map."
+  @spec reduce_has_key?(t(), String.t()) :: boolean()
+  def reduce_has_key?(state, key), do: Map.has_key?(state.reduce, key)
 
   @spec new(map()) :: {t(), [binary()]}
   def new(launch) do
@@ -61,8 +80,18 @@ defmodule Legend.Core.Acp.Connection do
   def prompt(state, content) do
     blocks = to_blocks(content)
     turn = state.turn + 1
-    reduce = Map.drop(state.reduce, ["msg-#{state.turn}", "thought-#{state.turn}"])
-    state = %{state | turn: turn, reduce: reduce}
+    # Drop the prior turn's accumulated conversational entries (bounded growth):
+    # msg-/thought-/user- of the turn we're leaving. Tool entries are pruned on
+    # completion in reduce_update/3. A live prompt starts a fresh turn, so reset
+    # the replay turn-boundary flag too.
+    reduce =
+      Map.drop(state.reduce, [
+        "msg-#{state.turn}",
+        "thought-#{state.turn}",
+        "user-#{state.turn}"
+      ])
+
+    state = %{state | turn: turn, reduce: reduce, turn_seen_response: false}
     frame = prompt_frame(state, blocks)
 
     {%{
@@ -269,16 +298,34 @@ defmodule Legend.Core.Acp.Connection do
 
   defp dispatch_incoming(state, _msg), do: {state, [], [], []}
 
-  defp reduce_update(state, u, "agent_message_chunk"),
-    do: accumulate(state, "msg-#{state.turn}", "message", %{"role" => "assistant"}, text(u))
+  defp reduce_update(state, u, "agent_message_chunk") do
+    state = mark_agent_output(state)
+    accumulate(state, "msg-#{state.turn}", "message", %{"role" => "assistant"}, text(u))
+  end
 
-  defp reduce_update(state, u, "agent_thought_chunk"),
-    do: accumulate(state, "thought-#{state.turn}", "thought", %{}, text(u))
+  defp reduce_update(state, u, "agent_thought_chunk") do
+    state = mark_agent_output(state)
+    accumulate(state, "thought-#{state.turn}", "thought", %{}, text(u))
+  end
 
-  defp reduce_update(state, u, "user_message_chunk"),
-    do: accumulate(state, "user-#{state.turn}", "message", %{"role" => "user"}, text(u))
+  defp reduce_update(state, u, "user_message_chunk") do
+    # Turn-boundary detection (I4): a user message that FOLLOWS agent output in
+    # the notification stream begins a new turn. This is how session/load replay
+    # — which never calls prompt/2 — produces distinct user-N/msg-N per turn.
+    # Consecutive user chunks (no intervening agent output) stay in one turn.
+    # Live is unaffected: an agent doesn't echo our own prompt as user chunks.
+    state =
+      if state.turn_seen_response do
+        %{state | turn: state.turn + 1, turn_seen_response: false}
+      else
+        state
+      end
+
+    accumulate(state, "user-#{state.turn}", "message", %{"role" => "user"}, text(u))
+  end
 
   defp reduce_update(state, u, kind) when kind in ["tool_call", "tool_call_update"] do
+    state = mark_agent_output(state)
     id = u["toolCallId"]
     prev = Map.get(state.reduce, id, %{"id" => id, "type" => "tool"})
 
@@ -289,7 +336,17 @@ defmodule Legend.Core.Acp.Connection do
       |> merge_present(u, "status")
       |> put_tool_content(u["content"])
 
-    {%{state | reduce: Map.put(state.reduce, id, item)}, item}
+    # I9: once a tool reaches a terminal status, drop it from the working set
+    # AFTER emitting the final item. The AcpTimeline holds the canonical copy by
+    # id; a later stray update just rebuilds a bare base entry (acceptable).
+    reduce =
+      if item["status"] in ["completed", "failed"] do
+        Map.delete(state.reduce, id)
+      else
+        Map.put(state.reduce, id, item)
+      end
+
+    {%{state | reduce: reduce}, item}
   end
 
   defp reduce_update(state, u, "plan"),
@@ -304,6 +361,10 @@ defmodule Legend.Core.Acp.Connection do
     do: {state, %{"id" => "mode", "type" => "mode", "mode" => u["currentModeId"]}}
 
   defp reduce_update(state, _u, _other), do: {state, nil}
+
+  # Record that the current turn has produced agent-side output, so the next
+  # user_message_chunk during session/load replay opens a new turn (I4).
+  defp mark_agent_output(state), do: %{state | turn_seen_response: true}
 
   defp accumulate(state, id, type, base, chunk) do
     prev = Map.get(state.reduce, id, Map.merge(%{"id" => id, "type" => type, "text" => ""}, base))
@@ -339,7 +400,17 @@ defmodule Legend.Core.Acp.Connection do
         do: Map.put(item, "diff", Map.take(diff, ["path", "oldText", "newText"])),
         else: item
     end)
-    |> Map.update("output", text, &(&1 <> text))
+    |> Map.update("output", cap_output(text), &cap_output(&1 <> text))
+  end
+
+  # Bound accumulated tool output to @max_tool_output bytes, keeping the tail
+  # (most recent output) behind a leading truncation marker (I9).
+  defp cap_output(output) when byte_size(output) <= @max_tool_output, do: output
+
+  defp cap_output(output) do
+    keep = @max_tool_output - byte_size(@tool_output_truncation_marker)
+    tail = binary_part(output, byte_size(output) - keep, keep)
+    @tool_output_truncation_marker <> tail
   end
 
   defp plan_entries(nil), do: []

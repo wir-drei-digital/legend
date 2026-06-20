@@ -30,6 +30,39 @@ defmodule Legend.Core.Acp.ConnectionTest do
     state
   end
 
+  # Drive new/1 through initialize + session/load so the connection is ready to
+  # reduce replayed history (session/update notifications), as on resume.
+  defp loaded_state do
+    {state, [init]} =
+      Connection.new(%{
+        cwd: "/tmp",
+        mcp_servers: [],
+        mode: :load,
+        conversation_id: "sess-resumed"
+      })
+
+    init_id = Jason.decode!(init)["id"]
+
+    {state, _, _, _} =
+      Connection.handle_bytes(
+        state,
+        Jason.encode!(%{
+          "jsonrpc" => "2.0",
+          "id" => init_id,
+          "result" => %{"protocolVersion" => 1, "agentCapabilities" => %{"loadSession" => true}}
+        }) <> "\n"
+      )
+
+    # session/load response (no sessionId in the result).
+    {state, _, _, _} =
+      Connection.handle_bytes(
+        state,
+        Jason.encode!(%{"jsonrpc" => "2.0", "id" => 2, "result" => %{}}) <> "\n"
+      )
+
+    state
+  end
+
   defp update(kind, fields) do
     Jason.encode!(%{
       "jsonrpc" => "2.0",
@@ -273,5 +306,225 @@ defmodule Legend.Core.Acp.ConnectionTest do
     assert decoded["id"] == 99
     assert decoded["result"]["outcome"]["outcome"] == "selected"
     assert decoded["result"]["outcome"]["optionId"] == "allow"
+  end
+
+  # --- I4: per-turn discrimination on session/load replay ---
+
+  test "I4: session/load replay splits multi-turn history into distinct per-turn items" do
+    state = loaded_state()
+
+    # Replayed history: turn 0 (user A, agent A), turn 1 (user B, agent B).
+    stream =
+      update("user_message_chunk", %{"content" => %{"type" => "text", "text" => "ask A"}}) <>
+        update("agent_message_chunk", %{"content" => %{"type" => "text", "text" => "reply A"}}) <>
+        update("user_message_chunk", %{"content" => %{"type" => "text", "text" => "ask B"}}) <>
+        update("agent_message_chunk", %{"content" => %{"type" => "text", "text" => "reply B"}})
+
+    {_state, items, _replies, _effects} = Connection.handle_bytes(state, stream)
+
+    # The last item per id is the accumulated one; collect final state by id.
+    by_id =
+      Enum.reduce(items, %{}, fn item, acc -> Map.put(acc, item["id"], item) end)
+
+    assert by_id["user-0"]["text"] == "ask A"
+    assert by_id["msg-0"]["text"] == "reply A"
+    assert by_id["user-1"]["text"] == "ask B"
+    assert by_id["msg-1"]["text"] == "reply B"
+    # Exactly four distinct conversational items — not one collapsed pair.
+    assert map_size(Map.take(by_id, ["user-0", "msg-0", "user-1", "msg-1"])) == 4
+  end
+
+  test "I4: consecutive user chunks with no intervening agent output stay in one turn" do
+    state = loaded_state()
+
+    {state, [u1], _, _} =
+      Connection.handle_bytes(
+        state,
+        update("user_message_chunk", %{"content" => %{"type" => "text", "text" => "part 1 "}})
+      )
+
+    {_state, [u2], _, _} =
+      Connection.handle_bytes(
+        state,
+        update("user_message_chunk", %{"content" => %{"type" => "text", "text" => "part 2"}})
+      )
+
+    assert u1["id"] == "user-0"
+    assert u2["id"] == "user-0" and u2["text"] == "part 1 part 2"
+  end
+
+  test "I4: a tool_call counts as agent output for the next user turn boundary" do
+    state = loaded_state()
+
+    stream =
+      update("tool_call", %{"toolCallId" => "tc1", "status" => "completed"}) <>
+        update("user_message_chunk", %{"content" => %{"type" => "text", "text" => "next"}})
+
+    {_state, items, _replies, _effects} = Connection.handle_bytes(state, stream)
+    user = Enum.find(items, &(&1["type"] == "message" and &1["role"] == "user"))
+    # Tool output bumped turn_seen_response, so the user message starts turn 1.
+    assert user["id"] == "user-1"
+  end
+
+  test "I4: live prompt turn bump is unaffected and resets the boundary flag" do
+    state = connected_state()
+
+    # An agent reply on turn 1 (prompt bumps 0 -> 1) ... wait: prompt bumps here.
+    {state, [_frame]} = Connection.prompt(state, "go")
+
+    {state, [m1], _, _} =
+      Connection.handle_bytes(
+        state,
+        update("agent_message_chunk", %{"content" => %{"type" => "text", "text" => "answer 1"}})
+      )
+
+    assert m1["id"] == "msg-1"
+
+    # Second live prompt -> turn 2; its reply must land on msg-2, not collapse.
+    {state, [_frame2]} = Connection.prompt(state, "again")
+
+    {_state, [m2], _, _} =
+      Connection.handle_bytes(
+        state,
+        update("agent_message_chunk", %{"content" => %{"type" => "text", "text" => "answer 2"}})
+      )
+
+    assert m2["id"] == "msg-2" and m2["text"] == "answer 2"
+  end
+
+  # --- I9: bounded reduce-map growth + capped tool output ---
+
+  test "I9: a completed tool_call_update drops its id so a later update starts fresh" do
+    state = connected_state()
+
+    {state, [_t1], _, _} =
+      Connection.handle_bytes(
+        state,
+        update("tool_call", %{
+          "toolCallId" => "tc1",
+          "title" => "Run tests",
+          "status" => "in_progress",
+          "content" => [%{"type" => "text", "text" => "first"}]
+        })
+      )
+
+    {state, [t2], _, _} =
+      Connection.handle_bytes(
+        state,
+        update("tool_call_update", %{
+          "toolCallId" => "tc1",
+          "status" => "completed",
+          "content" => [%{"type" => "text", "text" => " second"}]
+        })
+      )
+
+    # The emitted completed item is still the full merged entry.
+    assert t2["status"] == "completed"
+    assert t2["output"] == "first second"
+    assert t2["title"] == "Run tests"
+
+    # A stray follow-up for the (dropped) completed id rebuilds a bare base entry:
+    # no title carried over, output starts fresh.
+    {_state, [t3], _, _} =
+      Connection.handle_bytes(
+        state,
+        update("tool_call_update", %{
+          "toolCallId" => "tc1",
+          "content" => [%{"type" => "text", "text" => "stray"}]
+        })
+      )
+
+    assert t3["id"] == "tc1"
+    refute Map.has_key?(t3, "title")
+    assert t3["output"] == "stray"
+  end
+
+  test "I9: a failed tool_call_update also drops its id" do
+    state = connected_state()
+
+    {state, [_t1], _, _} =
+      Connection.handle_bytes(
+        state,
+        update("tool_call", %{"toolCallId" => "tc1", "title" => "X", "status" => "in_progress"})
+      )
+
+    {state, [_t2], _, _} =
+      Connection.handle_bytes(
+        state,
+        update("tool_call_update", %{"toolCallId" => "tc1", "status" => "failed"})
+      )
+
+    {_state, [t3], _, _} =
+      Connection.handle_bytes(
+        state,
+        update("tool_call_update", %{
+          "toolCallId" => "tc1",
+          "content" => [%{"type" => "text", "text" => "after-fail"}]
+        })
+      )
+
+    refute Map.has_key?(t3, "title")
+    assert t3["output"] == "after-fail"
+  end
+
+  test "I9: tool output is capped at the configured limit" do
+    state = connected_state()
+    cap = Connection.max_tool_output()
+
+    # Drive several big in_progress chunks (status not completed, so id survives).
+    big = String.duplicate("x", div(cap, 2) + 1000)
+
+    state =
+      Enum.reduce(1..4, state, fn _i, st ->
+        {st, [_item], _, _} =
+          Connection.handle_bytes(
+            st,
+            update("tool_call_update", %{
+              "toolCallId" => "tc1",
+              "status" => "in_progress",
+              "content" => [%{"type" => "text", "text" => big}]
+            })
+          )
+
+        st
+      end)
+
+    {_state, [item], _, _} =
+      Connection.handle_bytes(
+        state,
+        update("tool_call_update", %{
+          "toolCallId" => "tc1",
+          "status" => "in_progress",
+          "content" => [%{"type" => "text", "text" => "tail-marker"}]
+        })
+      )
+
+    assert byte_size(item["output"]) <= cap
+    # The tail (most recent output) is retained.
+    assert String.ends_with?(item["output"], "tail-marker")
+  end
+
+  test "I9: turn-boundary drop clears the previous turn's user item" do
+    state = connected_state()
+
+    # prompt bumps 0 -> 1; accumulate a user item for turn 1.
+    {state, [_frame]} = Connection.prompt(state, "go")
+
+    {state, [u1], _, _} =
+      Connection.handle_bytes(
+        state,
+        update("user_message_chunk", %{"content" => %{"type" => "text", "text" => "turn1 user"}})
+      )
+
+    assert u1["id"] == "user-1"
+
+    # Next prompt bumps 1 -> 2 and must drop user-1 (alongside msg-/thought-).
+    {state, [_frame2]} = Connection.prompt(state, "next")
+
+    # A fresh user chunk on the same id (user-1) would only re-accumulate the
+    # OLD text if it survived the drop; instead it must start empty. We probe by
+    # replaying a user_message_chunk that the reducer would route to turn 2, then
+    # assert the old user-1 entry is gone from reduce by re-creating it cleanly.
+    refute Connection.reduce_has_key?(state, "user-1")
   end
 end
