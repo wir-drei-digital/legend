@@ -177,6 +177,97 @@ defmodule Legend.Core.Agents.SessionTest do
     end
   end
 
+  describe "set_transport" do
+    test "switching an exited session resets the lifecycle fields" do
+      session =
+        Agents.start_session!(%{harness_id: "claude_code", runtime_id: "test", cwd: "/tmp"})
+
+      pid = Legend.Core.Agents.SessionServer.whereis(session.id)
+      send(pid, {:runtime_exit, 1})
+
+      eventually(fn -> Agents.get_session!(session.id).status == :exited end)
+
+      exited = Agents.get_session!(session.id)
+      assert exited.status == :exited
+      assert exited.exit_code == 1
+      assert exited.ended_at
+
+      switched =
+        Agents.set_session_transport!(Agents.get_session!(session.id), %{transport: :acp})
+
+      assert switched.transport == :acp
+      assert switched.status == :running
+      assert switched.exit_code == nil
+      assert switched.error == nil
+      assert switched.ended_at == nil
+    end
+
+    test "switching a failed session resets the lifecycle fields" do
+      session =
+        Agents.start_session!(%{harness_id: "claude_code", runtime_id: "test", cwd: "/tmp"})
+
+      Legend.Core.Agents.SessionServer.ensure_stopped(session.id)
+
+      failed =
+        Agents.fail_session!(Agents.get_session!(session.id), %{error: "spawn failed"})
+
+      assert failed.status == :failed
+      assert failed.error == "spawn failed"
+      assert failed.ended_at
+
+      switched = Agents.set_session_transport!(failed, %{transport: :acp})
+
+      assert switched.transport == :acp
+      assert switched.status == :running
+      assert switched.error == nil
+      assert switched.ended_at == nil
+    end
+
+    test "conversation_id is preserved across a transport switch" do
+      session =
+        Agents.start_session!(%{harness_id: "claude_code", runtime_id: "test", cwd: "/tmp"})
+
+      {:ok, session} =
+        Agents.set_session_conversation_id(session, %{conversation_id: "conv-xyz"})
+
+      Legend.Core.Agents.SessionServer.ensure_stopped(session.id)
+      session = Agents.interrupt_session!(Agents.get_session!(session.id))
+      assert session.conversation_id == "conv-xyz"
+
+      switched = Agents.set_session_transport!(session, %{transport: :terminal})
+
+      assert switched.transport == :terminal
+      assert switched.conversation_id == "conv-xyz"
+    end
+
+    test "rejects an invalid transport value (one_of constraint)" do
+      session =
+        Agents.start_session!(%{harness_id: "claude_code", runtime_id: "test", cwd: "/tmp"})
+
+      assert {:error, %Ash.Error.Invalid{}} =
+               Agents.set_session_transport(session, %{transport: :bogus})
+    end
+
+    test "switching a running session stops the old process and relaunches" do
+      session =
+        Agents.start_session!(%{harness_id: "claude_code", runtime_id: "test", cwd: "/tmp"})
+
+      assert session.transport == :acp
+      old_pid = Legend.Core.Agents.SessionServer.whereis(session.id)
+      assert old_pid
+
+      switched = Agents.set_session_transport!(session, %{transport: :terminal})
+
+      assert switched.transport == :terminal
+      assert switched.status == :running
+
+      new_pid = Legend.Core.Agents.SessionServer.whereis(switched.id)
+      assert new_pid
+      refute new_pid == old_pid
+      refute Process.alive?(old_pid)
+    end
+  end
+
   describe "resume" do
     test "resume from :interrupted restarts the process and clears the run fields" do
       session =

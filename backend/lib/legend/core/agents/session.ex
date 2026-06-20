@@ -188,6 +188,16 @@ defmodule Legend.Core.Agents.Session do
       require_atomic? false
       accept [:transport]
 
+      # Switching transport relaunches the run, so reset the same four lifecycle
+      # fields :resume does — otherwise an :exited/:failed session would surface
+      # as :running while still carrying the finished run's exit_code/error/ended_at.
+      # No ResumableStatus validation: set_transport is intentionally allowed from
+      # more states than :resume (a live :running session can be switched too).
+      change set_attribute(:status, :starting)
+      change set_attribute(:exit_code, nil)
+      change set_attribute(:error, nil)
+      change set_attribute(:ended_at, nil)
+
       # Relaunch into the same conversation under the new transport, if live.
       change before_action(fn changeset, _context ->
                Legend.Core.Agents.SessionServer.ensure_stopped(changeset.data.id)
