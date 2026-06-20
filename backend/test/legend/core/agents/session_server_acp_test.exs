@@ -62,6 +62,50 @@ defmodule Legend.Core.Agents.SessionServerAcpTest do
     assert Agents.get_session!(s.id).conversation_id == "sess-xyz"
   end
 
+  test "acp session: a finished turn broadcasts a turn timeline item" do
+    {:ok, s} =
+      Agents.start_session(%{harness_id: "claude_code", runtime_id: "test", transport: :acp})
+
+    Phoenix.PubSub.subscribe(Legend.PubSub, "session:#{s.id}")
+
+    # Drive the handshake to a live session.
+    assert_receive {:test_runtime, :write, init}, 1_000
+    init_id = Jason.decode!(init)["id"]
+
+    send_output(s.id, %{
+      "jsonrpc" => "2.0",
+      "id" => init_id,
+      "result" => %{"protocolVersion" => 1, "agentCapabilities" => %{"loadSession" => true}}
+    })
+
+    assert_receive {:test_runtime, :write, new_req}, 1_000
+    new_id = Jason.decode!(new_req)["id"]
+
+    send_output(s.id, %{
+      "jsonrpc" => "2.0",
+      "id" => new_id,
+      "result" => %{"sessionId" => "sess-xyz"}
+    })
+
+    drain_test_runtime_writes()
+
+    # Send a prompt and capture the session/prompt frame's request id.
+    Agents.SessionServer.acp_prompt(s.id, "hi")
+    assert_receive {:test_runtime, :write, prompt_req}, 1_000
+    decoded = Jason.decode!(prompt_req)
+    assert decoded["method"] == "session/prompt"
+    prompt_id = decoded["id"]
+
+    # The agent answers the prompt with a stopReason → a turn item broadcasts.
+    send_output(s.id, %{
+      "jsonrpc" => "2.0",
+      "id" => prompt_id,
+      "result" => %{"stopReason" => "end_turn"}
+    })
+
+    assert_receive {:session_event, _seq, %{"type" => "turn", "stop_reason" => "end_turn"}}, 1_000
+  end
+
   test "resume of an acp session loads the captured conversation id" do
     {:ok, s} =
       Agents.start_session(%{harness_id: "claude_code", runtime_id: "test", transport: :acp})

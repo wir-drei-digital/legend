@@ -617,7 +617,20 @@ defmodule Legend.Core.Agents.SessionServer do
   end
 
   defp apply_effect({:load_capable, _}, state), do: state
-  defp apply_effect({:turn, _stop}, state), do: state
+
+  # A finished turn (agent answered session/prompt with a stopReason) becomes a
+  # timeline item so live clients flip their busy flag off and reattachers see it
+  # in the snapshot. Use the connection's current turn counter for a stable id.
+  defp apply_effect({:turn, stop}, state) do
+    append_acp_item(state, %{
+      "id" => "turn-#{state.acp.turn}",
+      "type" => "turn",
+      "stop_reason" => stop
+    })
+  end
+
+  # Defensive: an unknown future effect must not crash the session.
+  defp apply_effect(_effect, state), do: state
 
   defp reset_nudge(state) do
     %{state | nudge_count: 0, nudge_froms: MapSet.new(), nudge_timer: nil}
