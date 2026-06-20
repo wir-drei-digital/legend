@@ -159,6 +159,17 @@ defmodule Legend.Core.Agents.SessionTest do
       assert s.transport == :acp
     end
 
+    test "start honors an explicit transport over the harness default" do
+      {:ok, s} =
+        Agents.start_session(%{
+          harness_id: "claude_code",
+          runtime_id: "test",
+          transport: :terminal
+        })
+
+      assert s.transport == :terminal
+    end
+
     test "set_session_conversation_id persists the agent handle" do
       {:ok, s} = Agents.start_session(%{harness_id: "claude_code", runtime_id: "test"})
       {:ok, s} = Agents.set_session_conversation_id(s, %{conversation_id: "abc-123"})
