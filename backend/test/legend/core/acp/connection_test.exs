@@ -23,7 +23,8 @@ defmodule Legend.Core.Acp.ConnectionTest do
     {state, _, _, _} =
       Connection.handle_bytes(
         state,
-        Jason.encode!(%{"jsonrpc" => "2.0", "id" => 2, "result" => %{"sessionId" => "s"}}) <> "\n"
+        Jason.encode!(%{"jsonrpc" => "2.0", "id" => 2, "result" => %{"sessionId" => "sess-xyz"}}) <>
+          "\n"
       )
 
     state
@@ -145,5 +146,38 @@ defmodule Legend.Core.Acp.ConnectionTest do
     assert t1["id"] == "tc1" and t1["status"] == "in_progress"
     assert t2["id"] == "tc1" and t2["status"] == "completed"
     assert t2["diff"]["newText"] == "b"
+  end
+
+  test "prompt sends session/prompt with the agent session id and bumps the turn" do
+    state = connected_state()
+    {_state, [frame]} = Connection.prompt(state, "do the thing")
+    msg = Jason.decode!(frame)
+    assert msg["method"] == "session/prompt"
+    assert msg["params"]["sessionId"] == "sess-xyz"
+    assert [%{"type" => "text", "text" => "do the thing"}] = msg["params"]["prompt"]
+  end
+
+  test "permission request becomes an item; answer responds to the agent" do
+    state = connected_state()
+
+    req =
+      Jason.encode!(%{
+        "jsonrpc" => "2.0",
+        "id" => 99,
+        "method" => "session/request_permission",
+        "params" => %{
+          "sessionId" => "sess-xyz",
+          "toolCall" => %{"title" => "rm -rf"},
+          "options" => [%{"optionId" => "allow", "name" => "Allow"}]
+        }
+      }) <> "\n"
+
+    {state, [item], _replies, _e} = Connection.handle_bytes(state, req)
+    assert item["type"] == "permission" and item["resolved"] == false
+    {_state, [reply]} = Connection.answer_permission(state, item["id"], "allow")
+    decoded = Jason.decode!(reply)
+    assert decoded["id"] == 99
+    assert decoded["result"]["outcome"]["outcome"] == "selected"
+    assert decoded["result"]["outcome"]["optionId"] == "allow"
   end
 end

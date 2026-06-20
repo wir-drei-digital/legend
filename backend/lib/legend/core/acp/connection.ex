@@ -12,7 +12,9 @@ defmodule Legend.Core.Acp.Connection do
             pending: %{},
             launch: nil,
             turn: 0,
-            reduce: %{}
+            reduce: %{},
+            session_id: nil,
+            perms: %{}
 
   @type t :: %__MODULE__{}
 
@@ -53,6 +55,68 @@ defmodule Legend.Core.Acp.Connection do
     end)
   end
 
+  # --- outbound client->agent operations ---
+
+  @spec prompt(t(), String.t() | [map()]) :: {t(), [binary()]}
+  def prompt(state, content) do
+    blocks = to_blocks(content)
+    turn = state.turn + 1
+    reduce = Map.drop(state.reduce, ["msg-#{state.turn}", "thought-#{state.turn}"])
+    state = %{state | turn: turn, reduce: reduce}
+    frame = prompt_frame(state, blocks)
+
+    {%{
+       state
+       | next_id: state.next_id + 1,
+         pending: Map.put(state.pending, state.next_id, :prompt)
+     }, [frame]}
+  end
+
+  defp prompt_frame(state, blocks) do
+    Jason.encode!(%{
+      "jsonrpc" => "2.0",
+      "id" => state.next_id,
+      "method" => "session/prompt",
+      "params" => %{"sessionId" => state.session_id, "prompt" => blocks}
+    }) <> "\n"
+  end
+
+  defp to_blocks(text) when is_binary(text), do: [%{"type" => "text", "text" => text}]
+  defp to_blocks(blocks) when is_list(blocks), do: blocks
+
+  @spec cancel(t()) :: {t(), [binary()]}
+  def cancel(state),
+    do: {state, [notify("session/cancel", %{"sessionId" => state.session_id})]}
+
+  @spec set_mode(t(), String.t()) :: {t(), [binary()]}
+  def set_mode(state, mode_id) do
+    {state, frame} =
+      request(
+        state,
+        "session/set_mode",
+        %{"sessionId" => state.session_id, "modeId" => mode_id},
+        :set_mode
+      )
+
+    {state, [frame]}
+  end
+
+  @spec answer_permission(t(), String.t(), String.t()) :: {t(), [binary()]}
+  def answer_permission(state, request_id, option_id) do
+    case Map.pop(state.perms, request_id) do
+      {nil, _} ->
+        {state, []}
+
+      {jsonrpc_id, perms} ->
+        reply =
+          response(jsonrpc_id, %{
+            "outcome" => %{"outcome" => "selected", "optionId" => option_id}
+          })
+
+        {%{state | perms: perms}, [reply]}
+    end
+  end
+
   # --- framing helpers ---
 
   defp split_lines(buf) do
@@ -71,12 +135,13 @@ defmodule Legend.Core.Acp.Connection do
     {%{state | next_id: id + 1, pending: Map.put(state.pending, id, tag)}, frame}
   end
 
-  # notify/2 (agent->client notifications) and response/2 (replies to agent->client
-  # requests) are part of this framing block per the design, but have no callers
-  # until Tasks 6 & 7 wire them in. They are added in those tasks alongside their
-  # first use because this project compiles with --warnings-as-errors and Elixir
-  # 1.20 no longer honors @compile {:nowarn_unused_function, ...} for unused
-  # private functions, so an unused helper here would break the build.
+  defp notify(method, params) do
+    Jason.encode!(%{"jsonrpc" => "2.0", "method" => method, "params" => params}) <> "\n"
+  end
+
+  defp response(id, result) do
+    Jason.encode!(%{"jsonrpc" => "2.0", "id" => id, "result" => result}) <> "\n"
+  end
 
   # --- dispatch: responses to our requests ---
 
@@ -129,13 +194,15 @@ defmodule Legend.Core.Acp.Connection do
 
   defp handle_response(state, :session_new, result) do
     cid = result["sessionId"]
+    state = %{state | session_id: cid}
     {state, replies, effects} = maybe_initial_prompt(state)
     {state, [], replies, [{:conversation_id, cid} | effects]}
   end
 
   defp handle_response(state, :session_load, _result) do
+    # session/load has no sessionId in the result — keep the launch conversation_id.
     # History replays as session/update notifications (handled in Task 6).
-    {state, [], [], []}
+    {%{state | session_id: state.launch[:conversation_id]}, [], [], []}
   end
 
   defp handle_response(state, :prompt, result) do
@@ -153,8 +220,29 @@ defmodule Legend.Core.Acp.Connection do
 
   defp maybe_initial_prompt(state), do: {state, [], []}
 
-  # do_prompt defined in Task 7; stub for now:
-  defp do_prompt(state, _text), do: {state, [], []}
+  defp do_prompt(state, text) do
+    {state, frames} = prompt(state, text)
+    {state, frames, []}
+  end
+
+  # --- inbound agent->client requests ---
+
+  defp dispatch_incoming(state, %{
+         "id" => id,
+         "method" => "session/request_permission",
+         "params" => p
+       }) do
+    item = %{
+      "id" => "perm-#{id}",
+      "type" => "permission",
+      "title" => get_in(p, ["toolCall", "title"]) || "Permission request",
+      "command" => get_in(p, ["toolCall", "rawInput", "command"]),
+      "options" => p["options"] || [],
+      "resolved" => false
+    }
+
+    {%{state | perms: Map.put(state.perms, "perm-#{id}", id)}, [item], [], []}
+  end
 
   # --- session/update reduction (agent->client notifications) ---
 
