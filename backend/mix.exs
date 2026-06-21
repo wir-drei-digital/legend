@@ -68,6 +68,9 @@ defmodule Legend.MixProject do
       {:ash_phoenix, "~> 2.0"},
       {:ash, "~> 3.0"},
       {:igniter, "~> 0.6", only: [:dev, :test]},
+      {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
+      {:ex_slop, "~> 0.4", only: [:dev, :test], runtime: false},
+      {:ash_credo, "~> 0.15", only: [:dev, :test], runtime: false},
       {:phoenix, "~> 1.8.3"},
       {:phoenix_ecto, "~> 4.5"},
       {:ecto_sql, "~> 3.13"},
@@ -100,6 +103,8 @@ defmodule Legend.MixProject do
       "ecto.setup": ["ecto.create", "ecto.migrate", "run priv/repo/seeds.exs"],
       "ecto.reset": ["ecto.drop", "ecto.setup"],
       test: ["ash.setup --quiet", "test"],
+      # compile before credo so AshCredo's compiled-module checks don't no-op
+      lint: ["compile", "credo"],
       precommit: ["compile --warnings-as-errors", "deps.unlock --unused", "format", "test"],
       "ash.setup": ["ash.setup", "run priv/repo/seeds.exs"]
     ]
