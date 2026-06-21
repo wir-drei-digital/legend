@@ -1,6 +1,6 @@
 # ACP Rich Sessions — Phase 2 (Cloud / Sprites) Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. **Execute tasks in the order written** — Task 3 (default transport) deliberately precedes Task 4 (provisioning) so the existing provisioning tests keep matching the terminal detect spec.
 
 **Goal:** Run an ACP (rich-UI) Claude Code session on a sprites.dev cloud sandbox — the adapter speaks JSON-RPC over a non-PTY (`:pipes`) WSS exec, reaches the Legend MCP signal bus + library over the existing reverse tunnel, and resumes via `session/load`.
 
@@ -10,40 +10,35 @@
 
 ## Verified facts (live against api.sprites.dev, 2026-06-22)
 
-These are the protocol/environment constants this plan depends on. They were captured by a live throwaway-sprite probe and are the authority for the wire format (the prior `Sprites.Exec` moduledoc documented only `tty=true`).
+These are the protocol/environment constants this plan depends on, captured by a live throwaway-sprite probe (the prior `Sprites.Exec` moduledoc documented only `tty=true`).
 
 **Non-TTY (`tty=false`) exec wire format — Docker-style 1-byte stream-id demux:**
-- Spawn query is identical to the TTY path except `tty=false` (omitting `tty` also yields `tty=false`); `stdin=true&detachable=true` still apply. `rows`/`cols` are irrelevant under `tty=false` (server reports `cols:0,rows:0`).
-- The leading TEXT frames are unchanged: optional `{"type":"debug",...}` lines, then `{"type":"session_info","session_id":"<id>",...,"tty":false}` (same reattach handle).
-- **Output BINARY frames carry a 1-byte stream-id prefix:**
-  - `0x01` + payload → **stdout**
-  - `0x02` + payload → **stderr**
-  - `0x03` + 1 byte → exit-status control frame (the exit code as a byte; redundant with the TEXT exit frame below — ignore it)
+- Spawn query identical to the TTY path except `tty=false` (omitting `tty` also yields `tty=false`); `stdin=true&detachable=true` unchanged. `rows`/`cols` are irrelevant under `tty=false`.
+- Leading TEXT frames unchanged: optional `{"type":"debug",...}` lines, then `{"type":"session_info","session_id":"<id>",...,"tty":false}`.
+- **Output BINARY frames carry a 1-byte stream-id prefix:** `0x01`+payload → **stdout**, `0x02`+payload → **stderr**, `0x03`+byte → exit-status control (redundant with the TEXT exit frame — ignore it).
 - **stdin BINARY frames must be prefixed with `0x00`** (`<<0>> <> data`). Raw (unprefixed) stdin bytes are silently dropped.
-- Exit is ALSO signalled by the existing TEXT frame `{"type":"exit","exit_code":N}` (the path `Sprites.Exec` already handles), followed by WS CLOSE 1000.
-- **TTY mode is unchanged:** BINARY frames are raw terminal bytes with **no** prefix; stdin is raw bytes; this plan must not alter that path.
+- Exit is ALSO signalled by the existing TEXT frame `{"type":"exit","exit_code":N}` (already handled), then WS CLOSE 1000.
+- **TTY mode unchanged:** BINARY frames are raw terminal bytes with no prefix; stdin is raw bytes; this plan must not alter that path.
 
-**Default sprite image (Ubuntu 25.10) toolchain — already present:**
-- `node` v22.20.0, `npm` 11.16.0, `npx` (`/.sprite/bin/npx`), `claude` 2.1.168 (Claude Code).
-- **`claude-code-acp` is MISSING** → install with `npm i -g @zed-industries/claude-code-acp` (detect with `claude-code-acp --version`).
-- Because `claude` is already installed, the existing terminal `provision/0` detect passes with no install on a fresh sprite.
+**Default sprite image (Ubuntu 25.10) toolchain — already present:** `node` v22.20.0, `npm` 11.16.0, `npx`, `claude` 2.1.168. **`claude-code-acp` is MISSING** → install `npm i -g @zed-industries/claude-code-acp` (detect `claude-code-acp --version`). Because `claude` is already installed, the terminal `provision` detect passes with no install on a fresh sprite.
 
 ## Global Constraints
 
-- **Clean over compatibility.** Legend is early-stage with no external consumers; replace signatures outright and migrate all callers rather than adding shims (e.g. `provision/0` → `provision/1`, `default_transport/1` → `default_transport/2`). [[clean-over-compat-early-stage]]
+- **Clean over compatibility.** Replace signatures outright and migrate ALL callers rather than adding shims (`provision/0`→`provision/1`, `default_transport/1`→`default_transport/2`). When you change a function's arity, grep BOTH definers and callers: `grep -rn "<name>" lib/ test/`. [[clean-over-compat-early-stage]]
 - **TTY path is sacred.** The existing `tty=true` exec behavior (terminal sessions, local + cloud) must be byte-for-byte unchanged. All `:pipes` behavior is gated on `spec.io == :pipes` / the session_info `"tty"` field.
-- **No raw bytes into an ACP pipe beyond the protocol.** ACP stdin is JSON-RPC frames written by `Acp.Connection` via `runtime.write/2`; the only transformation `Sprites.Exec` applies is the `<<0>>` stdin stream-id prefix. Agent-controllable strings that reach a PTY are already sanitized at `Terminal.nudge_line/3`; nothing in this plan introduces a new PTY-injection vector.
-- **Registry ids stay strings.** Never `String.to_atom/1` on a harness/runtime/tunnel/transport id sourced from user input.
-- **Auth model = terminal-first, then switch (no stored model credential).** Cloud Claude Code defaults to `:terminal`; the human authenticates once in the PTY; credentials persist in the sprite's `~/.claude`; the user flips to `rich` (ACP `session/load` over the same persisted sprite). Legend stores no model credential.
-- **Provisioning runs on every launch/relaunch** (including the `set_transport` switch), so the ACP adapter is installed lazily when the user first switches a cloud session to rich.
-- **Frontend token discipline:** feature code uses Legend tokens (`text-ink-*`, `bg-shell/app/panel`, `text-micro…title`) + shell primitives; never raw shadcn neutral classes / ad-hoc hex / ad-hoc `text-[Npx]`.
-- **Verification gates:** backend `cd backend && mix precommit` (compile --warnings-as-errors + format + test) must be green before finishing; frontend `cd frontend && bun run check` must be 0 errors / 0 warnings. Live cloud tests are `@tag :live_sprites` and excluded from the default run.
+- **ACP never reattaches; it relaunches + `session/load`.** Per the design, cloud ACP resume is a fresh adapter process replayed via `session/load`, never a PTY-style reattach-to-live. A transport switch always starts a fresh process for the new transport.
+- **No new PTY-injection vector.** ACP stdin is JSON-RPC frames from `Acp.Connection` via `runtime.write/2`; the only transformation `Sprites.Exec` applies is the `<<0>>` stdin prefix. Agent-controllable strings reaching a PTY remain sanitized at `Terminal.nudge_line/3`.
+- **Registry ids stay strings.** Never `String.to_atom/1` on a harness/runtime/tunnel/transport id from user input.
+- **Auth model = terminal-first, then switch (no stored model credential).** Cloud Claude Code defaults to `:terminal`; the human authenticates once in the PTY; credentials persist in the sprite's `~/.claude`; the user flips to `rich` (ACP `session/load`). Legend stores no model credential.
+- **Provisioning runs on every launch/relaunch** (including the `set_transport` switch), so the ACP adapter installs lazily when a cloud session first switches to rich.
+- **Frontend token discipline:** Legend tokens (`text-ink-*`, `bg-shell/app/panel`, `text-micro…title`) + shell primitives; never raw shadcn neutral classes / ad-hoc hex / ad-hoc `text-[Npx]`.
+- **Verification gates:** backend `cd backend && mix precommit` (compile --warnings-as-errors + format + test) green; frontend `cd frontend && bun run check` 0 errors / 0 warnings. Live cloud tests are `@tag :live_sprites`, excluded by default.
 
 ---
 
 ## Task 1: `Sprites.Exec` — `:pipes` wire-format pure helpers
 
-Extract the wire-format decisions into pure, offline-testable functions before touching the GenServer. This keeps the protocol logic unit-tested without a live connection (matching the existing offline `exec_test.exs` pattern).
+Extract the wire-format decisions into pure, offline-testable functions before touching the GenServer.
 
 **Files:**
 - Modify: `backend/lib/legend/sprites/exec.ex`
@@ -52,16 +47,16 @@ Extract the wire-format decisions into pure, offline-testable functions before t
 **Interfaces:**
 - Consumes: `Legend.Core.Runtime.CommandSpec` (`%CommandSpec{io: :pty | :pipes}`).
 - Produces (new public/`@doc false` pure functions on `Legend.Sprites.Exec`):
-  - `spawn_query/2` — now io-aware: a `%CommandSpec{io: :pipes}` yields `tty=false`; `:pty`/default yields `tty=true` (unchanged).
-  - `demux_output/2 :: (binary(), pipes? :: boolean()) -> {:stdout, binary()} | {:stderr, binary()} | {:exit, non_neg_integer()} | :ignore` — splits a BINARY output frame.
-  - `encode_stdin/2 :: (binary(), pipes? :: boolean()) -> binary()` — `pipes?` prefixes `<<0>>`; else passes through.
+  - `spawn_query/2` — io-aware: `io: :pipes` → `tty=false`; `:pty`/default → `tty=true` (unchanged).
+  - `demux_output/2 :: (binary(), pipes? :: boolean()) -> {:stdout, binary()} | {:stderr, binary()} | {:exit, non_neg_integer()} | :ignore`.
+  - `encode_stdin/2 :: (binary(), pipes? :: boolean()) -> binary()` (`pipes?` prefixes `<<0>>`).
 
-- [ ] **Step 1: Write failing tests for the io-aware spawn query**
+- [ ] **Step 1: Write failing tests for the io-aware spawn query + an `io: :pipes` sh spec (SpriteProxy bridge shape)**
 
 Add to `backend/test/legend/sprites/exec_test.exs`:
 
 ```elixir
-test "spawn_query/2 uses tty=false for an :pipes spec" do
+test "spawn_query/2 uses tty=false for a :pipes spec" do
   qs = Exec.spawn_query(%CommandSpec{cmd: "claude-code-acp", io: :pipes}, [])
   assert qs =~ "tty=false"
   refute qs =~ "tty=true"
@@ -76,16 +71,23 @@ test "spawn_query/2 keeps tty=true for a :pty spec (unchanged)" do
   assert qs =~ "rows=30"
   assert qs =~ "cols=100"
 end
+
+# SpriteProxy bridge commands (sprite_proxy.ex sh/1) are io: :pipes — confirm they
+# take the tty=false branch (this is the only offline guard for that regression).
+test "spawn_query/2 yields tty=false for an io: :pipes sh bridge spec" do
+  qs = Exec.spawn_query(%CommandSpec{cmd: "sh", args: ["-c", "pgrep -f x"], io: :pipes}, [])
+  assert qs =~ "tty=false"
+end
 ```
 
 - [ ] **Step 2: Run to verify failure**
 
 Run: `cd backend && mix test test/legend/sprites/exec_test.exs`
-Expected: FAIL (current `spawn_query` hardcodes `tty=true`).
+Expected: FAIL (`spawn_query` hardcodes `tty=true`).
 
 - [ ] **Step 3: Make `spawn_query/2` io-aware**
 
-In `backend/lib/legend/sprites/exec.ex`, change the `fixed` list in `spawn_query/2` so `tty` reflects `spec.io`. The `CommandSpec` struct is already destructured; add `io: io` to the match and compute the flag:
+In `backend/lib/legend/sprites/exec.ex`, add `io` to the match and compute the flag:
 
 ```elixir
 def spawn_query(%CommandSpec{cmd: bin, args: args, io: io}, opts) do
@@ -109,14 +111,12 @@ def spawn_query(%CommandSpec{cmd: bin, args: args, io: io}, opts) do
 end
 ```
 
-- [ ] **Step 4: Run to verify the spawn-query tests pass**
+- [ ] **Step 4: Run the spawn-query tests**
 
 Run: `cd backend && mix test test/legend/sprites/exec_test.exs`
-Expected: PASS (including the pre-existing `tty=true` default test).
+Expected: PASS (incl. the pre-existing `tty=true` default test).
 
 - [ ] **Step 5: Write failing tests for `demux_output/2` and `encode_stdin/2`**
-
-Add to `exec_test.exs`:
 
 ```elixir
 describe "demux_output/2 (pipes mode)" do
@@ -153,9 +153,7 @@ end
 Run: `cd backend && mix test test/legend/sprites/exec_test.exs`
 Expected: FAIL ("function demux_output/2 undefined").
 
-- [ ] **Step 7: Implement the pure helpers**
-
-Add to `backend/lib/legend/sprites/exec.ex` (place near the other public helpers, above the GenServer API):
+- [ ] **Step 7: Implement the pure helpers** (place near the other public helpers, above the GenServer API)
 
 ```elixir
 @doc """
@@ -177,7 +175,7 @@ def encode_stdin(data, true), do: <<0>> <> data
 def encode_stdin(data, false), do: data
 ```
 
-- [ ] **Step 8: Run to verify all Task-1 tests pass**
+- [ ] **Step 8: Run all Task-1 tests**
 
 Run: `cd backend && mix test test/legend/sprites/exec_test.exs`
 Expected: PASS.
@@ -193,19 +191,19 @@ git commit -m "feat(sprites): io-aware spawn query + pipes demux/stdin helpers"
 
 ## Task 2: `Sprites.Exec` — wire the GenServer into `:pipes` mode
 
-Make the live exec process use the Task-1 helpers: track whether this exec is pipes/tty, demux output frames to the right owner message, prefix stdin, and merge stderr into the `run/3` result so provisioning error reporting still works.
+Make the live exec use the Task-1 helpers: track pipes/tty, demux output to the right owner message, prefix stdin, and merge stderr into the `run/3` result so provisioning error reporting still works.
 
 **Files:**
 - Modify: `backend/lib/legend/sprites/exec.ex`
-- Test: `backend/test/legend/sprites/exec_test.exs` (gated live test) and a new offline test for the `run/3` collector.
+- Test: `backend/test/legend/sprites/exec_test.exs`
 
 **Interfaces:**
-- Consumes: `demux_output/2`, `encode_stdin/2`, `spawn_query/2` (Task 1).
-- Produces: the `Legend.Core.Runtime` message contract unchanged for the owner — stdout → `{:runtime_output, bin}`, stderr → `{:runtime_stderr, bin}` (matching `LocalPty :pipes`), exit → `{:runtime_exit, code}`. `start/3`, `attach/3`, `run/3`, `write/2` signatures unchanged.
+- Consumes: `demux_output/2`, `encode_stdin/2` (Task 1).
+- Produces: the `Legend.Core.Runtime` owner contract unchanged — stdout → `{:runtime_output, bin}`, stderr → `{:runtime_stderr, bin}` (matching `LocalPty :pipes`), exit → `{:runtime_exit, code}`. `start/3`, `attach/3`, `run/3`, `write/2` signatures unchanged.
 
-- [ ] **Step 1: Add `pipes?` to the GenServer state, seeded from the spec / session_info**
+- [ ] **Step 1: Add `pipes?` to state, seeded from the spec / session_info**
 
-In `init/1`, seed `pipes?` from the spec's `io` for `:spawn`/`:run` (the spec is `arg`); for `:attach` seed `false` and let session_info override (the `tty` field always arrives before any binary frame). Add `pipes?: false` to the state map and set it:
+In `init/1`, seed `pipes?` from the spec's `io` for `:spawn`/`:run`; for `:attach` seed `false` and rely on the session_info `"tty"` field. Add `pipes?: false` to the state map and set it:
 
 ```elixir
 def init({mode, name, arg, opts}) do
@@ -217,22 +215,16 @@ def init({mode, name, arg, opts}) do
       _ -> match?(%CommandSpec{io: :pipes}, arg)
     end
 
-  state = %{
-    name: name,
-    owner: owner,
-    conn: nil,
-    websocket: nil,
-    ref: nil,
-    exec_id: nil,
-    exited?: false,
-    pipes?: pipes?
-  }
+  state = %{name: name, owner: owner, conn: nil, websocket: nil, ref: nil,
+            exec_id: nil, exited?: false, pipes?: pipes?}
   ...
 ```
 
-- [ ] **Step 2: Capture the authoritative `tty` from `session_info`**
+> Note: ACP execs never attach (guaranteed by Task 5's terminal-only attach gate + relaunch-on-switch), so the `:attach` path is only ever a TTY terminal reattach (`pipes? == false`). The session_info `"tty"` capture in Step 2 keeps this correct even if that ever changes.
 
-In `dispatch_frame/2`'s `session_info` clause, set `pipes?` from the frame's `"tty"` field (authoritative for both spawn and attach):
+- [ ] **Step 2: Capture authoritative `tty` from `session_info`**
+
+In `dispatch_frame/2`'s `session_info` clause, set `pipes?` from the frame's `"tty"` field:
 
 ```elixir
 {:ok, %{"type" => "session_info", "session_id" => id} = info} ->
@@ -241,7 +233,7 @@ In `dispatch_frame/2`'s `session_info` clause, set `pipes?` from the frame's `"t
 
 - [ ] **Step 3: Demux output frames through the owner contract**
 
-Replace the `dispatch_frame({:binary, data}, state)` clause so it routes via `demux_output/2`:
+Replace the `dispatch_frame({:binary, data}, state)` clause:
 
 ```elixir
 defp dispatch_frame({:binary, data}, state) do
@@ -258,11 +250,9 @@ defp dispatch_frame({:binary, data}, state) do
 end
 ```
 
-(`demux_output(data, false)` returns `{:stdout, data}`, so TTY behavior is byte-for-byte unchanged.)
+(`demux_output(data, false)` returns `{:stdout, data}` → TTY behavior byte-for-byte unchanged.)
 
 - [ ] **Step 4: Prefix stdin writes**
-
-Change the write cast to encode stdin per mode:
 
 ```elixir
 def handle_cast({:write, data}, state) do
@@ -272,14 +262,13 @@ end
 
 - [ ] **Step 5: Write a failing offline test for the `run/3` collector merging stderr**
 
-The provisioning error path reports `%{stdout: out}`; under pipes, install errors land on stderr, so `collect_run/3` must accumulate both streams. Add an offline test that drives the collector directly:
+Promote `collect_run/3` to a public `@doc false` function so the test can call it. Add:
 
 ```elixir
 test "collect_run accumulates stdout and stderr into the combined result" do
   parent = self()
   ref = make_ref()
-  collector = spawn(fn -> send(parent, {:started}) ; Legend.Sprites.Exec.collect_run(parent, ref, "") end)
-  assert_receive {:started}
+  collector = spawn(fn -> Legend.Sprites.Exec.collect_run(parent, ref, "") end)
   send(collector, {:runtime_output, "OUT"})
   send(collector, {:runtime_stderr, "ERR"})
   send(collector, {:runtime_exit, 3})
@@ -289,12 +278,10 @@ test "collect_run accumulates stdout and stderr into the combined result" do
 end
 ```
 
-(Promote `collect_run/3` to a public `@doc false` function so the test can call it; it currently is `defp`.)
-
 - [ ] **Step 6: Run to verify failure**
 
 Run: `cd backend && mix test test/legend/sprites/exec_test.exs`
-Expected: FAIL (collector ignores `{:runtime_stderr, _}`).
+Expected: FAIL (collector ignores `{:runtime_stderr, _}`; or `collect_run/3` is private).
 
 - [ ] **Step 7: Update `collect_run/3` to accumulate both streams**
 
@@ -316,22 +303,19 @@ Expected: PASS.
 
 - [ ] **Step 9: Add a gated live test for the pipes exec round-trip (auth-free)**
 
-This exercises the real wire format end-to-end without any model auth (it runs `sh`, not the adapter). Add to `exec_test.exs`:
+Exercises the real wire format end-to-end with no model auth (runs `sh`). Guard on the value `Exec` actually reads (`Application.get_env(:legend, :sprites_token)`), not the bare env var:
 
 ```elixir
 @tag :live_sprites
 test "live: non-TTY exec demuxes stdout/stderr and reports the exit code" do
-  if System.get_env("SPRITES_TOKEN") in [nil, ""], do: flunk("set SPRITES_TOKEN for :live_sprites")
+  if Application.get_env(:legend, :sprites_token) in [nil, ""],
+    do: flunk("set SPRITES_TOKEN (app env :sprites_token) for :live_sprites")
+
   name = "lt-pipes-#{System.system_time(:second)}"
   {:ok, _} = Legend.Sprites.Client.create_sprite(name)
   Process.sleep(3_000)
 
-  spec = %CommandSpec{
-    cmd: "sh",
-    args: ["-c", "printf OUT; printf ERR 1>&2; exit 5"],
-    io: :pipes
-  }
-
+  spec = %CommandSpec{cmd: "sh", args: ["-c", "printf OUT; printf ERR 1>&2; exit 5"], io: :pipes}
   result = Legend.Sprites.Exec.run(name, spec, 60_000)
   Legend.Sprites.Client.delete_sprite(name)
 
@@ -341,15 +325,12 @@ test "live: non-TTY exec demuxes stdout/stderr and reports the exit code" do
 end
 ```
 
-Confirm `:live_sprites` is excluded by default. Check `backend/test/test_helper.exs`; if it does not already `ExUnit.configure(exclude: [:live_sprites])` (or `:live`), add `:live_sprites` to the excludes so `mix test` stays offline. Note the chosen tag name in the commit message.
+Then ensure `:live_sprites` is excluded by default: read `backend/test/test_helper.exs`; it currently has no `exclude`, so add `ExUnit.configure(exclude: [:live_sprites])` (preserving any existing config). Note the tag in the commit message.
 
-- [ ] **Step 10: Run the offline suite (live test excluded) + the live test explicitly**
+- [ ] **Step 10: Run offline (live excluded) + the live test explicitly**
 
-Run (offline): `cd backend && mix test test/legend/sprites/exec_test.exs`
-Expected: PASS, with the live test skipped/excluded.
-
-Run (live, this machine has `SPRITES_TOKEN`): `cd backend && mix test test/legend/sprites/exec_test.exs --only live_sprites`
-Expected: PASS (creates a throwaway sprite, asserts `OUT`/`ERR`/status 5, deletes it).
+Run (offline): `cd backend && mix test test/legend/sprites/exec_test.exs` → PASS, live test excluded.
+Run (live, this machine has the token): `cd backend && mix test test/legend/sprites/exec_test.exs --only live_sprites` → PASS (throwaway sprite asserts OUT/ERR/status 5, deleted).
 
 - [ ] **Step 11: Commit**
 
@@ -360,161 +341,39 @@ git commit -m "feat(sprites): :pipes exec mode (stream-id demux, stdin prefix, s
 
 ---
 
-## Task 3: Transport-aware provisioning (install `claude-code-acp` for cloud ACP)
+## Task 3: Runtime-aware default transport (cloud Claude Code opens in terminal)
 
-A cloud session switching to `:acp` needs the adapter in the sprite. Make the harness `provision` callback transport-aware so ACP launches install `claude-code-acp` while terminal launches keep installing `claude`.
-
-**Files:**
-- Modify: `backend/lib/legend/core/harness.ex` (callback + `provision_for`)
-- Modify: `backend/lib/legend/harnesses/claude_code.ex`
-- Modify: `backend/lib/legend/harnesses/hermes.ex` (only if it implements `provision/0`)
-- Modify: `backend/lib/legend/core/agents/session_server.ex` (`maybe_provision` passes the transport)
-- Test: `backend/test/legend/harnesses/claude_code_test.exs` (create if absent) and `backend/test/legend/core/agents/session_provisioning_test.exs`
-
-**Interfaces:**
-- Consumes: `session.transport` (`:terminal | :acp`).
-- Produces:
-  - `@callback provision(transport :: :terminal | :acp) :: %{detect: CommandSpec.t(), install: CommandSpec.t()} | nil` (replaces `provision/0`).
-  - `Legend.Core.Harness.provision_for(module, transport) :: %{detect, install} | nil`.
-  - `ClaudeCode.provision(:terminal)` → `claude`; `ClaudeCode.provision(:acp)` → `claude-code-acp`.
-
-- [ ] **Step 1: Write the failing harness test**
-
-Create/extend `backend/test/legend/harnesses/claude_code_test.exs`:
-
-```elixir
-defmodule Legend.Harnesses.ClaudeCodeTest do
-  use ExUnit.Case, async: true
-  alias Legend.Harnesses.ClaudeCode
-
-  test "provision/1 targets claude for terminal, claude-code-acp for acp" do
-    term = ClaudeCode.provision(:terminal)
-    assert term.detect.cmd == "claude"
-
-    acp = ClaudeCode.provision(:acp)
-    assert acp.detect.args |> Enum.join(" ") =~ "claude-code-acp" or acp.detect.cmd =~ "claude-code-acp"
-    assert acp.install.args |> Enum.join(" ") =~ "@zed-industries/claude-code-acp"
-    assert acp.install.io == :pipes
-  end
-end
-```
-
-- [ ] **Step 2: Run to verify failure**
-
-Run: `cd backend && mix test test/legend/harnesses/claude_code_test.exs`
-Expected: FAIL (`provision/1` undefined).
-
-- [ ] **Step 3: Update the behaviour**
-
-In `backend/lib/legend/core/harness.ex`, change the callback and helper to take a transport:
-
-```elixir
-@callback provision(transport :: Definition.transport()) ::
-            %{
-              detect: Legend.Core.Runtime.CommandSpec.t(),
-              install: Legend.Core.Runtime.CommandSpec.t()
-            }
-            | nil
-@optional_callbacks setup: 0, apply_setup: 0, provision: 1
-
-@doc "The harness's provision spec for a transport, or nil if it has no installer."
-@spec provision_for(module(), Definition.transport()) ::
-        %{detect: Legend.Core.Runtime.CommandSpec.t(), install: Legend.Core.Runtime.CommandSpec.t()} | nil
-def provision_for(module, transport) do
-  if Code.ensure_loaded?(module) and function_exported?(module, :provision, 1) do
-    module.provision(transport)
-  else
-    nil
-  end
-end
-```
-
-- [ ] **Step 4: Update `ClaudeCode.provision`**
-
-In `backend/lib/legend/harnesses/claude_code.ex`:
-
-```elixir
-@impl Legend.Core.Harness
-def provision(:acp) do
-  %{
-    detect: %CommandSpec{cmd: "claude-code-acp", args: ["--version"], io: :pipes},
-    install: %CommandSpec{
-      cmd: "sh",
-      args: ["-lc", "npm i -g @zed-industries/claude-code-acp"],
-      io: :pipes
-    }
-  }
-end
-
-def provision(_terminal) do
-  %{
-    detect: %CommandSpec{cmd: "claude", args: ["--version"], io: :pipes},
-    install: %CommandSpec{
-      cmd: "sh",
-      args: ["-lc", "curl -fsSL https://claude.ai/install.sh | sh"],
-      io: :pipes
-    }
-  }
-end
-```
-
-- [ ] **Step 5: Update any other `provision/0` implementers**
-
-Run: `cd backend && grep -rn "def provision" lib/`
-For each implementer (e.g. Hermes if present), change `def provision do` → `def provision(_transport) do` (or transport-specific clauses). If a harness only runs terminal, a single `def provision(_transport)` clause is correct.
-
-- [ ] **Step 6: Update `SessionServer.maybe_provision` to pass the transport**
-
-In `backend/lib/legend/core/agents/session_server.ex`, change the `provision_for` call:
-
-```elixir
-case Legend.Core.Harness.provision_for(harness, session.transport) do
-  nil ->
-    {:error, "harness #{session.harness_id} has no installer for this runtime"}
-  %{detect: detect, install: install} ->
-    ...
-end
-```
-
-- [ ] **Step 7: Write/extend the provisioning-dispatch test for the ACP transport**
-
-In `backend/test/legend/core/agents/session_provisioning_test.exs`, add a case that a `transport: :acp` session on a provisioning runtime detects/installs the ACP adapter. Follow the existing pattern (the test runtime captures `exec` calls; assert the detect `CommandSpec` carries `claude-code-acp`). Read the existing test for the exact fake-harness/test-runtime wiring before writing.
-
-- [ ] **Step 8: Run the provisioning + harness tests**
-
-Run: `cd backend && mix test test/legend/harnesses/claude_code_test.exs test/legend/core/agents/session_provisioning_test.exs`
-Expected: PASS.
-
-- [ ] **Step 9: Commit**
-
-```bash
-git add backend/lib/legend/core/harness.ex backend/lib/legend/harnesses/ backend/lib/legend/core/agents/session_server.ex backend/test/legend/harnesses/claude_code_test.exs backend/test/legend/core/agents/session_provisioning_test.exs
-git commit -m "feat(harness): transport-aware provisioning (claude-code-acp for cloud ACP)"
-```
-
----
-
-## Task 4: Runtime-aware default transport (cloud Claude Code opens in terminal)
-
-So the human can authenticate, a provisioning (cloud) runtime defaults a fresh ACP-capable session to `:terminal`; local stays on the harness default (`:acp` for Claude Code).
+So the human can authenticate, a provisioning (cloud) runtime defaults a fresh ACP-capable session to `:terminal`; local stays on the harness default (`:acp` for Claude Code). **This precedes Task 4 so the existing provisioning tests' no-transport sessions default to `:terminal` and keep matching the terminal detect spec.**
 
 **Files:**
 - Modify: `backend/lib/legend/core/agents/session.ex` (`default_transport`, `:start` change)
-- Test: `backend/test/legend/core/agents/session_test.exs` (create if absent; otherwise the closest session-action test)
+- Test: `backend/test/legend/core/agents/session_test.exs`
 
 **Interfaces:**
 - Consumes: `Legend.Core.Runtime.capabilities/1` (`%{provisions?: boolean()}`), harness `transports`.
 - Produces: `default_transport(harness_id, runtime_id) :: :terminal | :acp` (replaces `default_transport/1`).
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 1: Write the failing test — drive the cloud case through the REGISTERED `"test"` runtime**
+
+`sprites` is not registered in `config/test.exs`, so assert against `"test"` with `provisions?: true` set (the existing provisioning-test pattern). Add to `session_test.exs`:
 
 ```elixir
-test "default_transport prefers terminal on a provisioning (cloud) runtime, acp locally" do
+alias Legend.Runtimes.Test, as: TestRuntime
+
+test "default_transport prefers terminal on a provisioning runtime, acp on a local one" do
   alias Legend.Core.Agents.Session
+  on_exit(fn -> Application.delete_env(:legend, :test_runtime_capabilities) end)
+
+  # Local, non-provisioning runtime: harness default (claude_code → :acp).
+  TestRuntime.set_capabilities(%{provisions?: false, library: :path, tunnel: nil})
+  assert Session.default_transport("claude_code", "test") == :acp
   assert Session.default_transport("claude_code", "local_pty") == :acp
-  assert Session.default_transport("claude_code", "sprites") == :terminal
-  # A terminal-only harness is :terminal everywhere.
-  assert Session.default_transport("hermes", "sprites") == :terminal
+
+  # Provisioning (cloud-style) runtime: terminal-first for an ACP-capable harness.
+  TestRuntime.set_capabilities(%{provisions?: true, library: :api, tunnel: nil})
+  assert Session.default_transport("claude_code", "test") == :terminal
+  # A terminal-only harness is :terminal regardless.
+  assert Session.default_transport("hermes", "test") == :terminal
 end
 ```
 
@@ -524,8 +383,6 @@ Run: `cd backend && mix test test/legend/core/agents/session_test.exs`
 Expected: FAIL (`default_transport/2` undefined).
 
 - [ ] **Step 3: Implement `default_transport/2`**
-
-In `backend/lib/legend/core/agents/session.ex`:
 
 ```elixir
 @doc false
@@ -543,9 +400,9 @@ def default_transport(harness_id, runtime_id) do
   end
 end
 
-# A provisioning runtime is a fresh remote box that needs interactive (PTY)
-# first-run auth, so an ACP-capable session starts in :terminal until the human
-# has authenticated; they then switch to :acp on the same persisted sprite.
+# A provisioning runtime is a fresh remote box needing interactive (PTY) first-run
+# auth, so an ACP-capable session starts in :terminal until the human authenticates;
+# they then switch to :acp on the same persisted sprite.
 defp remote_auth_runtime?(runtime_id) do
   case Legend.Core.Runtime.Registry.fetch(runtime_id) do
     {:ok, rmod} -> Legend.Core.Runtime.capabilities(rmod).provisions?
@@ -556,7 +413,7 @@ end
 
 - [ ] **Step 4: Update the `:start` change to pass `runtime_id`**
 
-In the `create :start` action's transport-default change, resolve the runtime id from the changeset (it carries the supplied value or the `"local_pty"` attribute default) and pass it:
+In the `create :start` action's transport-default change:
 
 ```elixir
 hid = Ash.Changeset.get_attribute(changeset, :harness_id)
@@ -569,10 +426,10 @@ Ash.Changeset.force_change_attribute(changeset, :transport, default_transport(hi
 Run: `cd backend && mix test test/legend/core/agents/session_test.exs`
 Expected: PASS.
 
-- [ ] **Step 6: Run the broader session-action tests to confirm no regression**
+- [ ] **Step 6: Run the agents suite — confirm the provisioning-test transport flip is benign**
 
 Run: `cd backend && mix test test/legend/core/agents/`
-Expected: PASS (existing tests that create sessions without a runtime still default to local → `:acp` for Claude Code).
+Expected: PASS. Note: `session_provisioning_test.exs` sets `provisions?: true` and creates claude_code/test sessions with no transport — they now default to `:terminal` (was `:acp`). Provision is still transport-blind (`/0`, claude detect) at this point, so detect/install assertions hold. **If any provisioning/ACP test asserts a transport-specific launch (e.g. `{:test_runtime, :write, init}` for the ACP handshake) and now fails, pin its intended `transport:` explicitly in that test** rather than weakening the default.
 
 - [ ] **Step 7: Commit**
 
@@ -583,90 +440,320 @@ git commit -m "feat(sessions): runtime-aware default transport (cloud opens term
 
 ---
 
-## Task 5: `set_transport` clears `runtime_ref` (cloud switch starts fresh, not attach-to-old-exec)
+## Task 4: Transport-aware provisioning (install `claude-code-acp` for cloud ACP)
 
-On a transport switch, the persisted `runtime_ref` belongs to the OTHER transport's exec session. Because sprites execs are `detachable=true`, the `:resume` relaunch could wrongly reattach to the old (e.g. terminal) exec and feed its bytes into the new transport's decoder. Clearing `runtime_ref` forces the relaunch to start a fresh process for the new transport.
+A cloud session switching to `:acp` needs the adapter in the sprite. Make `provision` transport-aware; migrate ALL `provision_for` callers.
 
 **Files:**
-- Modify: `backend/lib/legend/core/agents/session.ex` (`set_transport` action)
-- Test: `backend/test/legend/core/agents/session_server_acp_test.exs` or `session_reattach_test.exs` (whichever owns transport-switch coverage)
+- Modify: `backend/lib/legend/core/harness.ex` (callback, `provision_for/2`, new `provisionable?/1`)
+- Modify: `backend/lib/legend/harnesses/claude_code.ex`
+- Modify: `backend/lib/legend_web/controllers/harness_controller.ex` (caller migration)
+- Modify: `backend/lib/legend/core/agents/session_server.ex` (`maybe_provision` passes transport)
+- Modify: `backend/test/support/runtimes/test.ex` (detect clause generalization)
+- Test: `backend/test/legend/core/harness_provision_test.exs`, `backend/test/legend/harnesses/claude_code_test.exs` (create), `backend/test/legend/core/agents/session_provisioning_test.exs`, `backend/test/legend_web/controllers/harness_controller_test.exs` (re-verify)
 
 **Interfaces:**
-- Consumes: the `:set_transport` action; `SessionServer.start_or_attach/4` (`:resume` with nil `runtime_ref` → `do_start`).
-- Produces: after `set_transport`, `session.runtime_ref == nil`; the relaunch starts a fresh process and persists a new ref.
+- Consumes: `session.transport`.
+- Produces:
+  - `@callback provision(transport :: :terminal | :acp) :: %{detect, install} | nil` (replaces `provision/0`).
+  - `Legend.Core.Harness.provision_for(module, transport) :: %{detect, install} | nil`.
+  - `Legend.Core.Harness.provisionable?(module) :: boolean()` (transport-independent: does the harness implement `provision/1` at all).
+  - `ClaudeCode.provision(:terminal)` → `claude`; `ClaudeCode.provision(:acp)` → `claude-code-acp`.
 
-- [ ] **Step 1: Write the failing test**
+- [ ] **Step 1: Migrate the migration grep first**
 
-Assert that `set_transport` nils the persisted `runtime_ref`. Drive it on the test runtime (no real sprite):
+Run: `cd backend && grep -rn "provision_for\|def provision\|provisionable" lib/ test/`
+Confirm the callers to migrate: `session_server.ex:312`, `harness_controller.ex:16`, `harness_provision_test.exs` (3 lines). Only `ClaudeCode` defines `provision`.
+
+- [ ] **Step 2: Write the failing harness unit test**
+
+Create `backend/test/legend/harnesses/claude_code_test.exs`:
 
 ```elixir
-test "set_transport clears runtime_ref so the relaunch starts fresh, not attach" do
-  {:ok, s} = Agents.start_session(%{harness_id: "claude_code", runtime_id: "test", transport: :terminal})
-  # Simulate a persisted reattach ref from the first (terminal) launch.
-  {:ok, s} = Agents.set_session_runtime_ref(s, %{"sprite" => s.id, "exec_id" => "old"})
-  {:ok, switched} = Agents.set_transport(s, :acp)
-  assert switched.runtime_ref == nil
+defmodule Legend.Harnesses.ClaudeCodeTest do
+  use ExUnit.Case, async: true
+  alias Legend.Harnesses.ClaudeCode
+
+  test "provision/1 targets claude for terminal, claude-code-acp for acp" do
+    assert ClaudeCode.provision(:terminal).detect.cmd == "claude"
+
+    acp = ClaudeCode.provision(:acp)
+    assert acp.detect.cmd == "claude-code-acp"
+    assert acp.detect.io == :pipes
+    assert Enum.join(acp.install.args, " ") =~ "@zed-industries/claude-code-acp"
+    assert acp.install.io == :pipes
+  end
 end
 ```
 
-If no `set_session_runtime_ref` interface exists, set the ref via the existing `:mark_running` action (`accept [:runtime_ref]`) instead — read `agents.ex` for the available code interfaces before writing the test, and use what is already there.
+- [ ] **Step 3: Run to verify failure**
 
-- [ ] **Step 2: Run to verify failure**
+Run: `cd backend && mix test test/legend/harnesses/claude_code_test.exs`
+Expected: FAIL (`provision/1` undefined).
 
-Run: `cd backend && mix test test/legend/core/agents/session_server_acp_test.exs`
-Expected: FAIL (`runtime_ref` survives the switch).
+- [ ] **Step 4: Update the behaviour + add `provisionable?/1`**
 
-- [ ] **Step 3: Clear `runtime_ref` in the `set_transport` action**
-
-In `backend/lib/legend/core/agents/session.ex`, add to the `update :set_transport` block (alongside the existing `set_attribute` lifecycle resets):
+In `backend/lib/legend/core/harness.ex`:
 
 ```elixir
-# The old runtime_ref belongs to the PRE-switch transport's exec session.
-# sprites execs are detachable, so a :resume relaunch could reattach to that
-# stale exec and feed its bytes into the new transport's decoder. Clear it so
-# start_or_attach falls through to a fresh do_start; the new launch persists a
-# new ref. (LocalPty has no attach/2, so this is a no-op there.)
-change set_attribute(:runtime_ref, nil)
+@callback provision(transport :: Definition.transport()) ::
+            %{detect: Legend.Core.Runtime.CommandSpec.t(), install: Legend.Core.Runtime.CommandSpec.t()} | nil
+@optional_callbacks setup: 0, apply_setup: 0, provision: 1
+
+@doc "The harness's provision spec for a transport, or nil if it has no installer."
+@spec provision_for(module(), Definition.transport()) ::
+        %{detect: Legend.Core.Runtime.CommandSpec.t(), install: Legend.Core.Runtime.CommandSpec.t()} | nil
+def provision_for(module, transport) do
+  if Code.ensure_loaded?(module) and function_exported?(module, :provision, 1) do
+    module.provision(transport)
+  else
+    nil
+  end
+end
+
+@doc "Whether a harness can install itself on a provisioning runtime (transport-independent)."
+@spec provisionable?(module()) :: boolean()
+def provisionable?(module) do
+  Code.ensure_loaded?(module) and function_exported?(module, :provision, 1)
+end
 ```
 
-- [ ] **Step 4: Run the test**
+- [ ] **Step 5: Update `ClaudeCode.provision`**
 
-Run: `cd backend && mix test test/legend/core/agents/session_server_acp_test.exs`
+```elixir
+@impl Legend.Core.Harness
+def provision(:acp) do
+  %{
+    detect: %CommandSpec{cmd: "claude-code-acp", args: ["--version"], io: :pipes},
+    install: %CommandSpec{cmd: "sh", args: ["-lc", "npm i -g @zed-industries/claude-code-acp"], io: :pipes}
+  }
+end
+
+def provision(_terminal) do
+  %{
+    detect: %CommandSpec{cmd: "claude", args: ["--version"], io: :pipes},
+    install: %CommandSpec{cmd: "sh", args: ["-lc", "curl -fsSL https://claude.ai/install.sh | sh"], io: :pipes}
+  }
+end
+```
+
+- [ ] **Step 6: Migrate the production caller (controller) to the transport-independent flag**
+
+In `backend/lib/legend_web/controllers/harness_controller.ex`, replace line 16:
+
+```elixir
+provisionable: Harness.provisionable?(mod),
+```
+
+(The listing has no session transport; `provisionable?` answers "can this harness install itself at all" — the existing `harness_controller_test` assertion `provisionable == true` for claude_code still holds.)
+
+- [ ] **Step 7: Migrate `SessionServer.maybe_provision` to pass the transport**
+
+In `session_server.ex`, change line ~312:
+
+```elixir
+case Legend.Core.Harness.provision_for(harness, session.transport) do
+```
+
+- [ ] **Step 8: Migrate the existing `harness_provision_test.exs`**
+
+Update its arity-1 calls: `Harness.provision_for(Bare, :terminal)` (nil case) and `Harness.provision_for(Legend.Harnesses.ClaudeCode, :terminal)` (still yields the `claude` detect). Keep the assertion `detect.cmd == "claude"`.
+
+- [ ] **Step 9: Generalize the TestRuntime detect clause so the ACP detect is recognized**
+
+In `backend/test/support/runtimes/test.ex`, change the detect clause from `cmd: "claude"` to match any `--version` detect (so `claude-code-acp --version` also notifies `:detect` and honors the `set_detect` override). This is non-breaking — existing `{:test_runtime, :exec, :detect}` assertions still fire:
+
+```elixir
+@impl true
+def exec(_handle, %Legend.Core.Runtime.CommandSpec{args: ["--version"]}) do
+  notify({:test_runtime, :exec, :detect})
+  Application.get_env(:legend, :test_runtime_detect, {:ok, %{stdout: "", status: 1}})
+end
+```
+
+- [ ] **Step 10: Add the ACP-transport provisioning-dispatch test**
+
+In `session_provisioning_test.exs`, following the existing pattern, create a claude_code/test session with `transport: :acp` and `provisions?: true`, and assert the detect dispatches and (default detect = status 1) the install runs with the ACP install command:
+
+```elixir
+test "an acp session provisions the claude-code-acp adapter" do
+  TestRuntime.set_capabilities(%{provisions?: true, library: :api, tunnel: nil})
+  {:ok, _s} = Agents.start_session(%{harness_id: "claude_code", runtime_id: "test", transport: :acp})
+
+  assert_receive {:test_runtime, :exec, :detect}, 1000
+  assert_receive {:test_runtime, :exec, %CommandSpec{cmd: "sh", args: ["-lc", install]}}, 1000
+  assert install =~ "@zed-industries/claude-code-acp"
+end
+```
+
+(Read the existing provisioning test for the exact setup/teardown + alias conventions before writing.)
+
+- [ ] **Step 11: Run the affected suites**
+
+Run: `cd backend && mix test test/legend/harnesses/claude_code_test.exs test/legend/core/harness_provision_test.exs test/legend/core/agents/session_provisioning_test.exs test/legend_web/controllers/harness_controller_test.exs`
 Expected: PASS.
 
-- [ ] **Step 5: Run the full agents suite to confirm switch/resume still behave**
-
-Run: `cd backend && mix test test/legend/core/agents/`
-Expected: PASS (terminal↔acp switch tests, reattach-on-restart tests).
-
-- [ ] **Step 6: Commit**
+- [ ] **Step 12: Commit**
 
 ```bash
-git add backend/lib/legend/core/agents/session.ex backend/test/legend/core/agents/session_server_acp_test.exs
-git commit -m "fix(sessions): clear runtime_ref on transport switch (cloud starts fresh)"
+git add backend/lib/legend/core/harness.ex backend/lib/legend/harnesses/claude_code.ex backend/lib/legend_web/controllers/harness_controller.ex backend/lib/legend/core/agents/session_server.ex backend/test/support/runtimes/test.ex backend/test/legend/harnesses/claude_code_test.exs backend/test/legend/core/harness_provision_test.exs backend/test/legend/core/agents/session_provisioning_test.exs
+git commit -m "feat(harness): transport-aware provisioning (claude-code-acp for cloud ACP)"
+```
+
+---
+
+## Task 5: Cloud ACP resume & transport switch start fresh (never reattach the wrong exec)
+
+Phase 2 makes ACP reachable on a runtime that implements `attach/2` (Sprites) for the first time, exposing two reattach hazards: (a) a same-transport ACP resume after a restart would `attach` to the old, already-initialized adapter exec and then write a fresh `initialize` into it (protocol-invalid); (b) a transport switch's `:resume` relaunch would `attach` to the OTHER transport's detached exec. Fix both by gating attach to terminal-only and giving the switch a dedicated `:switch` launch mode that always starts fresh while resuming the conversation at the protocol layer. **`runtime_ref` is NOT cleared** — it stays valid for teardown (no orphaned-sprite leak) and is overwritten by the fresh launch's new ref.
+
+**Files:**
+- Modify: `backend/lib/legend/core/agents/session_server.ex` (`start_or_attach`, `conversation_mode`, `build_opts`)
+- Modify: `backend/lib/legend/core/agents/session.ex` (`set_transport` → `start_session(session, :switch)`)
+- Test: `backend/test/legend/core/agents/session_reattach_test.exs`, `backend/test/legend/core/agents/session_server_acp_test.exs`
+
+**Interfaces:**
+- Consumes: `SessionServer.start_session/2` (`:fresh | :resume | :switch`).
+- Produces: `:resume` attaches only for `:terminal` sessions; `:switch` always `do_start`s; terminal CLI flags resume the conversation under `:switch` (via `conversation_mode/1`).
+
+- [ ] **Step 1: Pin the EXISTING reattach test to `:terminal` (it tests PTY reattach)**
+
+The existing `session_reattach_test.exs` creates a claude_code/test session with no transport — that resolves to `:acp` (provisions? false), but its intent is terminal reattach-to-live. After the attach gate, ACP won't attach, so pin the transport explicitly. Change line 24:
+
+```elixir
+{:ok, s} = Agents.start_session(%{name: "r", harness_id: "claude_code", runtime_id: "test", transport: :terminal})
+```
+
+(The rest of the test — `mark_session_running!` with a ref, interrupt, resume, `assert_receive {:test_runtime, :attach, ...}` — is unchanged and still asserts terminal reattach.)
+
+- [ ] **Step 2: Write the failing tests for the gate + switch**
+
+Add to `session_server_acp_test.exs` (it already aliases `TestRuntime` and drives claude_code/test ACP sessions):
+
+```elixir
+test "an interrupted ACP session resumes by relaunching (session/load), never attach" do
+  TestRuntime.set_capabilities(%{provisions?: false, library: :api, tunnel: nil})
+  {:ok, s} = Agents.start_session(%{harness_id: "claude_code", runtime_id: "test", transport: :acp})
+  assert_receive {:test_runtime, :start, _spec, _opts}, 1000
+
+  s = Agents.get_session!(s.id)
+  Agents.mark_session_running!(s, %{runtime_ref: %{"sprite" => s.id, "exec_id" => "e1"}})
+  Legend.Core.Agents.SessionServer.ensure_stopped(s.id)
+  {:ok, _} = Agents.interrupt_session(Agents.get_session!(s.id))
+
+  {:ok, _} = Agents.resume_session(Agents.get_session!(s.id))
+  assert_receive {:test_runtime, :start, _spec2, _opts2}, 1000
+  refute_receive {:test_runtime, :attach, _}, 300
+end
+
+test "a transport switch starts a fresh process, never attaching the old transport's exec" do
+  TestRuntime.set_capabilities(%{provisions?: false, library: :api, tunnel: nil})
+  {:ok, s} = Agents.start_session(%{harness_id: "claude_code", runtime_id: "test", transport: :terminal})
+  assert_receive {:test_runtime, :start, _spec, _opts}, 1000
+
+  s = Agents.get_session!(s.id)
+  Agents.mark_session_running!(s, %{runtime_ref: %{"sprite" => s.id, "exec_id" => "term1"}})
+  {:ok, _} = Agents.set_session_transport!(s, %{transport: :acp})
+
+  assert_receive {:test_runtime, :start, _spec2, _opts2}, 1000
+  refute_receive {:test_runtime, :attach, _}, 300
+end
+```
+
+(Use the exact code-interface names: `Agents.mark_session_running!/2`, `Agents.set_session_transport!/2`, `Agents.interrupt_session/1`, `Agents.resume_session/1` — confirmed in `agents.ex`. Read `session_server_acp_test.exs` setup/teardown before adding so capabilities are reset on exit.)
+
+- [ ] **Step 3: Run to verify failure**
+
+Run: `cd backend && mix test test/legend/core/agents/session_server_acp_test.exs`
+Expected: FAIL (ACP resume currently attaches; switch currently uses `:resume` and attaches).
+
+- [ ] **Step 4: Gate the `:resume` attach to terminal + add the `:switch` clause**
+
+In `session_server.ex`:
+
+```elixir
+defp start_or_attach(runtime, spec, session, :resume) do
+  # Attach-to-live is a terminal-only PTY reconnect. ACP resume must relaunch the
+  # adapter and replay via session/load — never reattach to the already-initialized
+  # adapter exec.
+  if session.transport == :terminal and function_exported?(runtime, :attach, 2) and
+       not is_nil(session.runtime_ref) do
+    case runtime.attach(session.runtime_ref, start_opts(session)) do
+      {:ok, handle} -> {:ok, handle, session.runtime_ref}
+      {:error, _} -> do_start(runtime, spec, session)
+    end
+  else
+    do_start(runtime, spec, session)
+  end
+end
+
+# A transport switch always starts a fresh process for the NEW transport (the
+# persisted runtime_ref belongs to the old transport's exec). The conversation is
+# resumed at the protocol layer (terminal --resume / ACP session/load).
+defp start_or_attach(runtime, spec, session, :switch), do: do_start(runtime, spec, session)
+
+defp start_or_attach(runtime, spec, session, _fresh), do: do_start(runtime, spec, session)
+```
+
+- [ ] **Step 5: Normalize the conversation mode for the terminal harness on `:switch`**
+
+The terminal CLI needs `--resume` (not `--session-id`) under a switch. Add a helper and apply it where `build_opts` sets `mode:` (both the `:api` and `:path` clauses):
+
+```elixir
+# A switch resumes the conversation under the new transport (terminal --resume /
+# ACP session/load) but with a fresh process — so the harness sees :resume.
+defp conversation_mode(:switch), do: :resume
+defp conversation_mode(mode), do: mode
+```
+
+In each `build_opts` clause replace `mode: mode` with `mode: conversation_mode(mode)`. (ACP's `start_transport` keys load on `conversation_id`, so it is already correct; only the terminal harness reads `mode`.)
+
+- [ ] **Step 6: Make `set_transport` relaunch with `:switch`**
+
+In `backend/lib/legend/core/agents/session.ex`, in the `update :set_transport` action's `after_transaction`, change the relaunch call:
+
+```elixir
+case Legend.Core.Agents.SessionServer.start_session(session, :switch) do
+```
+
+(Leave the lifecycle resets and `ensure_stopped` before_action as-is. Do NOT clear `runtime_ref` — it must stay valid for teardown; the fresh `do_start` overwrites it with the new transport's ref.)
+
+- [ ] **Step 7: Run the resume + switch + reattach tests**
+
+Run: `cd backend && mix test test/legend/core/agents/session_server_acp_test.exs test/legend/core/agents/session_reattach_test.exs`
+Expected: PASS.
+
+- [ ] **Step 8: Run the full agents suite**
+
+Run: `cd backend && mix test test/legend/core/agents/`
+Expected: PASS.
+
+- [ ] **Step 9: Commit**
+
+```bash
+git add backend/lib/legend/core/agents/session_server.ex backend/lib/legend/core/agents/session.ex backend/test/legend/core/agents/session_server_acp_test.exs backend/test/legend/core/agents/session_reattach_test.exs
+git commit -m "fix(sessions): ACP resume + transport switch start fresh (gate attach to terminal)"
 ```
 
 ---
 
 ## Task 6: Frontend — terminal-first hint for cloud rich-capable sessions
 
-A cloud Claude Code session opens in the Terminal view with the existing `rich ⇄ term` toggle. Add a subtle, dismissible-by-context hint so the user knows to authenticate, then switch to rich. Purely additive; no change to the switch mechanics.
+A cloud Claude Code session opens in Terminal with the existing `rich ⇄ term` toggle. Add a subtle hint so the user knows to authenticate, then switch. Purely additive.
 
 **Files:**
 - Modify: `frontend/src/lib/components/sessions/SessionPane.svelte`
 - Test: `cd frontend && bun run check`
 
 **Interfaces:**
-- Consumes: `session.transport`, `session.runtime_id`, `harness.transports` (already available in `SessionPane`).
-- Produces: a one-line hint rendered above/within the terminal body when `transport === 'terminal'` AND the harness also speaks `'acp'` AND the runtime is a provisioning/cloud runtime.
+- Consumes: `session.transport`, `session.runtime_id`, `harness.transports` (already in `SessionPane`).
 
-- [ ] **Step 1: Determine the cloud signal available on the frontend**
+- [ ] **Step 1: Choose the cloud signal**
 
-Read `frontend/src/lib/sessions.ts` and the runtimes API client. If the frontend already knows a runtime's `provisions?`/capabilities (via `/api/runtimes`), gate the hint on that. If not, gate on `runtime_id !== 'local_pty'` (the simplest correct signal for the current two-runtime set) and leave a `// TODO` noting a capabilities-based gate when more runtimes exist. Pick the approach the existing code best supports; do not add a new endpoint for this hint.
+The runtimes API serializes the Elixir key with a literal `?` (`"provisions?"`), so `capabilities.provisions` (no `?`) reads `undefined` on the frontend. Do NOT rely on it. Gate the hint on `transport === 'terminal'` AND the harness `transports` includes `'acp'` AND `session.runtime_id !== 'local_pty'` (the correct signal for the current runtime set), with a `// TODO: switch to a capabilities-based cloud gate when more runtimes exist`. Read `frontend/src/lib/sessions.ts` to confirm the field names.
 
 - [ ] **Step 2: Add the hint**
 
-In `SessionPane.svelte`, when the body is the Terminal and the harness speaks both transports and the runtime is cloud, render a subtle strip using Legend tokens (e.g. `text-micro text-ink-subtle bg-panel`), with copy like: `Sign in to Claude Code in the terminal, then switch to **rich** for the structured view.` Use the existing transport-toggle handler/label; do not introduce raw shadcn/hex classes.
+In `SessionPane.svelte`, when the body is the Terminal and that gate holds, render a subtle strip with Legend tokens (e.g. `text-micro text-ink-subtle`), copy like: `Sign in to Claude Code in the terminal, then switch to rich for the structured view.` Reuse the existing transport-toggle handler/label; no raw shadcn/hex classes.
 
 - [ ] **Step 3: Run the check**
 
@@ -675,7 +762,7 @@ Expected: 0 errors, 0 warnings.
 
 - [ ] **Step 4: Verify live (CDP click-through)**
 
-Per the user's verification preference, drive Chrome via CDP over a Bun WebSocket (no Playwright) to confirm the hint renders on a cloud session and is absent on a local one. [[frontend-live-verification-cdp]] If a cloud session can't be created without auth, verify the conditional by temporarily forcing the props in the component and confirm the local case shows no hint.
+Drive Chrome via CDP over a Bun WebSocket (no Playwright) to confirm the hint shows for a cloud session and is absent for a local one. If a cloud session can't be created without auth, temporarily force the props to verify the conditional, then confirm the local case shows no hint. [[frontend-live-verification-cdp]]
 
 - [ ] **Step 5: Commit**
 
@@ -686,9 +773,7 @@ git commit -m "feat(fe): terminal-first hint for cloud rich-capable sessions"
 
 ---
 
-## Task 7: Documentation — ARCHITECTURE.md, spec status, ledger
-
-Record the built state and the verified facts so the next reader doesn't re-derive them.
+## Task 7: Documentation — ARCHITECTURE.md, spec status
 
 **Files:**
 - Modify: `docs/ARCHITECTURE.md`
@@ -696,11 +781,11 @@ Record the built state and the verified facts so the next reader doesn't re-deri
 
 - [ ] **Step 1: Update the spec**
 
-In `2026-06-20-acp-rich-sessions-design.md`: mark Phase 2 built; in "Cloud/remote (Phase 2 — additive)" note the `Sprites :pipes` mode is implemented with the verified non-TTY wire format (1-byte stream-id demux: `0x00` stdin, `0x01` stdout, `0x02` stderr, `0x03` exit; `tty=false`). Resolve the relevant "Verify-at-plan-time" unknowns (#4 invocation specifics: `npm i -g @zed-industries/claude-code-acp`; #5 sprite-FS persistence: to be confirmed in the manual bring-up). Record the **terminal-first auth** decision (cloud defaults to `:terminal`; switch to `:acp` after PTY auth; no stored credential).
+Mark Phase 2 built. In "Cloud/remote (Phase 2 — additive)" record the verified non-TTY wire format (1-byte stream-id demux: `0x00` stdin, `0x01` stdout, `0x02` stderr, `0x03` exit; `tty=false`). Resolve verify-at-plan-time #4 (invocation: `npm i -g @zed-industries/claude-code-acp`) and note #5 (sprite-FS conversation persistence) is confirmed in the manual bring-up. Record the **terminal-first auth** decision and that **ACP resume/switch always relaunch + `session/load`** (never reattach).
 
 - [ ] **Step 2: Update ARCHITECTURE.md**
 
-Record: `Sprites.Exec` now has a `:pipes` mode (Docker-style stream-id demux) selected by `CommandSpec.io`; transport-aware provisioning (`provision/1`); runtime-aware default transport; `set_transport` clears `runtime_ref` (cloud switch starts fresh). Keep the spec index in sync. Note the accepted caveat: a transport switch on a cloud runtime leaves the pre-switch exec detached in the sprite until the sprite hibernates/is deleted.
+Record: `Sprites.Exec` `:pipes` mode (Docker-style stream-id demux) selected by `CommandSpec.io`; transport-aware provisioning (`provision/1`, `provisionable?/1`); runtime-aware default transport; the `:switch` launch mode (transport switch starts fresh, conversation resumed at the protocol layer; `:resume` attach gated to terminal). Keep the spec index in sync. **Accepted caveat:** a transport switch on a cloud runtime leaves the pre-switch exec **detached** in the sprite until the sprite hibernates/is deleted — the sprite itself is still torn down on destroy (runtime_ref stays valid; it is not cleared).
 
 - [ ] **Step 3: Commit**
 
@@ -713,19 +798,22 @@ git commit -m "docs(acp): phase 2 cloud built — sprites :pipes, provisioning, 
 
 ## Manual acceptance (live bring-up — needs the user's Claude auth)
 
-Not an automated task; this is the end-to-end confirmation, run by the user on a machine with `SPRITES_TOKEN` and a Claude account:
+Not automated; the end-to-end confirmation, run by the user on a machine with `SPRITES_TOKEN` + a Claude account:
 
-1. New session → harness **Claude Code**, runtime **sprites** → it opens in the **terminal** (`:provisioning` if `claude` ever needs install, then `:running`).
-2. Authenticate in the terminal (`claude` / `claude setup-token`); confirm it persists in the sprite.
-3. Click **rich** → expect `:provisioning` (installs `claude-code-acp`) → ACP handshake → `session/load` repaints the conversation the TUI started.
-4. Verify the agent can call the Legend MCP tools (e.g. `list_agents`, `read_messages`) — confirms the signal bus + library reach the backend over the reverse tunnel from inside the sprite.
+1. New session → harness **Claude Code**, runtime **sprites** → opens in **terminal** (`:provisioning` only if `claude` ever needs install, then `:running`).
+2. Authenticate in the terminal (`claude` / `claude setup-token`); confirm it persists.
+3. Click **rich** → `:provisioning` (installs `claude-code-acp`) → ACP handshake → `session/load` repaints the conversation the TUI started.
+4. The agent can call Legend MCP tools (`list_agents`, `read_messages`) — confirms the signal bus + library reach the backend over the reverse tunnel from inside the sprite.
 5. Close the laptop / restart the backend → resume → confirm `session/load` repaint and continued operation (validates sprite-FS conversation persistence across hibernation, spec open-unknown #5).
-6. Delete the session → sprite is torn down (`get_sprite` 404).
+6. Delete the session → sprite torn down (`get_sprite` 404).
 
-Report any deviation (especially: does `claude-code-acp` authenticate from the persisted `~/.claude` creds, and does cloud `session/load` repaint correctly).
+Report deviations — especially whether `claude-code-acp` authenticates from the persisted `~/.claude` creds and whether cloud `session/load` repaints correctly.
 
 ## Self-review notes
 
-- **TTY path untouched:** every `:pipes` behavior is gated on `spec.io`/the session_info `tty` field; `demux_output(_, false)` and `encode_stdin(_, false)` are identity-for-TTY.
-- **MCP/tunnel/`session/load`:** already wired in `SessionServer` (`acp_mcp_servers/3`, `maybe_open_tunnel`, `start_transport(:acp)` keying load on `conversation_id`) — no new code, exercised by the manual bring-up.
-- **Breakage risk — `Exec.run` now honors `io`:** existing `io: :pipes` callers (`SpriteProxy` bridge commands, provisioning) switch from `tty=true` to `tty=false`; they only consume exit status / combined output, which the stderr-merged `run/3` collector preserves. Covered by the SpriteProxy tests + the offline collector test; confirm `mix precommit` and the `--only live_sprites` run are green.
+- **TTY path untouched:** every `:pipes` behavior is gated on `spec.io`/the session_info `tty` field; `demux_output(_, false)`/`encode_stdin(_, false)` are identity-for-TTY.
+- **MCP/tunnel/`session/load`:** already wired in `SessionServer` (`acp_mcp_servers/3`, `maybe_open_tunnel`, `start_transport(:acp)` keying load on `conversation_id`) — no new code; exercised by the manual bring-up.
+- **`Exec.run` now honors `io`:** existing `io: :pipes` callers (`SpriteProxy` bridge commands, provisioning) switch from `tty=true` to `tty=false`; they consume exit status / combined output, preserved by the stderr-merged `run/3` collector. Real coverage: the offline `spawn_query` tty=false assertion (Task 1) + the `:live_sprites` round-trip (Task 2) + the gated bridge path in the manual bring-up. (The SpriteProxy unit tests are offline and do NOT exercise `Exec.run`.)
+- **No orphaned-sprite leak:** the switch keeps `runtime_ref` (overwritten by the fresh launch; preserved on a failed switch), so `maybe_teardown_runtime` always reaches the sprite on destroy.
+- **Resume/switch correctness:** ACP always relaunches (`:resume` gate + `:switch` → `do_start`); terminal restart-resume still reattaches (`session_reattach_test` pinned to `:terminal`).
+```
