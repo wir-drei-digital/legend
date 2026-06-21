@@ -1,7 +1,7 @@
 # ACP Rich Sessions — Design
 
 **Date:** 2026-06-20
-**Status:** Approved (design)
+**Status:** Phase 1 built; Phase 2 built (cloud/remote ACP)
 **Builds on:** agent sessions PoC (`2026-06-11-agent-sessions-poc-design.md`), agent messaging (`2026-06-12-agent-messaging-design.md`), session resume (`2026-06-12-session-resume-design.md`), the Sprites cloud-runtime + tunnel specs (2026-06-13/14/15)
 
 ## What this is
@@ -161,16 +161,44 @@ Converged design (validated via mockups `acp-surface*.html`):
 - **Composer** is one unit: textarea on top; a context row below with **`＠ Add context`** plus **file/@-mention chips** and **image chips** (→ ACP `resource_link`/`resource` content blocks appended to the prompt), the **mode selector** (`session/set_mode`), and Stop (`session/cancel`) / Send. A subtle **context-info footer** shows cwd, model, and a context-window usage meter; slash commands come from `available_commands_update`.
 - **Transport toggle** (`rich ⇄ term`) in the header, shown only when the harness speaks both.
 
-## Cloud/remote (Phase 2 — additive)
+## Cloud/remote (Phase 2 — built)
 
-`Acp.Connection` runs backend-side on loopback regardless of where the agent runs, so cloud ACP needs exactly one new thing:
+`Acp.Connection` runs backend-side on loopback regardless of where the agent runs. Phase 2 added one new piece and wired the rest together:
 
-- **`Sprites` gains a `:pipes` exec mode** (stdin/stdout over the existing WSS exec carrier, no PTY) — same contract as `LocalPty :pipes`.
+### Sprites `:pipes` exec (live-verified wire format)
 
-Everything else already exists and is transport-agnostic:
+`Sprites.Exec` gained a `:pipes` mode, selected by `CommandSpec.io == :pipes`. When `tty=false` is sent on the spawn query, the sprites WSS exec carrier switches to a **Docker-style 1-byte stream-id multiplexed** binary frame format:
 
-- **MCP signal bus + library** flow through **`session/new mcpServers`** (ACP supports HTTP MCP servers with headers): local → loopback `/api/mcp`; cloud → the tunnel `base_url <> "/api/mcp"` + bearer token — the same `base_url` rewrite already done for terminal. `library: :api` keeps the `library_*` MCP tools; `:path` keeps `LEGEND_LIBRARY`.
-- **Cloud resume = relaunch the adapter in the sprite + `session/load`** (sprite FS persists the conversation across hibernation), so ACP does not need the PTY "reattach-to-live" path — `session/load` is its true-survival analog.
+| byte | stream |
+|---|---|
+| `0x00` | stdin |
+| `0x01` | stdout |
+| `0x02` | stderr |
+| `0x03` | exit-status control (next byte = code) |
+
+`Sprites.Exec.demux_output/2` splits inbound binary frames; `encode_stdin/2` prepends `0x00` on writes. In TTY mode (`pipes? == false`) frames carry raw bytes with no prefix — both functions are identity operations there. The `pipes?` flag is set from `CommandSpec.io` at spawn, and also confirmed from the `session_info` frame's `"tty": false` field on arrival.
+
+`Sprites.Exec.run/3` (used for provisioning detect/install) spawns a non-interactive exec (`:run` mode, no `session_info` await), collects stdout+stderr merged into a single buffer via a dedicated collector process, and returns `{:ok, %{stdout: binary, status: integer}}`. Provisioning commands therefore don't need the PTY to exist first.
+
+### Auth model: terminal-first, then switch to ACP
+
+A cloud Claude Code session defaults to **`:terminal`** transport, not `:acp`, even though `ClaudeCode.definition().transports` lists `:acp` first. The rule (`Session.default_transport/2`): when the runtime's `capabilities.provisions?` is true (a fresh remote sandbox that needs interactive first-run setup), the harness's first transport is overridden to `:terminal`. The user authenticates `claude` interactively in the PTY, then clicks **rich** (the transport toggle) to switch to `:acp`. No stored credential — auth lives in the sprite's persistent `~/.claude` store. This is intentional: no out-of-band token flow is needed.
+
+### ACP resume and transport switch always relaunch
+
+The `:resume` attach gate in `SessionServer.start_or_attach/4` is **terminal-only**: reattach-to-live (`runtime.attach/2`) is skipped unless `session.transport == :terminal`. An ACP resume — or any transport switch — always calls `do_start` and relaunches the adapter. The conversation is resumed at the protocol layer: terminal uses `--resume <conversation_id>`; ACP sends `session/load {sessionId: conversation_id, …}`. The sprite FS persists the adapter's `~/.claude` conversation JSONL across hibernation, so `session/load` can replay history — this is ACP's true-survival analog of PTY reattach.
+
+Accepted caveat: a transport switch on a cloud session leaves the pre-switch exec **detached** in the sprite (the old PTY/pipe process keeps running until the sprite hibernates or is deleted). The sprite itself is torn down on session destroy (`runtime_ref` stays valid and is preserved on a failed switch, so `maybe_teardown_runtime` always reaches it).
+
+### MCP and library (unchanged from terminal path)
+
+- **MCP signal bus + library** flow through `session/new mcpServers` (ACP's native HTTP MCP server field): local → loopback `/api/mcp`; cloud → `base_url <> "/api/mcp"` + bearer token — the same `base_url` rewrite `acp_mcp_servers/3` already performs.
+- `library: :api` runtime keeps the `library_*` MCP tools; `:path` keeps `LEGEND_LIBRARY`.
+
+### Verify-at-plan-time resolutions (Phase 2)
+
+- **#4 (adapter invocation):** `provision(:acp)` detects `claude-code-acp --version` and installs via `npm i -g @zed-industries/claude-code-acp` (package `@zed-industries/claude-code-acp`).
+- **#5 (sprite-FS conversation persistence):** to be confirmed in the manual bring-up (close laptop / restart backend → resume → confirm `session/load` repaint).
 
 ## Codex + Gemini (Phase 3 — thin)
 
