@@ -53,13 +53,14 @@ defmodule Legend.Sprites.Exec do
   element; `path` is the executable. Keys are ordered for readable URLs only.
   """
   @spec spawn_query(CommandSpec.t(), keyword()) :: String.t()
-  def spawn_query(%CommandSpec{cmd: bin, args: args}, opts) do
+  def spawn_query(%CommandSpec{cmd: bin, args: args, io: io}, opts) do
     rows = Keyword.get(opts, :rows, 24)
     cols = Keyword.get(opts, :cols, 80)
+    tty = if io == :pipes, do: "false", else: "true"
 
     fixed = [
       {"path", bin},
-      {"tty", "true"},
+      {"tty", tty},
       {"stdin", "true"},
       {"detachable", "true"},
       {"rows", Integer.to_string(rows)},
@@ -71,6 +72,24 @@ defmodule Legend.Sprites.Exec do
     (fixed ++ cmd_pairs)
     |> Enum.map_join("&", fn {k, v} -> "#{k}=#{URI.encode_www_form(v)}" end)
   end
+
+  @doc """
+  Splits a non-TTY exec BINARY output frame by its 1-byte stream-id prefix:
+  `0x01` stdout, `0x02` stderr, `0x03` exit-status control (code as a byte). In
+  TTY mode (`pipes? == false`) frames are raw stdout bytes with no prefix.
+  """
+  @spec demux_output(binary(), boolean()) ::
+          {:stdout, binary()} | {:stderr, binary()} | {:exit, non_neg_integer()} | :ignore
+  def demux_output(data, false), do: {:stdout, data}
+  def demux_output(<<1, rest::binary>>, true), do: {:stdout, rest}
+  def demux_output(<<2, rest::binary>>, true), do: {:stderr, rest}
+  def demux_output(<<3, code, _::binary>>, true), do: {:exit, code}
+  def demux_output(_other, true), do: :ignore
+
+  @doc "Encodes a stdin write: non-TTY exec requires a 0x00 stream-id prefix."
+  @spec encode_stdin(binary(), boolean()) :: binary()
+  def encode_stdin(data, true), do: <<0>> <> data
+  def encode_stdin(data, false), do: data
 
   ## GenServer API
 
