@@ -7,6 +7,9 @@ defmodule Legend.Core.Agents.SessionServerAcpTest do
     TestRuntime.subscribe()
 
     on_exit(fn ->
+      Application.delete_env(:legend, :test_runtime_capabilities)
+      Application.delete_env(:legend, :test_runtime_detect)
+
       for {_, pid, _, _} <- DynamicSupervisor.which_children(Legend.Core.Agents.SessionSupervisor) do
         DynamicSupervisor.terminate_child(Legend.Core.Agents.SessionSupervisor, pid)
       end
@@ -498,6 +501,30 @@ defmodule Legend.Core.Agents.SessionServerAcpTest do
 
     assert_receive {:test_runtime, :start, _spec2, _opts2}, 1000
     refute_receive {:test_runtime, :attach, _}, 300
+  end
+
+  test "acp→terminal switch passes --resume (not --session-id) to the terminal harness" do
+    TestRuntime.set_capabilities(%{provisions?: false, library: :api, tunnel: nil})
+
+    {:ok, s} =
+      Agents.start_session(%{harness_id: "claude_code", runtime_id: "test", transport: :acp})
+
+    assert_receive {:test_runtime, :start, _acp_spec, _opts}, 1000
+
+    s = Agents.get_session!(s.id)
+    Agents.mark_session_running!(s, %{runtime_ref: %{"sprite" => s.id, "exec_id" => "acp1"}})
+    Agents.set_session_transport!(s, %{transport: :terminal})
+
+    assert_receive {:test_runtime, :start, spec, _opts2}, 1000
+
+    # conversation_mode(:switch) → :resume so the terminal harness emits --resume
+    assert "--resume" in spec.args
+    refute "--session-id" in spec.args
+    # The resume id is conversation_id || session.id; for a fresh ACP session
+    # that hasn't completed the handshake, conversation_id is nil → session.id.
+    resume_id = Agents.get_session!(s.id).conversation_id || s.id
+    resume_idx = Enum.find_index(spec.args, &(&1 == "--resume"))
+    assert Enum.at(spec.args, resume_idx + 1) == resume_id
   end
 
   # Poll briefly: the conversation id is persisted from the server process, so it

@@ -23,6 +23,10 @@ defmodule Legend.Sprites.Exec do
   - **Attach:** `wss://api.sprites.dev/v1/sprites/{name}/exec/{session_id}`
     (path segment, NOT a query param) — re-streams the live session; emits its
     own `session_info` then continues live output.
+  - **Non-TTY (`tty=false`, `io: :pipes`):** BINARY frames carry a 1-byte
+    stream-id prefix — `0x00` stdin (outbound), `0x01` stdout, `0x02` stderr,
+    `0x03` exit-status control (code as a byte). Used for ACP adapter processes
+    where stdout/stderr must remain separate.
   """
 
   use GenServer
@@ -49,8 +53,10 @@ defmodule Legend.Sprites.Exec do
   def attach_url(name, exec_id), do: "#{@ws_base}/#{name}/exec/#{exec_id}"
 
   @doc """
-  Spawn query string for a command under a TTY. `cmd` is repeated per argv
-  element; `path` is the executable. Keys are ordered for readable URLs only.
+  Spawn query string for a command. `cmd` is repeated per argv element; `path`
+  is the executable. Keys are ordered for readable URLs only. `tty` is set to
+  `false` when `spec.io == :pipes` (non-TTY, stream-id demuxed), `true`
+  otherwise (raw TTY bytes, no prefix).
   """
   @spec spawn_query(CommandSpec.t(), keyword()) :: String.t()
   def spawn_query(%CommandSpec{cmd: bin, args: args, io: io}, opts) do
@@ -94,9 +100,10 @@ defmodule Legend.Sprites.Exec do
   ## GenServer API
 
   @doc """
-  Spawns `spec` under a TTY in sprite `name`. Returns `{:ok, pid, exec_id}` once
-  the session_info frame yields the reattach handle. `opts` requires `:owner`;
-  honours `:rows`/`:cols`.
+  Spawns `spec` in sprite `name`. Uses `tty=true` (PTY) unless `spec.io ==
+  :pipes`, in which case `tty=false` applies stream-id demuxing (see
+  `demux_output/2`). Returns `{:ok, pid, exec_id}` once the session_info frame
+  yields the reattach handle. `opts` requires `:owner`; honours `:rows`/`:cols`.
   """
   @spec start(String.t(), CommandSpec.t(), map()) ::
           {:ok, pid(), String.t()} | {:error, String.t()}

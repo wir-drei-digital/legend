@@ -53,7 +53,7 @@ defmodule Legend.Core.Agents.SessionProvisioningTest do
   test "a provisioning runtime with a harness that has no installer fails the session" do
     TestRuntime.set_capabilities(%{provisions?: true, library: :api, tunnel: nil})
 
-    # Hermes declares no provision/0, so provisioning has nothing to install.
+    # Hermes declares no provision/1, so provisioning has nothing to install.
     {:ok, session} =
       Agents.start_session(%{name: "noinstaller", harness_id: "hermes", runtime_id: "test"})
 
