@@ -169,14 +169,14 @@ Converged design (validated via mockups `acp-surface*.html`):
 
 `Sprites.Exec` gained a `:pipes` mode, selected by `CommandSpec.io == :pipes`. When `tty=false` is sent on the spawn query, the sprites WSS exec carrier switches to a **Docker-style 1-byte stream-id multiplexed** binary frame format:
 
-| byte | stream |
-|---|---|
-| `0x00` | stdin |
-| `0x01` | stdout |
-| `0x02` | stderr |
-| `0x03` | exit-status control (next byte = code) |
+| direction | byte | stream |
+|---|---|---|
+| client→server | `0x00` | stdin (outbound only — `encode_stdin/2` prefix) |
+| server→client | `0x01` | stdout |
+| server→client | `0x02` | stderr |
+| server→client | `0x03` | exit-status control (next byte = code) |
 
-`Sprites.Exec.demux_output/2` splits inbound binary frames; `encode_stdin/2` prepends `0x00` on writes. In TTY mode (`pipes? == false`) frames carry raw bytes with no prefix — both functions are identity operations there. The `pipes?` flag is set from `CommandSpec.io` at spawn, and also confirmed from the `session_info` frame's `"tty": false` field on arrival.
+`Sprites.Exec.demux_output/2` splits inbound binary frames; `encode_stdin/2` prepends `0x00` on writes. In TTY mode (`pipes? == false`) frames carry raw bytes with no prefix — both functions are identity operations there. The `pipes?` flag is set from `CommandSpec.io` at spawn, and also overridden from the `session_info` frame's `"tty": false` field on arrival (`:attach` seeds it `false` until then).
 
 `Sprites.Exec.run/3` (used for provisioning detect/install) spawns a non-interactive exec (`:run` mode, no `session_info` await), collects stdout+stderr merged into a single buffer via a dedicated collector process, and returns `{:ok, %{stdout: binary, status: integer}}`. Provisioning commands therefore don't need the PTY to exist first.
 
@@ -204,7 +204,7 @@ Accepted caveat: a transport switch on a cloud session leaves the pre-switch exe
 
 With the spine + rich UI in place, each new ACP agent is a **harness module + provisioning + auth surface**; the protocol engine, timeline, UI, channel, and `:pipes` runtime are shared and agent-agnostic:
 
-- **`Legend.Harnesses.Codex`**: `transports: [:acp]`; `acp_command/1` → `npx @zed-industries/codex-acp` (or a configured `codex-acp` binary); `OPENAI_API_KEY`/`CODEX_API_KEY` from settings; `provision/0` detects/installs the adapter; **supports `session/load`** so resume + switch work. API-key entry is surfaced through the existing **harness setup seam** (`/settings` card + new-session notice).
+- **`Legend.Harnesses.Codex`**: `transports: [:acp]`; `acp_command/1` → `npx @zed-industries/codex-acp` (or a configured `codex-acp` binary); `OPENAI_API_KEY`/`CODEX_API_KEY` from settings; `provision/1` detects/installs the adapter; **supports `session/load`** so resume + switch work. API-key entry is surfaced through the existing **harness setup seam** (`/settings` card + new-session notice).
 - **Gemini**: native ACP (`transports: [:acp]`) — nearly free once the spine exists.
 
 The "second agent ≈ a thin module" payoff is the reason the protocol logic lives in the shared layer.
