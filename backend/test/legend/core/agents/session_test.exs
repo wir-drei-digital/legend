@@ -159,6 +159,23 @@ defmodule Legend.Core.Agents.SessionTest do
       assert s.transport == :acp
     end
 
+    test "default_transport prefers terminal on a provisioning runtime, acp on a local one" do
+      alias Legend.Core.Agents.Session
+      alias Legend.Runtimes.Test, as: TestRuntime
+      on_exit(fn -> Application.delete_env(:legend, :test_runtime_capabilities) end)
+
+      # Local, non-provisioning runtime: harness default (claude_code → :acp).
+      TestRuntime.set_capabilities(%{provisions?: false, library: :path, tunnel: nil})
+      assert Session.default_transport("claude_code", "test") == :acp
+      assert Session.default_transport("claude_code", "local_pty") == :acp
+
+      # Provisioning (cloud-style) runtime: terminal-first for an ACP-capable harness.
+      TestRuntime.set_capabilities(%{provisions?: true, library: :api, tunnel: nil})
+      assert Session.default_transport("claude_code", "test") == :terminal
+      # A terminal-only harness is :terminal regardless.
+      assert Session.default_transport("hermes", "test") == :terminal
+    end
+
     test "start honors an explicit transport over the harness default" do
       {:ok, s} =
         Agents.start_session(%{

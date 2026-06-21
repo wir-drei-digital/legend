@@ -74,7 +74,8 @@ defmodule Legend.Core.Agents.Session do
           changeset
         else
           hid = Ash.Changeset.get_attribute(changeset, :harness_id)
-          Ash.Changeset.force_change_attribute(changeset, :transport, default_transport(hid))
+          rid = Ash.Changeset.get_attribute(changeset, :runtime_id)
+          Ash.Changeset.force_change_attribute(changeset, :transport, default_transport(hid, rid))
         end
       end
 
@@ -300,12 +301,27 @@ defmodule Legend.Core.Agents.Session do
   end
 
   @doc false
-  def default_transport(harness_id) do
-    with {:ok, mod} <- Legend.Core.Harness.Registry.fetch(harness_id),
-         [first | _] <- mod.definition().transports do
-      first
+  def default_transport(harness_id, runtime_id) do
+    with {:ok, hmod} <- Legend.Core.Harness.Registry.fetch(harness_id),
+         transports = hmod.definition().transports,
+         [first | _] <- transports do
+      if remote_auth_runtime?(runtime_id) and :terminal in transports do
+        :terminal
+      else
+        first
+      end
     else
       _ -> :terminal
+    end
+  end
+
+  # A provisioning runtime is a fresh remote box needing interactive (PTY) first-run
+  # auth, so an ACP-capable session starts in :terminal until the human authenticates;
+  # they then switch to :acp on the same persisted sprite.
+  defp remote_auth_runtime?(runtime_id) do
+    case Legend.Core.Runtime.Registry.fetch(runtime_id) do
+      {:ok, rmod} -> Legend.Core.Runtime.capabilities(rmod).provisions?
+      :error -> false
     end
   end
 
