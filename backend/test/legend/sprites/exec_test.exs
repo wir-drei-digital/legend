@@ -90,4 +90,52 @@ defmodule Legend.Sprites.ExecTest do
     assert Exec.encode_stdin("line\n", true) == <<0>> <> "line\n"
     assert Exec.encode_stdin("line\n", false) == "line\n"
   end
+
+  test "collect_run accumulates stdout and stderr into the combined result" do
+    parent = self()
+    ref = make_ref()
+    collector = spawn(fn -> Legend.Sprites.Exec.collect_run(parent, ref, "") end)
+    send(collector, {:runtime_output, "OUT"})
+    send(collector, {:runtime_stderr, "ERR"})
+    send(collector, {:runtime_exit, 3})
+    assert_receive {^ref, 3, combined}
+    assert combined =~ "OUT"
+    assert combined =~ "ERR"
+  end
+
+  @tag :live_sprites
+  test "live: non-TTY exec demuxes stdout/stderr and reports the exit code" do
+    token = Application.get_env(:legend, :sprites_token)
+
+    if token in [nil, ""],
+      do: flunk("set SPRITES_TOKEN (app env :sprites_token) for :live_sprites")
+
+    # Legend.Sprites.Client compiles plug: {Req.Test, __MODULE__} in test env.
+    # Bypass it by calling the sprites.dev REST API directly with Req (no plug).
+    base = "https://api.sprites.dev/v1"
+    auth = {:bearer, token}
+    name = "lt-pipes-#{System.system_time(:second)}"
+
+    {:ok, %{status: s}} =
+      Req.post(base <> "/sprites",
+        auth: auth,
+        json: %{name: name, url_settings: %{auth: "sprite"}}
+      )
+
+    assert s in 200..299
+    Process.sleep(3_000)
+
+    spec = %CommandSpec{
+      cmd: "sh",
+      args: ["-c", "printf OUT; printf ERR 1>&2; exit 5"],
+      io: :pipes
+    }
+
+    result = Legend.Sprites.Exec.run(name, spec, 60_000)
+    Req.delete(base <> "/sprites/#{name}", auth: auth)
+
+    assert {:ok, %{stdout: combined, status: 5}} = result
+    assert combined =~ "OUT"
+    assert combined =~ "ERR"
+  end
 end

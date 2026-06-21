@@ -170,6 +170,12 @@ defmodule Legend.Sprites.Exec do
   def init({mode, name, arg, opts}) do
     owner = Map.fetch!(opts, :owner)
 
+    pipes? =
+      case mode do
+        :attach -> false
+        _ -> match?(%CommandSpec{io: :pipes}, arg)
+      end
+
     state = %{
       name: name,
       owner: owner,
@@ -177,7 +183,8 @@ defmodule Legend.Sprites.Exec do
       websocket: nil,
       ref: nil,
       exec_id: nil,
-      exited?: false
+      exited?: false,
+      pipes?: pipes?
     }
 
     case token() do
@@ -226,7 +233,7 @@ defmodule Legend.Sprites.Exec do
 
   @impl true
   def handle_cast({:write, data}, state) do
-    {:noreply, send_frame(state, {:binary, data})}
+    {:noreply, send_frame(state, {:binary, encode_stdin(data, state.pipes?)})}
   end
 
   def handle_cast({:resize, cols, rows}, state) do
@@ -288,17 +295,24 @@ defmodule Legend.Sprites.Exec do
   defp handle_responses([_other | rest], ref, state),
     do: handle_responses(rest, ref, state)
 
-  # Raw terminal output.
   defp dispatch_frame({:binary, data}, state) do
-    send(state.owner, {:runtime_output, data})
+    case demux_output(data, state.pipes?) do
+      {:stdout, payload} -> send(state.owner, {:runtime_output, payload})
+      {:stderr, payload} -> send(state.owner, {:runtime_stderr, payload})
+      # The TEXT {"type":"exit"} frame drives termination; the 0x03 control frame
+      # is redundant — ignore it so we don't double-send {:runtime_exit}.
+      {:exit, _code} -> :noop
+      :ignore -> :noop
+    end
+
     state
   end
 
   # Control frames: session_info (capture id), exit (terminate), others ignored.
   defp dispatch_frame({:text, json}, state) do
     case Jason.decode(json) do
-      {:ok, %{"type" => "session_info", "session_id" => id}} ->
-        %{state | exec_id: state.exec_id || to_string(id)}
+      {:ok, %{"type" => "session_info", "session_id" => id} = info} ->
+        %{state | exec_id: state.exec_id || to_string(id), pipes?: info["tty"] == false}
 
       {:ok, %{"type" => "exit", "exit_code" => code}} ->
         exit_owner(state, code)
@@ -319,10 +333,12 @@ defmodule Legend.Sprites.Exec do
   defp exit_owner(%{exited?: true}, _code), do: :ok
   defp exit_owner(state, code), do: send(state.owner, {:runtime_exit, code})
 
-  # Collector for run/3: accumulate output, report {ref, status, stdout} on exit.
-  defp collect_run(parent, ref, acc) do
+  # Collector for run/3: accumulate output+stderr, report {ref, status, combined} on exit.
+  @doc false
+  def collect_run(parent, ref, acc) do
     receive do
       {:runtime_output, data} -> collect_run(parent, ref, acc <> data)
+      {:runtime_stderr, data} -> collect_run(parent, ref, acc <> data)
       {:runtime_exit, code} -> send(parent, {ref, code, acc})
     end
   end
