@@ -207,7 +207,7 @@ defmodule Legend.Core.Agents.Session do
 
       change after_transaction(fn
                _changeset, {:ok, session}, _context ->
-                 case Legend.Core.Agents.SessionServer.start_session(session, :resume) do
+                 case Legend.Core.Agents.SessionServer.start_session(session, :switch) do
                    {:ok, _pid} ->
                      {:ok, Legend.Core.Agents.get_session!(session.id)}
 

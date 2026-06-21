@@ -466,6 +466,40 @@ defmodule Legend.Core.Agents.SessionServerAcpTest do
     assert Process.alive?(Agents.SessionServer.whereis(s.id))
   end
 
+  test "an interrupted ACP session resumes by relaunching (session/load), never attach" do
+    TestRuntime.set_capabilities(%{provisions?: false, library: :api, tunnel: nil})
+
+    {:ok, s} =
+      Agents.start_session(%{harness_id: "claude_code", runtime_id: "test", transport: :acp})
+
+    assert_receive {:test_runtime, :start, _spec, _opts}, 1000
+
+    s = Agents.get_session!(s.id)
+    Agents.mark_session_running!(s, %{runtime_ref: %{"sprite" => s.id, "exec_id" => "e1"}})
+    Legend.Core.Agents.SessionServer.ensure_stopped(s.id)
+    {:ok, _} = Agents.interrupt_session(Agents.get_session!(s.id))
+
+    {:ok, _} = Agents.resume_session(Agents.get_session!(s.id))
+    assert_receive {:test_runtime, :start, _spec2, _opts2}, 1000
+    refute_receive {:test_runtime, :attach, _}, 300
+  end
+
+  test "a transport switch starts a fresh process, never attaching the old transport's exec" do
+    TestRuntime.set_capabilities(%{provisions?: false, library: :api, tunnel: nil})
+
+    {:ok, s} =
+      Agents.start_session(%{harness_id: "claude_code", runtime_id: "test", transport: :terminal})
+
+    assert_receive {:test_runtime, :start, _spec, _opts}, 1000
+
+    s = Agents.get_session!(s.id)
+    Agents.mark_session_running!(s, %{runtime_ref: %{"sprite" => s.id, "exec_id" => "term1"}})
+    Agents.set_session_transport!(s, %{transport: :acp})
+
+    assert_receive {:test_runtime, :start, _spec2, _opts2}, 1000
+    refute_receive {:test_runtime, :attach, _}, 300
+  end
+
   # Poll briefly: the conversation id is persisted from the server process, so it
   # may lag the synchronous response we just fed in.
   defp eventually(fun, attempts \\ 50)

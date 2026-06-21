@@ -358,7 +358,11 @@ defmodule Legend.Core.Agents.SessionServer do
   defp maybe_close_tunnel({tunnel, handle}), do: tunnel.close(handle)
 
   defp start_or_attach(runtime, spec, session, :resume) do
-    if function_exported?(runtime, :attach, 2) and not is_nil(session.runtime_ref) do
+    # Attach-to-live is a terminal-only PTY reconnect. ACP resume must relaunch the
+    # adapter and replay via session/load — never reattach to the already-initialized
+    # adapter exec.
+    if session.transport == :terminal and function_exported?(runtime, :attach, 2) and
+         not is_nil(session.runtime_ref) do
       case runtime.attach(session.runtime_ref, start_opts(session)) do
         {:ok, handle} -> {:ok, handle, session.runtime_ref}
         {:error, _} -> do_start(runtime, spec, session)
@@ -367,6 +371,11 @@ defmodule Legend.Core.Agents.SessionServer do
       do_start(runtime, spec, session)
     end
   end
+
+  # A transport switch always starts a fresh process for the NEW transport (the
+  # persisted runtime_ref belongs to the old transport's exec). The conversation is
+  # resumed at the protocol layer (terminal --resume / ACP session/load).
+  defp start_or_attach(runtime, spec, session, :switch), do: do_start(runtime, spec, session)
 
   defp start_or_attach(runtime, spec, session, _fresh), do: do_start(runtime, spec, session)
 
@@ -386,10 +395,15 @@ defmodule Legend.Core.Agents.SessionServer do
   defp runtime_ref_from(%{sprite: s, exec_id: e}), do: %{"sprite" => s, "exec_id" => e}
   defp runtime_ref_from(_), do: nil
 
+  # A switch resumes the conversation under the new transport (terminal --resume /
+  # ACP session/load) but with a fresh process — so the harness sees :resume.
+  defp conversation_mode(:switch), do: :resume
+  defp conversation_mode(mode), do: mode
+
   # :api runtimes reach the library + signal bus over the tunnel (base_url loopback).
   defp build_opts(session, mode, %{library: :api}, base_url) do
     %{
-      mode: mode,
+      mode: conversation_mode(mode),
       # The shared cross-transport handle: terminal passes it as
       # --session-id/--resume. Nil at first launch → resolves to session.id
       # (unchanged terminal behavior).
@@ -407,7 +421,7 @@ defmodule Legend.Core.Agents.SessionServer do
         primer: Signals.messaging_primer(session),
         instructions: session.instructions
       },
-      mode: mode,
+      mode: conversation_mode(mode),
       # The shared cross-transport handle: terminal passes it as
       # --session-id/--resume. Nil at first launch → resolves to session.id
       # (unchanged terminal behavior).

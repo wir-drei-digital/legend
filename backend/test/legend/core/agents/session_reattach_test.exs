@@ -21,7 +21,14 @@ defmodule Legend.Core.Agents.SessionReattachTest do
   end
 
   test "resume with a persisted runtime_ref reattaches via attach/2" do
-    {:ok, s} = Agents.start_session(%{name: "r", harness_id: "claude_code", runtime_id: "test"})
+    {:ok, s} =
+      Agents.start_session(%{
+        name: "r",
+        harness_id: "claude_code",
+        runtime_id: "test",
+        transport: :terminal
+      })
+
     assert_receive {:test_runtime, :start, _spec, _opts}, 1000
 
     # Simulate a persisted runtime_ref, then stop + interrupt so the session is resumable.
