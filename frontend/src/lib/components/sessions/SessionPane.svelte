@@ -307,6 +307,23 @@
 				{/if}
 			{/key}
 
+			{#if session.transport === 'terminal' && harness?.transports?.includes('acp') && session.runtime_id !== 'local_pty'}
+				<!-- TODO: switch to a capabilities-based cloud gate when more runtimes exist -->
+				<div class="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-center px-3 py-1.5">
+					<p class="text-micro text-ink-subtle">
+						Sign in to Claude Code in the terminal, then
+						<button
+							type="button"
+							class="pointer-events-auto text-micro text-ink-subtle underline underline-offset-2 hover:text-ink-2"
+							onclick={() => switchTransport('acp')}
+						>
+							switch to rich
+						</button>
+						for the structured view.
+					</p>
+				</div>
+			{/if}
+
 			{#if !isLive}
 				<!-- Stopped session: keep the pane usable with a resume affordance. -->
 				<div
