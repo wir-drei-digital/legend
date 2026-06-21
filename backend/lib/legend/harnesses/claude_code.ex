@@ -21,7 +21,18 @@ defmodule Legend.Harnesses.ClaudeCode do
   end
 
   @impl Legend.Core.Harness
-  def provision do
+  def provision(:acp) do
+    %{
+      detect: %CommandSpec{cmd: "claude-code-acp", args: ["--version"], io: :pipes},
+      install: %CommandSpec{
+        cmd: "sh",
+        args: ["-lc", "npm i -g @zed-industries/claude-code-acp"],
+        io: :pipes
+      }
+    }
+  end
+
+  def provision(_terminal) do
     %{
       detect: %CommandSpec{cmd: "claude", args: ["--version"], io: :pipes},
       install: %CommandSpec{

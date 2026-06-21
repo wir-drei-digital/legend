@@ -309,7 +309,7 @@ defmodule Legend.Core.Agents.SessionServer do
   # sprite (idempotent, keyed by session id) so exec works pre-start; the Test
   # runtime ignores the handle. Only reached when the runtime declares provisions?.
   defp maybe_provision(session, harness, runtime, %{provisions?: true}) do
-    case Legend.Core.Harness.provision_for(harness) do
+    case Legend.Core.Harness.provision_for(harness, session.transport) do
       nil ->
         {:error, "harness #{session.harness_id} has no installer for this runtime"}
 

@@ -47,13 +47,13 @@ defmodule Legend.Core.Harness do
   @callback definition() :: Definition.t()
   @callback setup() :: Setup.t()
   @callback apply_setup() :: :ok | {:error, String.t()}
-  @callback provision() ::
+  @callback provision(transport :: Definition.transport()) ::
               %{
                 detect: Legend.Core.Runtime.CommandSpec.t(),
                 install: Legend.Core.Runtime.CommandSpec.t()
               }
               | nil
-  @optional_callbacks setup: 0, apply_setup: 0, provision: 0
+  @optional_callbacks setup: 0, apply_setup: 0, provision: 1
 
   @doc "The harness's setup state; harnesses without the callback are not_applicable."
   @spec setup_for(module()) :: Setup.t()
@@ -65,18 +65,24 @@ defmodule Legend.Core.Harness do
     end
   end
 
-  @doc "The harness's provision spec, or nil if it has no installer."
-  @spec provision_for(module()) ::
+  @doc "The harness's provision spec for a transport, or nil if it has no installer."
+  @spec provision_for(module(), Definition.transport()) ::
           %{
             detect: Legend.Core.Runtime.CommandSpec.t(),
             install: Legend.Core.Runtime.CommandSpec.t()
           }
           | nil
-  def provision_for(module) do
-    if Code.ensure_loaded?(module) and function_exported?(module, :provision, 0) do
-      module.provision()
+  def provision_for(module, transport) do
+    if Code.ensure_loaded?(module) and function_exported?(module, :provision, 1) do
+      module.provision(transport)
     else
       nil
     end
+  end
+
+  @doc "Whether a harness can install itself on a provisioning runtime (transport-independent)."
+  @spec provisionable?(module()) :: boolean()
+  def provisionable?(module) do
+    Code.ensure_loaded?(module) and function_exported?(module, :provision, 1)
   end
 end

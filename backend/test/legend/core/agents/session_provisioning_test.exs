@@ -62,6 +62,21 @@ defmodule Legend.Core.Agents.SessionProvisioningTest do
     assert session.error =~ "no installer"
   end
 
+  test "an acp session provisions the claude-code-acp adapter" do
+    TestRuntime.set_capabilities(%{provisions?: true, library: :api, tunnel: nil})
+
+    {:ok, _s} =
+      Agents.start_session(%{harness_id: "claude_code", runtime_id: "test", transport: :acp})
+
+    assert_receive {:test_runtime, :exec, :detect}, 1000
+
+    assert_receive {:test_runtime, :exec,
+                    %Legend.Core.Runtime.CommandSpec{cmd: "sh", args: ["-lc", install]}},
+                   1000
+
+    assert install =~ "@zed-industries/claude-code-acp"
+  end
+
   test "an :api runtime gets NO library/mcp env injected in 2a" do
     TestRuntime.set_capabilities(%{provisions?: false, library: :api, tunnel: nil})
 

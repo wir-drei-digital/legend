@@ -53,7 +53,7 @@ defmodule Legend.Runtimes.Test do
       })
 
   @impl true
-  def exec(_handle, %Legend.Core.Runtime.CommandSpec{cmd: "claude", args: ["--version"]}) do
+  def exec(_handle, %Legend.Core.Runtime.CommandSpec{args: ["--version"]}) do
     notify({:test_runtime, :exec, :detect})
     # default: harness "not installed" (status 1) so SessionServer runs install; override per test
     Application.get_env(:legend, :test_runtime_detect, {:ok, %{stdout: "", status: 1}})
