@@ -805,18 +805,47 @@ defmodule Legend.Core.Agents.SessionServer do
         %{state | acp_prompt_queue: state.acp_prompt_queue ++ [content]}
       end
     else
-      {acp, frames} = Legend.Core.Acp.Connection.prompt(state.acp, content)
-      Enum.each(frames, &state.runtime.write(state.handle, &1))
-      %{state | acp: acp}
+      send_acp_prompt(state, content)
     end
   end
+
+  # Send a user prompt now: write the JSON-RPC frames AND surface the human's
+  # text as a user-role timeline item so it appears in the stream immediately.
+  # Live agents don't echo our prompt back as a user_message_chunk (only
+  # session/load replay does), so without this the user's own messages would
+  # never show during a live conversation. The id reuses the reducer's per-turn
+  # scheme ("user-<turn>") so a later replay merges onto it rather than
+  # duplicating. NOT used for the nudge wake-prompt (that carries its own "nudge"
+  # item) nor the launch instructions prompt.
+  defp send_acp_prompt(state, content) do
+    {acp, frames} = Legend.Core.Acp.Connection.prompt(state.acp, content)
+    Enum.each(frames, &state.runtime.write(state.handle, &1))
+
+    append_acp_item(%{state | acp: acp}, %{
+      "id" => "user-#{acp.turn}",
+      "type" => "message",
+      "role" => "user",
+      "text" => prompt_text(content)
+    })
+  end
+
+  # The prompt content is either a plain string or a list of ACP content blocks;
+  # extract the human-readable text for the timeline item (mirrors to_blocks/1).
+  defp prompt_text(content) when is_binary(content), do: content
+
+  defp prompt_text(content) when is_list(content) do
+    Enum.map_join(content, "", fn
+      %{"type" => "text", "text" => t} when is_binary(t) -> t
+      _ -> ""
+    end)
+  end
+
+  defp prompt_text(_), do: ""
 
   # Post-turn drain: send at most ONE prompt (one turn at a time). Prefer a
   # queued user prompt; otherwise wake the agent with a deferred nudge line.
   defp flush_after_turn(%{acp_prompt_queue: [content | rest]} = state) do
-    {acp, frames} = Legend.Core.Acp.Connection.prompt(state.acp, content)
-    Enum.each(frames, &state.runtime.write(state.handle, &1))
-    %{state | acp: acp, acp_prompt_queue: rest}
+    %{send_acp_prompt(state, content) | acp_prompt_queue: rest}
   end
 
   defp flush_after_turn(%{acp_prompt_queue: [], pending_nudge: line} = state)

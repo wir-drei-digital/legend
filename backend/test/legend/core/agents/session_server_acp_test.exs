@@ -91,6 +91,57 @@ defmodule Legend.Core.Agents.SessionServerAcpTest do
     assert [%{"name" => "Authorization", "value" => "Bearer " <> _}] = server["headers"]
   end
 
+  test "acp session: sending a prompt broadcasts the user's message as a timeline item" do
+    {:ok, s} =
+      Agents.start_session(%{harness_id: "claude_code", runtime_id: "test", transport: :acp})
+
+    Phoenix.PubSub.subscribe(Legend.PubSub, "session:#{s.id}")
+    drive_to_live(s.id)
+    drain_test_runtime_writes()
+
+    # The human sends a prompt. It must immediately appear in the stream as a
+    # user-role message item — not only after a later session/load replay.
+    Agents.SessionServer.acp_prompt(s.id, "hello agent")
+
+    assert_receive {:session_event, _seq,
+                    %{"type" => "message", "role" => "user", "text" => "hello agent"}},
+                   1_000
+  end
+
+  test "acp session: a queued (mid-turn) prompt shows as a user message when it is sent" do
+    {:ok, s} =
+      Agents.start_session(%{harness_id: "claude_code", runtime_id: "test", transport: :acp})
+
+    Phoenix.PubSub.subscribe(Legend.PubSub, "session:#{s.id}")
+    drive_to_live(s.id)
+    drain_test_runtime_writes()
+
+    # Turn 1 in flight (its own user item broadcasts now).
+    Agents.SessionServer.acp_prompt(s.id, "first")
+
+    assert_receive {:session_event, _seq,
+                    %{"type" => "message", "role" => "user", "text" => "first"}},
+                   1_000
+
+    assert_receive {:test_runtime, :write, p1}, 1_000
+    first_id = Jason.decode!(p1)["id"]
+
+    # A second prompt arrives mid-turn → server-side queue, no user item yet.
+    Agents.SessionServer.acp_prompt(s.id, "second")
+    refute_receive {:session_event, _seq, %{"role" => "user", "text" => "second"}}, 200
+
+    # Completing the turn flushes the queued prompt → its user item broadcasts.
+    send_output(s.id, %{
+      "jsonrpc" => "2.0",
+      "id" => first_id,
+      "result" => %{"stopReason" => "end_turn"}
+    })
+
+    assert_receive {:session_event, _seq,
+                    %{"type" => "message", "role" => "user", "text" => "second"}},
+                   1_000
+  end
+
   test "acp session: a finished turn broadcasts a turn timeline item" do
     {:ok, s} =
       Agents.start_session(%{harness_id: "claude_code", runtime_id: "test", transport: :acp})
