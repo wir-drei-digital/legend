@@ -39,10 +39,11 @@ Location: `frontend/src/lib/components/shell/PaneHeader.svelte`. A dumb shell pr
 
 Two trailing snippets, because surfaces carry two visually distinct kinds of trailing
 content: **meta** (status badges, relative time, the transport toggle, a Save button —
-loosely spaced, `gap-1.5`) and **actions** (icon buttons — `more`, `panel-right`,
-`columns` — that read as one tight `gap-0.5` cluster with the universal maximize/close
-pair). Keeping them separate is what makes Files' buttons stop being loosely scattered
-and match Sessions' tight cluster.
+rendered as direct children of the header's `gap-2` row, matching the spacing the old
+SessionPane header already used for badge/time/transport) and **actions** (icon buttons —
+`more`, `panel-right`, `columns` — that read as one tight `gap-0.5` cluster with the
+universal maximize/close pair). Keeping them separate is what makes Files' buttons stop
+being loosely scattered and match Sessions' tight cluster.
 
 **Derived from `layout` + `tileId`:** `active` (`layout.activeId === tileId`), `focusedMode` (`layout.focusedId === tileId`), `dragging` (`layout.draggingId === tileId`).
 
