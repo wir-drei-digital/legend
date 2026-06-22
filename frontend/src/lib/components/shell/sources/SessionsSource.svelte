@@ -10,6 +10,7 @@
 	import { identityFor } from '$lib/shell/identities';
 	import { relativeTime, mostRecentIso } from '$lib/shell/format';
 	import type { Session } from '$lib/sessions';
+	import { groupSessions } from '$lib/shell/sessionGroups';
 
 	let { open, ontoggle }: { open: boolean; ontoggle: () => void } = $props();
 
@@ -25,15 +26,13 @@
 		lastActive: string | undefined;
 	}
 
-	// One flat list. The row's status dot encodes the live state (needs you /
-	// running / idle); the harness tag + last-active time ride along on the right.
-	// Sort: attention first, then running, then idle — recency breaks ties.
-	const rank = (r: Row) => (r.state.attention ? 0 : r.state.kind === 'running' ? 1 : 2);
-
-	const rows = $derived.by((): Row[] => {
-		const q = query.trim().toLowerCase();
-		const list = sessionsStore.sessions
-			.filter((s) => !q || (s.name || s.harness_id).toLowerCase().includes(q))
+	// Rows for the list; all ordering (within and across groups) lives in groupSessions.
+	const rows = $derived.by((): Row[] =>
+		sessionsStore.sessions
+			.filter((s) => {
+				const q = query.trim().toLowerCase();
+				return !q || (s.name || s.harness_id).toLowerCase().includes(q);
+			})
 			.map((s): Row => {
 				const thread = messagesStore.forSession(s.id);
 				return {
@@ -50,15 +49,34 @@
 						s.inserted_at
 					)
 				};
-			});
-		return list.sort((a, b) => {
-			const d = rank(a) - rank(b);
-			if (d) return d;
-			const ta = a.lastActive ? new Date(a.lastActive).getTime() : 0;
-			const tb = b.lastActive ? new Date(b.lastActive).getTime() : 0;
-			return tb - ta;
-		});
-	});
+			})
+	);
+
+	const groups = $derived(groupSessions(rows));
+
+	// Per-directory collapse state (default open). Separate localStorage namespace
+	// from the Dock's per-source `legend:dock`.
+	const GROUPS_KEY = 'legend:sessions:groups';
+	let groupOpen = $state<Record<string, boolean>>(loadGroupOpen());
+
+	function loadGroupOpen(): Record<string, boolean> {
+		try {
+			return JSON.parse(localStorage.getItem(GROUPS_KEY) || '{}');
+		} catch {
+			return {};
+		}
+	}
+
+	const isGroupOpen = (key: string) => groupOpen[key] !== false;
+
+	function toggleGroup(key: string) {
+		groupOpen[key] = !isGroupOpen(key);
+		try {
+			localStorage.setItem(GROUPS_KEY, JSON.stringify(groupOpen));
+		} catch {
+			/* localStorage unavailable — non-fatal */
+		}
+	}
 </script>
 
 <div class="flex h-full min-h-0 flex-col">
@@ -103,12 +121,36 @@
 			</div>
 		{/if}
 
-		<!-- single list -->
-		<div class="flex min-h-0 flex-1 flex-col overflow-y-auto py-1.5">
-			{#each rows as row (row.session.id)}
-				{@render benchRow(row)}
+		<!-- grouped by working directory -->
+		<div class="flex min-h-0 flex-1 flex-col overflow-y-auto py-1">
+			{#each groups as group (group.key)}
+				<div class="flex flex-col">
+					<button
+						type="button"
+						onclick={() => toggleGroup(group.key)}
+						class="flex h-[var(--h-row)] w-full items-center gap-1.5 pl-2 pr-2 text-left text-ink-3 transition-colors hover:bg-[var(--hover-tint)]"
+						title={group.fullPath ?? undefined}
+						aria-expanded={isGroupOpen(group.key)}
+					>
+						<Icon
+							name={isGroupOpen(group.key) ? 'chevron-down' : 'chevron-right'}
+							size={11}
+							class="shrink-0"
+						/>
+						<Icon name="folder" size={12} class="shrink-0" />
+						<span class="min-w-0 flex-1 truncate text-micro font-semibold uppercase tracking-[0.08em]">
+							{group.label}
+						</span>
+						<span class="shrink-0 font-mono text-micro tabular-nums">{group.rows.length}</span>
+					</button>
+					{#if isGroupOpen(group.key)}
+						{#each group.rows as row (row.session.id)}
+							{@render benchRow(row)}
+						{/each}
+					{/if}
+				</div>
 			{:else}
-				<p class="px-3 text-meta text-ink-3">
+				<p class="px-3 py-1.5 text-meta text-ink-3">
 					{sessionsStore.loaded ? 'No sessions match.' : 'Connecting…'}
 				</p>
 			{/each}
@@ -146,6 +188,10 @@
 		>
 			{row.session.name || row.session.harness_id}
 		</span>
+
+		{#if row.session.runtime_id !== 'local_pty'}
+			<Icon name="cloud" size={11} class="shrink-0 text-ink-3" />
+		{/if}
 
 		<!-- harness kind -->
 		<span
