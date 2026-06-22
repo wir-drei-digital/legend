@@ -259,6 +259,12 @@ placement. Open/collapsed state persists in `localStorage` (`legend:dock`).
 - Replaced the per-space `WorkbenchLayout` rail/primary/side split (retired with the dock,
   alongside `SessionBench` / `LibraryRail` / `LibrarySide`).
 
+**In-list group headers** — a second-level collapse *inside* a Dock source (the
+session list groups by working directory). The header is a `--h-row` button:
+chevron + `folder` icon + uppercase `text-micro` label (`tracking-[0.08em]`,
+`text-ink-3`) + a `font-mono text-micro` count, with the full path as the `title`.
+Remote rows carry a `cloud` glyph before the harness tag.
+
 ### `TileGrid`
 The windowing primitive: a tiling layout of *surfaces*. Renders each tile **once** in a
 flat list and positions it with an absolute `transform`/`width`/`height` derived from the

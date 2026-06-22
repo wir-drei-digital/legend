@@ -116,6 +116,22 @@ Accepted caveats:
 - **File buffers are shared by path** (`filesStore`, ref-counted by path). Two `file` tiles on the same path share one buffer; the buffer is released only when the last tile referencing that path closes.
 - **`views.ts` is legacy.** `frontend/src/lib/shell/views.ts` still backs the TopBar's space chip and the "New session" toolbar button (both still route-derived via `sectionForPath`/`viewById` in `TopBar`/`LegendShell`). It is slated to be retired once the TopBar reflects the active space directly.
 
+### Session grouping by working directory
+
+The session list groups sessions by their `cwd`. `frontend/src/lib/shell/sessionGroups.ts`
+is the single chokepoint — `groupKey`/`groupLabel`/`groupSessions` (pure, unit-tested)
+bucket the existing `Row` view-model; `SessionsSource.svelte` renders collapsible
+per-directory groups (per-group open state in `localStorage` key
+`legend:sessions:groups`, distinct from the Dock's `legend:dock`). Group order:
+attention-first, then most-recently-active. Backend `Session.:start` normalizes
+`cwd` (runtime-aware: local expands `~` + absolutizes + strips trailing slash;
+remote sandbox paths stay opaque) so near-miss paths collapse into one group.
+
+Deferred (extension points behind the same helper): a first-class Project/Workspace
+entity, an optional `workspace` label that defaults to the folder basename, and
+sprite-based remote grouping (today each Sprites session is its own sprite, so
+there is nothing to group by). Remote sessions group by `cwd` with a cloud marker.
+
 ## Data & boot
 
 - SQLite via AshSqlite; **no atomic updates** — every custom update action needs `require_atomic? false`.
