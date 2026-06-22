@@ -88,6 +88,67 @@ defmodule Legend.Core.Acp.ConnectionTest do
     assert {:load_capable, true} in effects
   end
 
+  test "initialize in :load mode degrades to session/new when loadSession is unadvertised" do
+    # A resume/transport-switch launches with mode: :load. But session/load is
+    # fatal (-32601) on an adapter that doesn't implement it — e.g.
+    # claude-code-acp, which advertises sessionCapabilities.resume but no
+    # loadSession. Gate on the runtime-advertised capability: degrade to a fresh
+    # session/new rather than fail the handshake.
+    {state, [init]} =
+      Connection.new(%{
+        cwd: "/tmp",
+        mcp_servers: [],
+        mode: :load,
+        conversation_id: "sess-resumed"
+      })
+
+    init_id = Jason.decode!(init)["id"]
+
+    {_state, _items, replies, effects} =
+      Connection.handle_bytes(
+        state,
+        Jason.encode!(%{
+          "jsonrpc" => "2.0",
+          "id" => init_id,
+          "result" => %{
+            "protocolVersion" => 1,
+            "agentCapabilities" => %{"sessionCapabilities" => %{"resume" => %{}}}
+          }
+        }) <> "\n"
+      )
+
+    assert [%{"method" => "session/new", "params" => %{"cwd" => "/tmp"}}] = decode_lines(replies)
+    refute Enum.any?(decode_lines(replies), &(&1["method"] == "session/load"))
+    assert {:load_capable, false} in effects
+  end
+
+  test "initialize in :load mode sends session/load when loadSession IS advertised" do
+    {state, [init]} =
+      Connection.new(%{
+        cwd: "/tmp",
+        mcp_servers: [],
+        mode: :load,
+        conversation_id: "sess-resumed"
+      })
+
+    init_id = Jason.decode!(init)["id"]
+
+    {_state, _items, replies, effects} =
+      Connection.handle_bytes(
+        state,
+        Jason.encode!(%{
+          "jsonrpc" => "2.0",
+          "id" => init_id,
+          "result" => %{"protocolVersion" => 1, "agentCapabilities" => %{"loadSession" => true}}
+        }) <> "\n"
+      )
+
+    assert [%{"method" => "session/load", "params" => %{"sessionId" => "sess-resumed"}}] =
+             decode_lines(replies)
+
+    assert {:load_capable, true} in effects
+  end
+
   test "session/new response captures the conversation id" do
     {state, [init]} = Connection.new(%{cwd: "/tmp", mcp_servers: [], mode: :new})
     init_id = Jason.decode!(init)["id"]

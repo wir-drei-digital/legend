@@ -489,6 +489,44 @@ defmodule Legend.Core.Agents.SessionServerAcpTest do
     assert decoded["params"]["sessionId"] == "sess-xyz"
   end
 
+  test "resume degrades to session/new (no failure) when the adapter lacks loadSession" do
+    # The real claude-code-acp adapter advertises sessionCapabilities.resume but
+    # implements NO session/load handler, so a resume/transport-switch that sent
+    # session/load would get a fatal -32601 and mark the session :failed. The
+    # handshake must instead degrade to a fresh session/new and stay healthy.
+    {:ok, s} =
+      Agents.start_session(%{harness_id: "claude_code", runtime_id: "test", transport: :acp})
+
+    Phoenix.PubSub.subscribe(Legend.PubSub, "session:#{s.id}")
+
+    # Fresh handshake captures conversation_id "sess-xyz".
+    drive_to_live(s.id)
+    assert eventually(fn -> Agents.get_session!(s.id).conversation_id == "sess-xyz" end)
+
+    # Stop, then resume → relaunch with mode :load (conversation_id is set).
+    Agents.finish_session!(Agents.get_session!(s.id), %{exit_code: 0})
+    drain_test_runtime_writes()
+    {:ok, _} = Agents.resume_session(Agents.get_session!(s.id))
+
+    assert_receive {:test_runtime, :write, init2}, 1_000
+    init2_id = Jason.decode!(init2)["id"]
+
+    # The adapter does NOT advertise loadSession (mirrors claude-code-acp).
+    send_output(s.id, %{
+      "jsonrpc" => "2.0",
+      "id" => init2_id,
+      "result" => %{
+        "protocolVersion" => 1,
+        "agentCapabilities" => %{"sessionCapabilities" => %{"resume" => %{}}}
+      }
+    })
+
+    # Degrades to session/new — NOT session/load — and the session does not fail.
+    assert_receive {:test_runtime, :write, req}, 1_000
+    assert Jason.decode!(req)["method"] == "session/new"
+    refute_receive {:session_status, :failed}, 200
+  end
+
   test "answering an unknown permission request id is a no-op" do
     {:ok, s} =
       Agents.start_session(%{harness_id: "claude_code", runtime_id: "test", transport: :acp})

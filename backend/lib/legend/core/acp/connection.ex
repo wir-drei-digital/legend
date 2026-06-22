@@ -283,27 +283,34 @@ defmodule Legend.Core.Acp.Connection do
     launch = state.launch
     mcp = launch[:mcp_servers] || []
 
+    # Capability gating (design: 2026-06-20-acp-rich-sessions §"Capability
+    # gating"): send session/load ONLY when the launch wants to resume AND the
+    # agent advertised the loadSession capability at initialize. An adapter that
+    # doesn't implement loadSession (e.g. claude-code-acp, which exposes
+    # sessionCapabilities.resume but no session/load handler) rejects session/load
+    # with a fatal -32601 "Method not found", failing the whole handshake. Degrade
+    # to a fresh session/new instead — losing the prior transcript replay, but
+    # keeping the switch/resume alive (mirrors how non-resumable terminal harnesses
+    # degrade).
     {state, frame} =
-      case launch[:mode] do
-        :load ->
-          request(
-            state,
-            "session/load",
-            %{
-              "sessionId" => launch[:conversation_id],
-              "cwd" => launch[:cwd],
-              "mcpServers" => mcp
-            },
-            :session_load
-          )
-
-        _ ->
-          request(
-            state,
-            "session/new",
-            %{"cwd" => launch[:cwd], "mcpServers" => mcp},
-            :session_new
-          )
+      if launch[:mode] == :load and load? do
+        request(
+          state,
+          "session/load",
+          %{
+            "sessionId" => launch[:conversation_id],
+            "cwd" => launch[:cwd],
+            "mcpServers" => mcp
+          },
+          :session_load
+        )
+      else
+        request(
+          state,
+          "session/new",
+          %{"cwd" => launch[:cwd], "mcpServers" => mcp},
+          :session_new
+        )
       end
 
     {state, [], [frame], [{:load_capable, load?}]}
