@@ -14,6 +14,7 @@ defmodule Legend.Core.Agents do
         post :start
         patch :resume, route: "/:id/resume"
         patch :set_transport, route: "/:id/transport"
+        patch :rename, route: "/:id/rename"
         delete :destroy
       end
     end
@@ -33,6 +34,7 @@ defmodule Legend.Core.Agents do
       define :resume_session, action: :resume
       define :set_session_conversation_id, action: :set_conversation_id
       define :set_session_transport, action: :set_transport
+      define :rename_session, action: :rename
       define :destroy_session, action: :destroy
     end
   end

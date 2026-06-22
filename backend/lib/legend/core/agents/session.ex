@@ -259,6 +259,51 @@ defmodule Legend.Core.Agents.Session do
              end)
     end
 
+    # Manual rename + the auto-namer's deferred write share this action. It
+    # accepts any name (the "only-if-blank" guard lives at the auto-name call
+    # site). After commit it nudges the session list to refetch; the open pane
+    # picks the new name up via that refetch → its `session` prop (no per-session
+    # broadcast needed).
+    update :rename do
+      require_atomic? false
+      accept [:name]
+
+      # Trim; an all-blank name resets to nil so the UI falls back to harness_id.
+      change fn changeset, _context ->
+        case Ash.Changeset.get_attribute(changeset, :name) do
+          nil ->
+            changeset
+
+          name ->
+            trimmed = String.trim(name)
+
+            Ash.Changeset.force_change_attribute(
+              changeset,
+              :name,
+              if(trimmed == "", do: nil, else: trimmed)
+            )
+        end
+      end
+
+      validate match(:name, ~r/\A[^[:cntrl:]]*\z/u) do
+        message "must not contain control characters"
+        where present(:name)
+      end
+
+      validate string_length(:name, max: 120) do
+        where present(:name)
+      end
+
+      change after_transaction(fn
+               _changeset, {:ok, session}, _context ->
+                 Legend.Core.Agents.Notifications.sessions_changed()
+                 {:ok, session}
+
+               _changeset, {:error, _} = error, _context ->
+                 error
+             end)
+    end
+
     destroy :destroy do
       primary? true
       require_atomic? false
