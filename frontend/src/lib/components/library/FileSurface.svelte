@@ -27,6 +27,7 @@
 	const dragging = $derived(layout.draggingId === tileId);
 	const buf = $derived(path ? filesStore.buffer(path) : undefined);
 	const dirty = $derived(path ? filesStore.dirty(path) : false);
+	const saving = $derived(path ? filesStore.saving(path) : false);
 	const crumbs = $derived(path ? path.split('/') : []);
 
 	let menuOpen = $state(false);
@@ -67,8 +68,12 @@
 		{/snippet}
 
 		{#snippet meta()}
-			{#if dirty}<span class="shrink-0 text-meta text-warn">Unsaved</span>{/if}
-			<Button size="sm" class="h-7 px-2.5 text-meta" onclick={() => path && filesStore.save(path)} disabled={!dirty}>Save</Button>
+			<!-- autosave status: Unsaved (pending) → Saving… (write in flight) → nothing -->
+			{#if saving}
+				<span class="shrink-0 text-meta text-ink-3">Saving…</span>
+			{:else if dirty}
+				<span class="shrink-0 text-meta text-warn">Unsaved</span>
+			{/if}
 		{/snippet}
 
 		{#snippet actions()}
@@ -94,6 +99,7 @@
 				<textarea
 					value={buf.content}
 					oninput={(e) => filesStore.setContent(path, e.currentTarget.value)}
+					onblur={() => void filesStore.save(path)}
 					onkeydown={(e) => {
 						if ((e.metaKey || e.ctrlKey) && e.key === 's') {
 							e.preventDefault();
