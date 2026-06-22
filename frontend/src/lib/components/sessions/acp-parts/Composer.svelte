@@ -93,71 +93,71 @@
 	<!-- sticky queue above the composer -->
 	<Queue queue={queueState.items} onSendNow={sendNow} onRemove={removeAt} onEdit={editAt} />
 
-	<div class="bg-shell px-3 pb-3 pt-2.5">
-		<div
-			class="overflow-hidden rounded-lg border border-hair-strong bg-app focus-within:border-brand"
-		>
-			<textarea
-				bind:value={text}
-				onkeydown={onKeydown}
-				rows="2"
-				placeholder="Message the agent…  ⏎ send · ⇧⏎ newline · @ file · / command — sends now, or queues while busy"
-				class="block min-h-10 w-full resize-none bg-transparent px-3 pb-1.5 pt-2.5 text-body text-ink-1 placeholder:text-ink-3 focus:outline-none"
-			></textarea>
+	<!-- The composer is the bottom of the message-stream surface, not a panel: it
+	     shares the stream's `bg-app` and `px-4` inset (so typed text lines up with the
+	     conversation prose) and carries no boxed border — the dock's single top hairline
+	     is the only seam between the scrolling history and the input. -->
+	<div class="px-4 pb-3 pt-2">
+		<textarea
+			bind:value={text}
+			onkeydown={onKeydown}
+			rows="2"
+			placeholder="Message the agent…  ⏎ send · ⇧⏎ newline · @ file · / command — sends now, or queues while busy"
+			class="block min-h-10 w-full resize-none bg-transparent py-1 text-body text-ink-1 placeholder:text-ink-3 focus:outline-none"
+		></textarea>
 
-			<div class="flex flex-wrap items-center gap-1.5 px-2 pb-2 pt-1.5">
-				<!-- Phase-1: context chips are an honest visual affordance only — no file
-				     picker, no fake attached state, no content-block assembly yet. -->
+		<div class="flex flex-wrap items-center gap-1.5 pt-1">
+			<!-- Phase-1: context chips are an honest visual affordance only — no file
+			     picker, no fake attached state, no content-block assembly yet. -->
+			<button
+				type="button"
+				disabled
+				title="Add context (coming soon)"
+				class="cursor-default rounded-sm border border-dashed border-hair-strong px-2 py-0.5 text-meta text-ink-2 opacity-60"
+			>
+				＠ Add context
+			</button>
+
+			<span class="flex-1"></span>
+
+			{#if mode}
 				<button
 					type="button"
-					disabled
-					title="Add context (coming soon)"
-					class="cursor-default rounded-sm border border-dashed border-hair-strong px-2 py-0.5 text-meta text-ink-2 opacity-60"
+					onclick={cycleMode}
+					title="Session mode"
+					class="rounded-sm border border-hair-strong bg-panel px-2 py-1 text-meta text-ink-2 hover:bg-raised"
 				>
-					＠ Add context
+					{mode} ▾
 				</button>
+			{/if}
 
-				<span class="flex-1"></span>
-
-				{#if mode}
-					<button
-						type="button"
-						onclick={cycleMode}
-						title="Session mode"
-						class="rounded-sm border border-hair-strong bg-panel px-2 py-1 text-meta text-ink-2 hover:bg-raised"
-					>
-						{mode} ▾
-					</button>
-				{/if}
-
-				{#if busy}
-					<button
-						type="button"
-						onclick={onCancel}
-						title="Stop the current turn"
-						class="h-[30px] rounded-md border border-hair-strong px-2.5 text-meta text-bad hover:bg-bad/10"
-					>
-						■ Stop
-					</button>
-					<button
-						type="button"
-						onclick={submit}
-						title="Agent is busy — enqueue"
-						class="h-[30px] rounded-md border border-hair-strong px-2.5 text-meta text-brand-hi hover:bg-raised"
-					>
-						＋ Queue
-					</button>
-				{:else}
-					<button
-						type="button"
-						onclick={submit}
-						title="Send"
-						class="grid h-[30px] w-8 place-items-center rounded-md bg-brand text-title text-void hover:bg-brand-hi"
-					>
-						↑
-					</button>
-				{/if}
-			</div>
+			{#if busy}
+				<button
+					type="button"
+					onclick={onCancel}
+					title="Stop the current turn"
+					class="h-[30px] rounded-md border border-hair-strong px-2.5 text-meta text-bad hover:bg-bad/10"
+				>
+					■ Stop
+				</button>
+				<button
+					type="button"
+					onclick={submit}
+					title="Agent is busy — enqueue"
+					class="h-[30px] rounded-md border border-hair-strong px-2.5 text-meta text-brand-hi hover:bg-raised"
+				>
+					＋ Queue
+				</button>
+			{:else}
+				<button
+					type="button"
+					onclick={submit}
+					title="Send"
+					class="grid h-[30px] w-8 place-items-center rounded-md bg-brand text-title text-void hover:bg-brand-hi"
+				>
+					↑
+				</button>
+			{/if}
 		</div>
 
 		<div class="mt-1.5 flex flex-wrap items-center gap-2.5 text-meta text-ink-3">
