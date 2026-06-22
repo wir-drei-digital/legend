@@ -55,6 +55,15 @@
 	// Empty dir on a local runtime falls back to the home dir — the footgun we nudge against.
 	const cautionHome = $derived(localRuntime && cwd.trim() === '');
 
+	const isTauri = typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window;
+
+	async function browseDir() {
+		// Dynamic import: the web build never loads the Tauri-only plugin.
+		const { open } = await import('@tauri-apps/plugin-dialog');
+		const picked = await open({ directory: true, multiple: false });
+		if (typeof picked === 'string') cwd = picked;
+	}
+
 	// Transports are harness-specific; default to the harness's first (its
 	// preferred transport) whenever the selection changes, and only show the
 	// picker when the harness speaks more than one.
@@ -255,13 +264,19 @@
 
 			<div class="flex flex-col gap-2">
 				<SectionLabel><label for="cwd">Working directory</label></SectionLabel>
-				<Input
-					id="cwd"
-					bind:value={cwd}
-					placeholder={localRuntime
-						? 'pick or type a project folder'
-						: 'sprite working directory (e.g. /root)'}
-				/>
+				<div class="flex items-center gap-2">
+					<Input
+						id="cwd"
+						bind:value={cwd}
+						class="flex-1"
+						placeholder={localRuntime
+							? 'pick or type a project folder'
+							: 'sprite working directory (e.g. /root)'}
+					/>
+					{#if isTauri && localRuntime}
+						<Button variant="outline" size="sm" onclick={browseDir}>Browse…</Button>
+					{/if}
+				</div>
 
 				{#if dirSuggestions.length}
 					<div class="flex flex-col overflow-hidden rounded-md border border-hair">

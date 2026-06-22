@@ -16,6 +16,7 @@ struct Backend(Mutex<Option<CommandChild>>);
 fn main() {
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_dialog::init())
         .manage(Backend(Mutex::new(None)))
         .setup(|app| {
             if cfg!(debug_assertions) {
