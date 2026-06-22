@@ -92,6 +92,25 @@ defmodule Legend.Core.Agents.Session do
         end
       end
 
+      # Auto-name from the launch instructions when the user left the name blank.
+      # Spawned/delegated sessions carry instructions as the CLI's initial prompt;
+      # deriving here (inside the insert) makes the name correct in the create
+      # response with no extra write. A user-provided name always wins.
+      change fn changeset, _context ->
+        name = Ash.Changeset.get_attribute(changeset, :name)
+
+        if is_nil(name) or String.trim(name) == "" do
+          instructions = Ash.Changeset.get_attribute(changeset, :instructions)
+
+          case Legend.Core.Agents.SessionName.derive(instructions) do
+            nil -> changeset
+            derived -> Ash.Changeset.force_change_attribute(changeset, :name, derived)
+          end
+        else
+          changeset
+        end
+      end
+
       # after_transaction (not after_action): SessionServer.start_session/1
       # writes to the DB from the server process, which must run OUTSIDE the
       # enclosing create transaction.
