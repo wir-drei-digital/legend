@@ -40,7 +40,7 @@ defmodule Legend.HarnessesTest do
 
   test "both built-ins are registered" do
     ids = Legend.Core.Harness.Registry.list() |> Enum.map(& &1.id) |> Enum.sort()
-    assert ids == ["claude_code", "codex", "gemini", "hermes", "opencode"]
+    assert ids == ["claude_code", "codex", "gemini", "hermes", "openclaw", "opencode"]
   end
 
   describe "library primer delivery" do

@@ -66,7 +66,8 @@ config :legend,
     Legend.Harnesses.Codex,
     Legend.Harnesses.Gemini,
     Legend.Harnesses.Hermes,
-    Legend.Harnesses.OpenCode
+    Legend.Harnesses.OpenCode,
+    Legend.Harnesses.OpenClaw
   ],
   runtimes: [Legend.Runtimes.LocalPty, Legend.Runtimes.Sprites],
   tunnels: [Legend.Tunnels.SpriteProxy],
