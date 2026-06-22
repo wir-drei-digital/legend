@@ -268,6 +268,8 @@ class WorkspaceStore {
 					// sessionsLayout.layout so the reconcile keeps working — and
 					// restore its saved layout onto it so session tiles persist.
 					noteSeq(entry.id, 'space-');
+					// The default space is renameable, so restore its saved name.
+					if (entry.name) live.name = entry.name;
 					live.layout.deserialize(entry.layout);
 					// Session tiles are derived from layout membership; restore only the
 					// MANUAL (file/messages) bindings so non-session tiles in the default

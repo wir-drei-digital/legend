@@ -153,31 +153,33 @@
 		<span class="flex-1 truncate text-body {active ? 'font-semibold text-ink-1' : 'text-ink-2'}">
 			{s.name}
 		</span>
-		{#if custom}
-			{#if armedDeleteId === s.id}
-				<button
-					type="button"
-					title="Confirm delete"
-					onclick={(e) => {
-						e.stopPropagation();
-						confirmDelete(s.id);
-					}}
-					class="shrink-0 rounded p-0.5 text-bad"
-				>
-					<Icon name="trash" size={13} />
-				</button>
-			{:else}
-				<button
-					type="button"
-					title="Rename space"
-					onclick={(e) => {
-						e.stopPropagation();
-						shell.openSpaceRename(s.id);
-					}}
-					class="shrink-0 rounded p-0.5 text-ink-3 opacity-0 transition-opacity hover:text-ink-1 group-hover/row:opacity-100"
-				>
-					<Icon name="pencil" size={13} />
-				</button>
+		{#if custom && armedDeleteId === s.id}
+			<button
+				type="button"
+				title="Confirm delete"
+				onclick={(e) => {
+					e.stopPropagation();
+					confirmDelete(s.id);
+				}}
+				class="shrink-0 rounded p-0.5 text-bad"
+			>
+				<Icon name="trash" size={13} />
+			</button>
+		{:else}
+			<!-- Rename is available on every space, including the default Workspace. -->
+			<button
+				type="button"
+				title="Rename space"
+				onclick={(e) => {
+					e.stopPropagation();
+					shell.openSpaceRename(s.id);
+				}}
+				class="shrink-0 rounded p-0.5 text-ink-3 opacity-0 transition-opacity hover:text-ink-1 group-hover/row:opacity-100"
+			>
+				<Icon name="pencil" size={13} />
+			</button>
+			<!-- Delete only for custom spaces — the auto Sessions space is required. -->
+			{#if custom}
 				<button
 					type="button"
 					title="Delete space"

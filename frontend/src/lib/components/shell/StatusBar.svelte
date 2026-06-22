@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { goto } from '$app/navigation';
+	import { shell } from '$lib/shell/shell.svelte';
 	import Icon from './Icon.svelte';
 	import VDiv from './VDiv.svelte';
 	import Popover from './Popover.svelte';
@@ -221,7 +221,7 @@
 
 		<button
 			type="button"
-			onclick={() => goto('/settings')}
+			onclick={() => shell.openSettings()}
 			class="grid size-[22px] place-items-center rounded-md text-ink-3 transition-colors hover:bg-[var(--hover-tint)] hover:text-ink-1"
 			title="Settings"
 		>
