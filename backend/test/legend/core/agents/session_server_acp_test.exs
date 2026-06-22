@@ -65,6 +65,32 @@ defmodule Legend.Core.Agents.SessionServerAcpTest do
     assert Agents.get_session!(s.id).conversation_id == "sess-xyz"
   end
 
+  test "acp launch encodes MCP http headers as an array of {name, value} (ACP schema)" do
+    {:ok, s} =
+      Agents.start_session(%{harness_id: "claude_code", runtime_id: "test", transport: :acp})
+
+    # Reply initialize so the server emits session/new carrying the mcpServers.
+    assert_receive {:test_runtime, :write, init}, 1_000
+    init_id = Jason.decode!(init)["id"]
+
+    send_output(s.id, %{
+      "jsonrpc" => "2.0",
+      "id" => init_id,
+      "result" => %{"protocolVersion" => 1, "agentCapabilities" => %{}}
+    })
+
+    assert_receive {:test_runtime, :write, new_req}, 1_000
+    params = Jason.decode!(new_req)["params"]
+
+    assert [server] = params["mcpServers"]
+    assert server["type"] == "http"
+
+    # ACP's zMcpServerHttp requires headers as Array<{name, value}>. A bare map
+    # fails the adapter's zod validation with JSON-RPC -32602 "Invalid params",
+    # which fails the handshake and marks the session :failed.
+    assert [%{"name" => "Authorization", "value" => "Bearer " <> _}] = server["headers"]
+  end
+
   test "acp session: a finished turn broadcasts a turn timeline item" do
     {:ok, s} =
       Agents.start_session(%{harness_id: "claude_code", runtime_id: "test", transport: :acp})

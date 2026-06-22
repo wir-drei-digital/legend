@@ -150,7 +150,8 @@ defmodule Legend.Core.Agents.Session do
       change set_attribute(:ended_at, &DateTime.utc_now/0)
     end
 
-    # Manual resume (also from :exited — continue a finished conversation).
+    # Manual resume from any stopped state — :interrupted, :exited (continue a
+    # finished conversation), or :failed (recover from a launch/handshake error).
     # Same record/process lockstep pattern as :start; SessionServer marks the
     # record :running (or :failed) from its own process, outside this txn.
     update :resume do

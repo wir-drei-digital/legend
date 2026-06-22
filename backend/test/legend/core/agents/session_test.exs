@@ -318,6 +318,23 @@ defmodule Legend.Core.Agents.SessionTest do
       assert resumed.exit_code == nil
     end
 
+    test "resume from :failed restarts (a failed session is recoverable)" do
+      session =
+        Agents.start_session!(%{harness_id: "claude_code", runtime_id: "test", cwd: "/tmp"})
+
+      Legend.Core.Agents.SessionServer.ensure_stopped(session.id)
+      session = Agents.fail_session!(Agents.get_session!(session.id), %{error: "boom"})
+      assert session.status == :failed
+
+      resumed = Agents.resume_session!(Agents.get_session!(session.id))
+
+      assert resumed.status == :running
+      assert resumed.error == nil
+      assert resumed.exit_code == nil
+      assert resumed.ended_at == nil
+      assert Legend.Core.Agents.SessionServer.whereis(resumed.id)
+    end
+
     test "resume is rejected while running" do
       session =
         Agents.start_session!(%{harness_id: "claude_code", runtime_id: "test", cwd: "/tmp"})

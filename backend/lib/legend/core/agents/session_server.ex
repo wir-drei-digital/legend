@@ -281,7 +281,7 @@ defmodule Legend.Core.Agents.SessionServer do
         "name" => "legend",
         "type" => "http",
         "url" => base_url <> "/api/mcp",
-        "headers" => %{"Authorization" => "Bearer #{session.mcp_token}"}
+        "headers" => acp_auth_headers(session.mcp_token)
       }
     ]
   end
@@ -292,10 +292,16 @@ defmodule Legend.Core.Agents.SessionServer do
         "name" => "legend",
         "type" => "http",
         "url" => mcp_url(),
-        "headers" => %{"Authorization" => "Bearer #{session.mcp_token}"}
+        "headers" => acp_auth_headers(session.mcp_token)
       }
     ]
   end
+
+  # ACP's HTTP McpServer schema (zMcpServerHttp) requires `headers` to be an
+  # ARRAY of {name, value} objects — NOT the {name => value} map the Claude Code
+  # CLI's --mcp-config uses. A map fails the adapter's zod validation with
+  # JSON-RPC -32602 "Invalid params", which fails the handshake (session :failed).
+  defp acp_auth_headers(token), do: [%{"name" => "Authorization", "value" => "Bearer #{token}"}]
 
   defp fetch_registered(registry, id) do
     case registry.fetch(id) do
