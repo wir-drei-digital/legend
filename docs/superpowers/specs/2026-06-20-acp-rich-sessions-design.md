@@ -1,7 +1,7 @@
 # ACP Rich Sessions — Design
 
 **Date:** 2026-06-20
-**Status:** Phase 1 built; Phase 2 built (cloud/remote ACP)
+**Status:** Phase 1 built; Phase 2 built (cloud/remote ACP); Phase 3 built (Codex / Gemini / OpenCode terminal+ACP, OpenClaw terminal-only)
 **Builds on:** agent sessions PoC (`2026-06-11-agent-sessions-poc-design.md`), agent messaging (`2026-06-12-agent-messaging-design.md`), session resume (`2026-06-12-session-resume-design.md`), the Sprites cloud-runtime + tunnel specs (2026-06-13/14/15)
 
 ## What this is
@@ -21,12 +21,12 @@ Legend is an orchestrator for AI agents — a unified interface across harnesses
 1. Run an ACP agent as a session and render its full structured stream in a rich, native UI.
 2. **One Claude Code harness, two transports** (`:acp` default, `:terminal` fallback), **switchable live** within a single session/conversation.
 3. Generalize the session spine so the content model (byte scrollback vs structured timeline) is polymorphic, not special-cased — the clean version of the PoC's `kind`/`io` seams.
-4. Shape the design so **cloud/remote** ACP and **additional ACP agents (Codex, Gemini)** are additive, not redesigns.
+4. Shape the design so **cloud/remote** ACP and **additional agents (Codex, Gemini, OpenCode, OpenClaw)** are additive, not redesigns.
 
 ## Non-goals (Phase 1)
 
 - Cloud/remote ACP (designed here; built in Phase 2).
-- Codex / Gemini harnesses (designed here; built in Phase 3).
+- Codex / Gemini / OpenCode / OpenClaw harnesses (designed here; built in Phase 3).
 - Client-side `fs/*` and `terminal/*` ACP capabilities — Phase 1 does **not** advertise them; the agent uses its own native file/terminal tools and we render the resulting `tool_call` updates (diffs included).
 - Persisting the conversation transcript in Legend's DB — the agent owns the durable record (its JSONL); Legend keeps only an in-memory live cache. (A Legend-side durable/queryable transcript store is a possible later feature, addable without rework.)
 - Auth/multi-user changes; the loopback single-user posture is unchanged.
@@ -200,14 +200,21 @@ Accepted caveat: a transport switch on a cloud session leaves the pre-switch exe
 - **#4 (adapter invocation):** `provision(:acp)` detects `claude-code-acp --version` and installs via `npm i -g @zed-industries/claude-code-acp` (package `@zed-industries/claude-code-acp`).
 - **#5 (sprite-FS conversation persistence):** to be confirmed in the manual bring-up (close laptop / restart backend → resume → confirm `session/load` repaint).
 
-## Codex + Gemini (Phase 3 — thin)
+## Codex + Gemini + OpenCode + OpenClaw (Phase 3 — built)
 
-With the spine + rich UI in place, each new ACP agent is a **harness module + provisioning + auth surface**; the protocol engine, timeline, UI, channel, and `:pipes` runtime are shared and agent-agnostic:
+With the spine + rich UI in place, each new agent is a **thin harness module** (`Legend.Harnesses.{Codex,Gemini,OpenCode,OpenClaw}`): a `definition/0`, a `provision/1`, a `Terminal.build_command/1`, and (for the dual-transport agents) an `Acp.acp_command/1`. The protocol engine, timeline, rich UI, channel, provisioning machinery, transport switching, and conversation-id capture are **shared and unchanged** — the "second agent ≈ a thin module" payoff the whole spine was designed for. Each is registered in `config :legend, :harnesses` (now six: ClaudeCode, Codex, Gemini, Hermes, OpenCode, OpenClaw).
 
-- **`Legend.Harnesses.Codex`**: `transports: [:acp]`; `acp_command/1` → `npx @zed-industries/codex-acp` (or a configured `codex-acp` binary); `OPENAI_API_KEY`/`CODEX_API_KEY` from settings; `provision/1` detects/installs the adapter; **supports `session/load`** so resume + switch work. API-key entry is surfaced through the existing **harness setup seam** (`/settings` card + new-session notice).
-- **Gemini**: native ACP (`transports: [:acp]`) — nearly free once the spine exists.
+**Auth is terminal-first.** The dual-transport agents declare `transports: [:terminal, :acp]` — terminal is the default, so first-run auth happens **in the PTY via the agent's own CLI login** (`codex login`, Google login / `GEMINI_API_KEY`, `opencode auth login`), with the rich ACP UI one transport toggle away. **Legend stores no credential** — auth lives in each agent's own on-disk store (`~/.codex`, Gemini's settings, opencode's auth). There is **no API-key entry surface**; this supersedes the original Phase-3 plan to surface keys through the harness setup seam.
 
-The "second agent ≈ a thin module" payoff is the reason the protocol logic lives in the shared layer.
+- **Codex** (`Legend.Harnesses.Codex`, `transports: [:terminal, :acp]`): terminal `codex` (npm `@openai/codex`), initial prompt as a trailing **positional** arg (seeds the interactive TUI — not `codex exec`, which is headless run-and-exit); resume `codex resume --last` (most-recent session in the cwd). ACP runs the **separate** `@zed-industries/codex-acp` adapter (`codex-acp` binary), so `provision/1` is **per-transport**: `:acp` detects/installs `codex-acp`, terminal detects/installs `codex`.
+- **Gemini** (`Legend.Harnesses.Gemini`, `transports: [:terminal, :acp]`): terminal `gemini` (npm `@google/gemini-cli`), initial prompt via `-i` (`--prompt-interactive` — submit then stay interactive; **not** `-p`, which forces a headless one-shot); resume `gemini -r latest`. ACP is **native** (`gemini --acp`, same binary), so a single `provision/1`. Known upstream risks to validate at live bring-up: ACP mode may not honor `GEMINI_API_KEY` non-interactively (google-gemini/gemini-cli#10855) and `--acp` has hung when spawned from non-TTY contexts (#22782) — pre-establish auth.
+- **OpenCode** (`Legend.Harnesses.OpenCode`, `transports: [:terminal, :acp]`): terminal `opencode` (npm `opencode-ai`), initial prompt via `--prompt` (the TUI positional is a project dir, not a prompt). **Known limitation:** `--prompt` only **pre-fills** the input box and does not auto-submit (sst/opencode#3937), so a delegated opencode session shows its task awaiting a manual Enter. Resume `opencode --continue` (last session). ACP is **native** (`opencode acp`, same binary), so a single `provision/1`.
+- **OpenClaw** (`Legend.Harnesses.OpenClaw`, **terminal-only** `transports: [:terminal]`): `openclaw chat` (alias for `openclaw tui --local`, the standalone embedded runtime) with a pinned stable session key `--session main` and the initial prompt via `--message`. Requires a one-time `openclaw setup` (or `openclaw onboard`) + model auth in the agent's own config before first use. **ACP is intentionally not offered** because `openclaw acp` is a **Gateway bridge** that needs a separately-running OpenClaw Gateway service — not a self-contained adapter like the others.
+
+### Intentionally scoped out for the new agents
+
+- **Terminal-mode library/messaging primers and signal-bus MCP.** These CLIs register MCP servers and load context via **config files** (each agent's own `AGENTS.md`/`GEMINI.md`/`opencode.json`/settings), not per-launch flags like Claude Code's `--mcp-config`/`--append-system-prompt`. So the Legend library primer and signal-bus MCP are delivered **over ACP only** (`session/new mcpServers` + first prompt); in terminal mode the new agents fall back to their own native context (out of Phase 3 scope). The initial-prompt *instructions* are still delivered in both modes.
+- **Conversation-id pinning at terminal fresh launch.** No CLI here supports pinning Legend's id as the conversation id the way Claude Code's `--session-id` does, so Legend never pins one for the new agents. Terminal resume is therefore **best-effort** — last/cwd-scoped (`codex resume --last`, `gemini -r latest`, `opencode --continue`, OpenClaw's pinned `--session main`) — and **cross-transport conversation continuity is not relied upon** for these agents (unlike Claude Code, whose TUI and ACP adapter share one keyed store).
 
 ## Error handling
 
@@ -235,7 +242,7 @@ Each phase is an independently shippable plan → build → review cycle.
 
 - **Phase 1 (build now):** spine + local + Claude Code + full rich UI — `transports` + `Acp` behaviour; `transport`/`conversation_id`; `Transcript` refactor + `AcpTimeline`; `Acp.Connection`; `SessionServer` generalization; `LocalPty :pipes`; channel ACP events; `ClaudeCode.acp_command/1`; Test ACP agent; the rich Svelte surface.
 - **Phase 2:** cloud — `Sprites :pipes`, MCP via `session/new`, cloud resume via `session/load`.
-- **Phase 3:** Codex + Gemini harnesses (definitions, provisioning, auth surface).
+- **Phase 3 (built):** Codex + Gemini + OpenCode + OpenClaw harnesses — thin modules (definitions, transport-aware provisioning, terminal-first auth via each CLI's own login). Codex/Gemini/OpenCode are dual-transport `[:terminal, :acp]`; OpenClaw is terminal-only (its `openclaw acp` is a Gateway bridge). No credential UI; terminal-mode primers/MCP + cross-transport continuity scoped out (ACP carries the primers/MCP).
 
 ## Verify-at-plan-time (open unknowns)
 
@@ -265,5 +272,9 @@ On implementation, update `docs/ARCHITECTURE.md` (the ACP entries move from "res
 
 - ACP: https://agentclientprotocol.com — JSON-RPC 2.0 over stdio; lifecycle `initialize` → `session/new`/`session/load` → `session/prompt`/`session/cancel`/`session/set_mode`; `session/update` notifications; client methods `session/request_permission`, `fs/*`, `terminal/*`.
 - `claude-code-acp` (`@zed-industries/claude-code-acp`) — Claude Code ACP adapter; supports `session/load` (replays JSONL history); shared `~/.claude/projects/<encoded-cwd>/session-<uuid>.jsonl` store.
-- `codex-acp` (`@zed-industries/codex-acp`) — Codex ACP adapter; `OPENAI_API_KEY`/`CODEX_API_KEY`/ChatGPT auth; supports `session/load`.
+- `codex` (`@openai/codex`) — OpenAI Codex CLI; terminal TUI seeded by positional prompt, `codex resume --last`; auth via `codex login` (`~/.codex`).
+- `codex-acp` (`@zed-industries/codex-acp`) — **separate** Codex ACP adapter (`codex-acp` binary); auth via Codex's own store; supports `session/load`.
+- `gemini` (`@google/gemini-cli`) — Google Gemini CLI; terminal REPL seeded by `-i`, `gemini -r latest`; **native** ACP via `gemini --acp` (same binary). Non-TTY ACP auth/hang risks: google-gemini/gemini-cli#10855, #22782.
+- `opencode` (`opencode-ai`) — sst opencode; terminal TUI pre-filled by `--prompt` (no auto-submit, sst/opencode#3937), `opencode --continue`; **native** ACP via `opencode acp` (same binary).
+- `openclaw` (`openclaw`) — OpenClaw local TUI; `openclaw chat --session main --message …`; one-time `openclaw setup`/auth. ACP not used (`openclaw acp` is a Gateway bridge).
 - Mockups: `.superpowers/brainstorm/<session>/content/acp-surface*.html` (rich surface iterations).
