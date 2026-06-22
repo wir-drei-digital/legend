@@ -281,7 +281,7 @@ Create `frontend/src/lib/shell/sessionGroups.ts`:
 
 // Sentinel for sessions with no cwd (legacy rows predating the home default):
 // keeps them in one deterministic bucket instead of one group each.
-const NO_DIR = ' nodir';
+const NO_DIR = '__no_dir__';
 
 export interface GroupableRow {
 	session: { cwd: string | null };
