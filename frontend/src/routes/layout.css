@@ -100,7 +100,10 @@
 
 @theme inline {
 	--font-sans: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
-	--font-mono: 'Geist Mono Variable', ui-monospace, 'SF Mono', Menlo, monospace;
+	/* UI "mono" now renders Geist sans (same family as --font-sans) — the only
+	   difference is the tabular-nums applied via the .font-mono rule below. True
+	   monospace lives solely in the terminal, which sets Geist Mono directly. */
+	--font-mono: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
 
 	/* Dense type scale — every UI font-size is one of these. */
 	--text-micro: 9px;

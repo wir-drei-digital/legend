@@ -106,8 +106,11 @@ appear as `text-micro … text-title`. No ad-hoc `text-[Npx]` in feature code.
 | `text-body` | 12.5px | comfortable body copy |
 | `text-title` | 13px | titles / the largest in-chrome text |
 
-Fonts: `--font-sans` = Geist Variable, `--font-mono` = Geist Mono Variable.
-`.font-mono` carries `font-variant-numeric: tabular-nums` so counts/ids line up.
+Fonts: Geist Variable throughout. Both `--font-sans` and `--font-mono` resolve to
+Geist Variable — the UI uses one proportional family everywhere. `.font-mono` no
+longer changes the typeface; it only carries `font-variant-numeric: tabular-nums`
+so counts/ids line up. True monospace is reserved for the terminal, which sets
+Geist Mono Variable directly (column alignment / TUIs need it).
 
 When migrating a stray pixel size, map: `9, 9.5 → text-micro`;
 `10, 10.5, 11 → text-meta`; `11.5 → text-ui`; `12, 12.5 → text-body`;
