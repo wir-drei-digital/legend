@@ -13,6 +13,21 @@ export function relativeTime(iso: string | null | undefined): string {
 	return `${Math.floor(hrs / 24)}d`;
 }
 
+/** The most recent of several ISO timestamps (ignores blanks/invalid). */
+export function mostRecentIso(...isos: (string | null | undefined)[]): string | undefined {
+	let best: string | undefined;
+	let bestMs = -Infinity;
+	for (const iso of isos) {
+		if (!iso) continue;
+		const ms = new Date(iso).getTime();
+		if (!Number.isNaN(ms) && ms > bestMs) {
+			bestMs = ms;
+			best = iso;
+		}
+	}
+	return best;
+}
+
 /** Last path segment of a working directory, for terse task summaries. */
 export function basename(path: string | null | undefined): string {
 	if (!path) return '';

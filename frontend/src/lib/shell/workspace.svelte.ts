@@ -46,6 +46,21 @@ class WorkspaceStore {
 		if (this.spaces.some((s) => s.id === id)) this.activeId = id;
 	}
 
+	/** Is this session currently tiled (and therefore on-screen) in the ACTIVE
+	 *  space? True for a derived session tile (id === sessionId) or a manual
+	 *  session binding. Drives the dock "placed" highlight + the notif filter
+	 *  (we only nag about sessions the user can't already see). */
+	isSessionVisible(sessionId: string): boolean {
+		const sp = this.active;
+		return (
+			sp.layout.has(sessionId) ||
+			sp.layout.tiles.some((t) => {
+				const b = this.binding(t);
+				return b?.kind === 'session' && b.params.sessionId === sessionId;
+			})
+		);
+	}
+
 	/** Restore-preserving reconcile: prune Sessions-space tiles whose session no
 	 *  longer exists, then auto-append live sessions not placed in ANY space and
 	 *  not user-dismissed. The restored layout is otherwise left intact. */

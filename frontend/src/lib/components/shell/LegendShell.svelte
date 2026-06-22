@@ -5,6 +5,7 @@
 	import StatusBar from './StatusBar.svelte';
 	import SpacesOverlay from './SpacesOverlay.svelte';
 	import SettingsModal from './SettingsModal.svelte';
+	import RenameSpaceModal from './RenameSpaceModal.svelte';
 	import NewSessionDialog from '$lib/components/NewSessionDialog.svelte';
 	import Dock from './Dock.svelte';
 	import TileGrid from './TileGrid.svelte';
@@ -111,4 +112,6 @@
 	<NewSessionDialog bind:open={shell.newSessionOpen} trigger={false} />
 
 	<SettingsModal />
+
+	<RenameSpaceModal />
 </div>

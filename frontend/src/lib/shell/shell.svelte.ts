@@ -5,6 +5,8 @@ class ShellStore {
 	spacesOpen = $state(false);
 	settingsOpen = $state(false);
 	newSessionOpen = $state(false);
+	/** id of the space currently being renamed (drives the rename modal), or null */
+	renameSpaceId = $state<string | null>(null);
 
 	openSpaces(): void {
 		this.spacesOpen = true;
@@ -26,6 +28,15 @@ class ShellStore {
 	openNewSession(): void {
 		this.closeSpaces();
 		this.newSessionOpen = true;
+	}
+
+	/** Open the rename-space modal. Closes the launcher so the modal stands alone. */
+	openSpaceRename(id: string): void {
+		this.closeSpaces();
+		this.renameSpaceId = id;
+	}
+	closeSpaceRename(): void {
+		this.renameSpaceId = null;
 	}
 }
 

@@ -31,6 +31,8 @@
 		| 'corner-down-left'
 		| 'file'
 		| 'panel-right'
+		| 'expand'
+		| 'shrink'
 		| 'link';
 </script>
 
@@ -151,6 +153,16 @@
 	{:else if name === 'panel-right'}
 		<rect x="3.5" y="4.5" width="17" height="15" rx="2.4" />
 		<path d="M14.5 4.5v15" />
+	{:else if name === 'expand'}
+		<path d="M4.5 9V4.5H9" />
+		<path d="M15 4.5h4.5V9" />
+		<path d="M19.5 15v4.5H15" />
+		<path d="M9 19.5H4.5V15" />
+	{:else if name === 'shrink'}
+		<path d="M9 4.5V9H4.5" />
+		<path d="M15 4.5V9h4.5" />
+		<path d="M9 19.5V15H4.5" />
+		<path d="M15 19.5V15h4.5" />
 	{:else if name === 'link'}
 		<path d="M9.5 14.5l5-5" />
 		<path d="M8 11l-2.2 2.2a3.1 3.1 0 004.4 4.4L12 16" />

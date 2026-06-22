@@ -115,7 +115,9 @@ export class TileLayout {
 		this.columns = cloneColumns(snap.columns);
 		this.colSizes = [...snap.colSizes];
 		this.rowSizes = snap.rowSizes.map((r) => [...r]);
-		this.focusedId = snap.focusedId;
-		this.activeId = snap.activeId;
+		// Defensive: a focused/active id that isn't a real tile (stale or corrupt
+		// snapshot) would blank the grid — drop it rather than trust it.
+		this.focusedId = snap.focusedId && this.has(snap.focusedId) ? snap.focusedId : null;
+		this.activeId = snap.activeId && this.has(snap.activeId) ? snap.activeId : null;
 	}
 }

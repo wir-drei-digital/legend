@@ -4,14 +4,10 @@
 	import SectionLabel from './SectionLabel.svelte';
 	import { shell } from '$lib/shell/shell.svelte';
 	import { workspaceStore, type Space } from '$lib/shell/workspace.svelte';
-	import { sessionsStore } from '$lib/stores/sessions.svelte';
 
 	let query = $state('');
 	let input = $state<HTMLInputElement | null>(null);
 
-	// Inline-rename state for custom spaces.
-	let renamingId = $state<string | null>(null);
-	let renameValue = $state('');
 	// Two-step delete: which custom space is currently armed for deletion.
 	let armedDeleteId = $state<string | null>(null);
 
@@ -21,7 +17,6 @@
 	const isCustom = (s: Space) => !s.auto;
 
 	const spaces = $derived(workspaceStore.spaces.filter((s) => matchText(s.name)));
-	const sessions = $derived(sessionsStore.sessions.filter((s) => matchText(s.name || s.harness_id)));
 
 	// Static "Open" rows — filtered by label like everything else.
 	interface OpenRow {
@@ -57,38 +52,14 @@
 	}
 
 	// Single click always switches immediately — custom spaces are renamed via the
-	// hover-revealed pencil button, not a double-click, so there's no debounce.
+	// hover-revealed pencil button (opens the rename modal).
 	function rowClick(s: Space) {
-		if (renamingId === s.id) return;
 		chooseSpace(s);
 	}
 
 	function newSpace() {
 		workspaceStore.createSpace();
 		shell.closeSpaces();
-	}
-
-	function openSession(s: { id: string; name: string | null; harness_id: string }) {
-		workspaceStore.openSurface('session', { sessionId: s.id, name: s.name || s.harness_id });
-		shell.closeSpaces();
-	}
-
-	// ---- inline rename ----------------------------------------------------
-	function startRename(s: Space) {
-		if (!isCustom(s)) return;
-		renamingId = s.id;
-		renameValue = s.name;
-		armedDeleteId = null;
-	}
-	function commitRename() {
-		if (renamingId) {
-			const name = renameValue.trim();
-			if (name) workspaceStore.renameSpace(renamingId, name);
-		}
-		renamingId = null;
-	}
-	function cancelRename() {
-		renamingId = null;
 	}
 
 	// ---- two-step delete --------------------------------------------------
@@ -143,23 +114,15 @@
 				{/each}
 			{/if}
 			{#if !q}
-				{@render actionRow('new-space', 'plus', '+ New space', newSpace)}
+				{@render actionRow('new-space', 'plus', 'New space', newSpace)}
 			{/if}
 
 			<!-- Open --------------------------------------------------------- -->
-			{#if openRowsFiltered.length || sessions.length}
+			{#if openRowsFiltered.length}
 				<SectionLabel class="block px-3 pb-1 pt-2.5 tracking-[0.12em]">Open</SectionLabel>
 				{#each openRowsFiltered as r (r.id)}
 					{@render actionRow(r.id, r.icon, r.label, r.run)}
 				{/each}
-				{#if sessions.length}
-					<SectionLabel class="block px-3 pb-1 pt-2 tracking-[0.12em] text-ink-3"
-						>Running sessions</SectionLabel
-					>
-					{#each sessions as s (s.id)}
-						{@render sessionRow(s)}
-					{/each}
-				{/if}
 			{/if}
 
 			<!-- Settings ----------------------------------------------------- -->
@@ -168,7 +131,7 @@
 				{@render actionRow('settings', 'gear', 'Settings', () => shell.openSettings())}
 			{/if}
 
-			{#if !spaces.length && !openRowsFiltered.length && !sessions.length && !settingsVisible}
+			{#if !spaces.length && !openRowsFiltered.length && !settingsVisible}
 				<p class="px-3 py-3 text-body text-ink-3">No matches for "{query}".</p>
 			{/if}
 		</div>
@@ -179,70 +142,53 @@
 	{@const active = s.id === workspaceStore.activeId}
 	{@const custom = isCustom(s)}
 	<div
-		class="group/row mx-1.5 flex items-center gap-2.5 rounded-[9px] px-2 py-[7px] transition-colors hover:bg-[var(--hover-tint)]"
-		class:cursor-pointer={renamingId !== s.id}
+		class="group/row mx-1.5 flex cursor-pointer items-center gap-2.5 rounded-[9px] px-2 py-[7px] transition-colors hover:bg-[var(--hover-tint)]"
 		style:background={active ? 'var(--accent-soft)' : undefined}
 		role="button"
 		tabindex="0"
 		onclick={() => rowClick(s)}
-		onkeydown={(e) => e.key === 'Enter' && renamingId !== s.id && chooseSpace(s)}
+		onkeydown={(e) => e.key === 'Enter' && chooseSpace(s)}
 	>
 		<Icon name="grid" size={15} class={active ? 'text-brand-hi' : 'text-ink-2'} />
-		{#if renamingId === s.id}
-			<!-- svelte-ignore a11y_autofocus -->
-			<input
-				autofocus
-				bind:value={renameValue}
-				onclick={(e) => e.stopPropagation()}
-				onblur={commitRename}
-				onkeydown={(e) => {
-					e.stopPropagation();
-					if (e.key === 'Enter') commitRename();
-					else if (e.key === 'Escape') cancelRename();
-				}}
-				class="min-w-0 flex-1 rounded-[5px] border border-hair bg-inset px-1.5 py-0.5 text-body text-ink-1 focus:outline-none"
-			/>
-		{:else}
-			<span class="flex-1 truncate text-body {active ? 'font-semibold text-ink-1' : 'text-ink-2'}">
-				{s.name}
-			</span>
-			{#if custom}
-				{#if armedDeleteId === s.id}
-					<button
-						type="button"
-						title="Confirm delete"
-						onclick={(e) => {
-							e.stopPropagation();
-							confirmDelete(s.id);
-						}}
-						class="shrink-0 rounded p-0.5 text-bad"
-					>
-						<Icon name="trash" size={13} />
-					</button>
-				{:else}
-					<button
-						type="button"
-						title="Rename space"
-						onclick={(e) => {
-							e.stopPropagation();
-							startRename(s);
-						}}
-						class="shrink-0 rounded p-0.5 text-ink-3 opacity-0 transition-opacity hover:text-ink-1 group-hover/row:opacity-100"
-					>
-						<Icon name="pencil" size={13} />
-					</button>
-					<button
-						type="button"
-						title="Delete space"
-						onclick={(e) => {
-							e.stopPropagation();
-							armDelete(s.id);
-						}}
-						class="shrink-0 rounded p-0.5 text-ink-3 opacity-0 transition-opacity hover:text-bad group-hover/row:opacity-100"
-					>
-						<Icon name="trash" size={13} />
-					</button>
-				{/if}
+		<span class="flex-1 truncate text-body {active ? 'font-semibold text-ink-1' : 'text-ink-2'}">
+			{s.name}
+		</span>
+		{#if custom}
+			{#if armedDeleteId === s.id}
+				<button
+					type="button"
+					title="Confirm delete"
+					onclick={(e) => {
+						e.stopPropagation();
+						confirmDelete(s.id);
+					}}
+					class="shrink-0 rounded p-0.5 text-bad"
+				>
+					<Icon name="trash" size={13} />
+				</button>
+			{:else}
+				<button
+					type="button"
+					title="Rename space"
+					onclick={(e) => {
+						e.stopPropagation();
+						shell.openSpaceRename(s.id);
+					}}
+					class="shrink-0 rounded p-0.5 text-ink-3 opacity-0 transition-opacity hover:text-ink-1 group-hover/row:opacity-100"
+				>
+					<Icon name="pencil" size={13} />
+				</button>
+				<button
+					type="button"
+					title="Delete space"
+					onclick={(e) => {
+						e.stopPropagation();
+						armDelete(s.id);
+					}}
+					class="shrink-0 rounded p-0.5 text-ink-3 opacity-0 transition-opacity hover:text-bad group-hover/row:opacity-100"
+				>
+					<Icon name="trash" size={13} />
+				</button>
 			{/if}
 		{/if}
 	</div>
@@ -259,21 +205,5 @@
 	>
 		<Icon name={icon} size={15} class="text-ink-2" />
 		<span class="flex-1 truncate text-body text-ink-2">{label}</span>
-	</div>
-{/snippet}
-
-{#snippet sessionRow(s: { id: string; name: string | null; harness_id: string })}
-	<div
-		class="group/row mx-1.5 flex cursor-pointer items-center gap-2.5 rounded-[9px] px-2 py-[7px] transition-colors hover:bg-[var(--hover-tint)]"
-		role="button"
-		tabindex="0"
-		onclick={() => openSession(s)}
-		onkeydown={(e) => e.key === 'Enter' && openSession(s)}
-	>
-		<Icon name="sessions" size={15} class="text-ink-2" />
-		<span class="flex-1 truncate text-body text-ink-2">{s.name || s.harness_id}</span>
-		{#if s.name}
-			<span class="shrink-0 font-mono text-micro text-ink-3">{s.harness_id}</span>
-		{/if}
 	</div>
 {/snippet}

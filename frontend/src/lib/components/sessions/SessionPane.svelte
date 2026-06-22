@@ -9,6 +9,7 @@
 	import ConfirmButton from '$lib/components/shell/ConfirmButton.svelte';
 	import StatusDot from '$lib/components/shell/StatusDot.svelte';
 	import StateBadge from '$lib/components/shell/StateBadge.svelte';
+	import VDiv from '$lib/components/shell/VDiv.svelte';
 	import SidePane from '$lib/components/shell/SidePane.svelte';
 	import SidePaneSection from '$lib/components/shell/SidePaneSection.svelte';
 	import SidePaneField from '$lib/components/shell/SidePaneField.svelte';
@@ -27,13 +28,18 @@
 	} from '$lib/sessions';
 
 	// `grab` is the grid's pointer-drag starter — fired when the header is pressed.
+	// `tileId` is the grid tile this pane occupies — it equals session.id only in
+	// the auto Sessions space; custom spaces mint a `tile-N` id, so all LAYOUT ops
+	// (active/focus/drag) must key off tileId, never session.id.
 	let {
 		session,
+		tileId,
 		grab,
 		layout,
 		onClose
 	}: {
 		session: Session;
+		tileId: string;
 		grab?: (e: PointerEvent) => void;
 		layout: TileLayout;
 		onClose: () => void;
@@ -41,9 +47,9 @@
 
 	const live = $derived(liveState(session));
 	const identity = $derived(identityFor(session.harness_id));
-	const active = $derived(layout.activeId === session.id);
-	const focusedMode = $derived(layout.focusedId === session.id);
-	const dragging = $derived(layout.draggingId === session.id);
+	const active = $derived(layout.activeId === tileId);
+	const focusedMode = $derived(layout.focusedId === tileId);
+	const dragging = $derived(layout.draggingId === tileId);
 
 	// A session only has a live PTY while running/starting; otherwise the pane
 	// shows a resume affordance so a stopped tile is still usable.
@@ -158,7 +164,7 @@
 
 	function toggleFocus() {
 		if (focusedMode) layout.restore();
-		else layout.focus(session.id);
+		else layout.focus(tileId);
 	}
 </script>
 
@@ -166,7 +172,7 @@
 <div
 	class="flex h-full min-h-0 flex-col bg-app transition-opacity"
 	style:opacity={dragging ? 0.45 : 1}
-	onpointerdown={() => layout.setActive(session.id)}
+	onpointerdown={() => layout.setActive(tileId)}
 >
 	<!-- header -->
 	<div
@@ -245,55 +251,63 @@
 			</div>
 		{/if}
 
-		<!-- per-pane actions menu -->
-		<div class="relative shrink-0">
+		<VDiv height={18} />
+
+		<!-- per-pane actions: grouped tightly so the cluster reads as one unit -->
+		<div class="flex shrink-0 items-center gap-0.5">
+			<div class="relative">
+				<IconButton
+					icon="more"
+					size={14}
+					box={24}
+					title="More actions"
+					active={menuOpen}
+					onclick={() => (menuOpen = !menuOpen)}
+				/>
+
+				<Popover bind:open={menuOpen} class="right-0 top-[28px] w-[150px]">
+					{#if isLive}
+						<MenuItem icon="pause" onclick={suspend}>Suspend</MenuItem>
+					{:else}
+						<MenuItem
+							icon="refresh"
+							onclick={() => {
+								void resume();
+								menuOpen = false;
+							}}
+						>
+							{resumeLabel}
+						</MenuItem>
+					{/if}
+					<div class="my-1 h-px bg-hair"></div>
+					<ConfirmButton
+						idleLabel="Delete session"
+						confirmLabel="Confirm delete"
+						onconfirm={remove}
+					/>
+				</Popover>
+			</div>
+
 			<IconButton
-				icon="more"
+				icon="panel-right"
 				size={14}
-				box={20}
-				title="More actions"
-				active={menuOpen}
-				onclick={() => (menuOpen = !menuOpen)}
+				box={24}
+				title="Details"
+				active={detailsOpen}
+				tone="accent"
+				onclick={() => (detailsOpen = !detailsOpen)}
 			/>
-
-			<Popover bind:open={menuOpen} class="right-0 top-[26px] w-[150px]">
-				{#if isLive}
-					<MenuItem icon="pause" onclick={suspend}>Suspend</MenuItem>
-				{:else}
-					<MenuItem icon="refresh" onclick={() => { void resume(); menuOpen = false; }}>
-						{resumeLabel}
-					</MenuItem>
-				{/if}
-				<div class="my-1 h-px bg-hair"></div>
-				<ConfirmButton idleLabel="Delete session" confirmLabel="Confirm delete" onconfirm={remove} />
-			</Popover>
+			<IconButton
+				icon={focusedMode ? 'shrink' : 'expand'}
+				size={14}
+				box={24}
+				title={focusedMode ? 'Restore grid' : 'Maximize pane'}
+				active={focusedMode}
+				tone="accent"
+				onclick={toggleFocus}
+			/>
+			<IconButton icon="close" size={14} box={24} title="Close pane" onclick={onClose} />
 		</div>
-
-		<IconButton
-			icon="eye"
-			size={14}
-			box={20}
-			title={focusedMode ? 'Restore grid' : 'Focus pane'}
-			active={focusedMode}
-			tone="accent"
-			onclick={toggleFocus}
-		/>
-		<IconButton
-			icon="panel-right"
-			size={14}
-			box={20}
-			title="Details"
-			active={detailsOpen}
-			tone="accent"
-			onclick={() => (detailsOpen = !detailsOpen)}
-		/>
-		<IconButton
-			icon="close"
-			size={14}
-			box={20}
-			title="Close pane"
-			onclick={onClose}
-		/>
 	</div>
 
 	<!-- stream (live terminal) + optional in-tile Details -->

@@ -14,6 +14,10 @@ export interface Session {
 	error: string | null;
 	transport: 'terminal' | 'acp';
 	conversation_id: string | null;
+	started_at: string | null;
+	ended_at: string | null;
+	inserted_at?: string;
+	updated_at?: string;
 }
 
 export interface HarnessSetup {

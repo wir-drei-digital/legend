@@ -12,7 +12,7 @@
 </script>
 
 {#if session}
-	<SessionPane {session} {grab} {layout} onClose={() => workspaceStore.closeTile(tileId)} />
+	<SessionPane {session} {tileId} {grab} {layout} onClose={() => workspaceStore.closeTile(tileId)} />
 {:else}
 	<div class="flex h-full flex-col items-center justify-center gap-2 bg-app px-6 text-center">
 		<Icon name="sessions" size={22} class="text-ink-3" />
