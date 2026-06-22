@@ -58,9 +58,14 @@ One pure deriver, two trigger sites, one shared `:rename` action.
                                                           │
                                    update :rename ────────┘  (also: manual rename UI)
                                    after_transaction:
-                                     Notifications.sessions_changed()   (lobby refetch)
-                                     broadcast {:session_named, name} on "session:<id>"
+                                     Notifications.sessions_changed()   (lobby refetch → prop)
 ```
+
+The lobby refetch is the only broadcast needed: `sessionsStore` refetches the
+whole list on the `sessions:lobby` `"changed"` event and `SessionPane` receives
+its `session` as a prop, so a rename re-renders the header automatically — the
+same path a transport switch already relies on. No per-session broadcast or
+channel push is added.
 
 ### 1. `Legend.Core.Agents.SessionName` — pure deriver
 
@@ -105,8 +110,6 @@ update :rename do
   change after_transaction(fn
     _changeset, {:ok, session}, _context ->
       Legend.Core.Agents.Notifications.sessions_changed()
-      Phoenix.PubSub.broadcast(Legend.PubSub, "session:#{session.id}",
-        {:session_named, session.name})
       {:ok, session}
     _changeset, {:error, _} = error, _context -> error
   end)
@@ -115,10 +118,9 @@ end
 
 - Accepts **any** name — manual rename can overwrite freely. The "only-if-blank"
   guard lives at the auto-name **call site**, not in the action.
-- The `after_transaction` fires **both** the lobby refetch signal
-  (`sessions_changed/0`, identical to how every lifecycle transition notifies the
-  list) **and** a targeted `{:session_named, name}` broadcast on the per-session
-  topic. Every caller — manual or auto — therefore gets live updates for free.
+- The `after_transaction` fires the lobby refetch signal (`sessions_changed/0`,
+  identical to how every lifecycle transition notifies the list). That is the
+  only broadcast needed — the open pane updates via refetch → prop (see §6).
 - Code wrapper `Agents.rename_session(id, name)` for the SessionServer caller.
 
 ### 4. First-ACP-prompt trigger — deferred, in SessionServer
@@ -150,10 +152,10 @@ session that is still unnamed gets named on its next live prompt (accepted).
   line 192) becomes **inline-editable**: click / pencil affordance → input → Enter
   commits via `renameSession`, Esc reverts. Inline edit (Linear-style) is lighter
   and more keyboard-first than a modal, matching the design register.
-- `session_channel.ex`: add `handle_info({:session_named, name}, socket)` →
-  `push(socket, "named", %{name: name})`; the pane updates `session.name` on that
-  event. The session **list** already refetches on the lobby `"changed"` event, so
-  it needs no change.
+- No channel change: `session` is a prop, and `sessionsStore` refetches the list
+  on the lobby `"changed"` event that `:rename` emits, so the header re-renders
+  from the updated prop (the same path transport switches already use). The edit
+  input is local state and closes on commit.
 
 ## Edge cases
 
@@ -179,11 +181,10 @@ session that is still unnamed gets named on its next live prompt (accepted).
 - **Resource (`:start`):** fills `name` from `instructions` when blank; does **not**
   override a provided name; `nil` instructions leaves `name` `nil`.
 - **Resource (`:rename`):** control-char + length validation; `after_transaction`
-  fires `sessions_changed` and the `{:session_named, name}` broadcast
-  (`assert_receive` on a subscribed PubSub).
-- **SessionServer (ACP):** first `acp_prompt` names a blank session (persisted +
-  broadcast); a pre-named session is left alone; a second prompt does not re-derive.
-- **Channel:** the `"named"` push reaches an attached client on rename.
+  fires `sessions_changed` (`assert_receive` on a subscribed PubSub); trims and
+  stores `nil` when blank.
+- **SessionServer (ACP):** first `acp_prompt` names a blank session (persisted); a
+  pre-named session is left alone; a second prompt does not re-derive.
 - **Frontend:** `bun run check` passes (repo's frontend testing is light).
 
 ## Out of scope (documented)
@@ -199,9 +200,7 @@ session that is still unnamed gets named on its next live prompt (accepted).
 - `backend/lib/legend/core/agents.ex` (`rename_session/2` code interface)
 - `backend/lib/legend/core/agents/` domain JSON:API routes (`/:id/rename`)
 - `backend/lib/legend/core/agents/session_server.ex` (deferred ACP trigger +
-  `auto_named?` state + prompt-content flattening)
-- `backend/lib/legend_web/channels/session_channel.ex` (`{:session_named, …}` →
-  `"named"` push)
+  `auto_named?` state; reuses the existing `prompt_text/1` content flattener)
 - `frontend/src/lib/sessions.ts` (`renameSession`)
 - `frontend/src/lib/components/sessions/SessionPane.svelte` (inline-editable header +
   handle `"named"`)
