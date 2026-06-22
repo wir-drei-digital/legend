@@ -61,7 +61,11 @@ config :legend,
   generators: [timestamp_type: :utc_datetime]
 
 config :legend,
-  harnesses: [Legend.Harnesses.ClaudeCode, Legend.Harnesses.Hermes],
+  harnesses: [
+    Legend.Harnesses.ClaudeCode,
+    Legend.Harnesses.Codex,
+    Legend.Harnesses.Hermes
+  ],
   runtimes: [Legend.Runtimes.LocalPty, Legend.Runtimes.Sprites],
   tunnels: [Legend.Tunnels.SpriteProxy],
   library_storage: Legend.Storage.LocalDisk,
