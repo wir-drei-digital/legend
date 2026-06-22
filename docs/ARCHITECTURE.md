@@ -9,7 +9,7 @@ One application, two delivery targets, three serving modes:
 ```
                   SvelteKit static SPA (Svelte 5 runes, no SSR — ever)
                  /            |                        \
-   Dev: Vite :5173     Web prod: served by      Desktop: Tauri webview,
+   Dev: Vite :4173     Web prod: served by      Desktop: Tauri webview,
    proxies /api+/socket  Phoenix from           backend runs INSIDE the app
    to Phoenix :4100      priv/static            as a Burrito sidecar :4807
                  \            |                        /

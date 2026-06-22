@@ -5,7 +5,7 @@
   "identifier": "dev.danielmilenkovic.legend",
   "build": {
     "frontendDist": "../../frontend/build",
-    "devUrl": "http://localhost:5173",
+    "devUrl": "http://localhost:4173",
     "beforeDevCommand": "cd ../frontend && bun run dev",
     "beforeBuildCommand": "cd ../frontend && PUBLIC_API_URL=http://localhost:4807 PUBLIC_WS_URL=ws://localhost:4807/socket bun run build"
   },

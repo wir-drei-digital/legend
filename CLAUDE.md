@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 One app, two delivery targets: a web app and a Tauri desktop app sharing the same backend and frontend. The SvelteKit SPA is served three ways:
 
-1. **Dev:** Vite dev server (:5173) proxies `/api` and `/socket` (ws) to Phoenix (:4100).
+1. **Dev:** Vite dev server (:4173) proxies `/api` and `/socket` (ws) to Phoenix (:4100).
 2. **Web prod:** the SPA build is copied into `backend/priv/static` and served by Phoenix from the `legend` release.
 3. **Desktop:** Tauri loads the static build; the backend ships *inside the app* as a Burrito-packaged sidecar binary listening on `127.0.0.1:4807`.
 
@@ -14,7 +14,7 @@ One app, two delivery targets: a web app and a Tauri desktop app sharing the sam
 
 ```bash
 just setup            # all deps (mix setup + bun install x2)
-just dev              # Phoenix :4100 + Vite :5173 (open :5173)
+just dev              # Phoenix :4100 + Vite :4173 (open :4173)
 just dev-desktop      # Phoenix + Tauri window (Tauri runs Vite itself)
 just test             # mix test + svelte-check
 just build            # SPA → priv/static → prod web release
