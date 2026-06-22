@@ -4,6 +4,7 @@
 	import AcpConversation from '$lib/components/sessions/AcpConversation.svelte';
 	import Icon from '$lib/components/shell/Icon.svelte';
 	import IconButton from '$lib/components/shell/IconButton.svelte';
+	import PaneHeader from '$lib/components/shell/PaneHeader.svelte';
 	import Popover from '$lib/components/shell/Popover.svelte';
 	import MenuItem from '$lib/components/shell/MenuItem.svelte';
 	import ConfirmButton from '$lib/components/shell/ConfirmButton.svelte';
@@ -48,8 +49,6 @@
 
 	const live = $derived(liveState(session));
 	const identity = $derived(identityFor(session.harness_id));
-	const active = $derived(layout.activeId === tileId);
-	const focusedMode = $derived(layout.focusedId === tileId);
 	const dragging = $derived(layout.draggingId === tileId);
 
 	// A session only has a live PTY while running/starting; otherwise the pane
@@ -191,11 +190,6 @@
 					? ({ kind: 'new', count: unread } as const)
 					: null
 	);
-
-	function toggleFocus() {
-		if (focusedMode) layout.restore();
-		else layout.focus(tileId);
-	}
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -205,18 +199,8 @@
 	onpointerdown={() => layout.setActive(tileId)}
 >
 	<!-- header -->
-	<div
-		class="flex h-[var(--h-bar)] shrink-0 items-center gap-2 border-b border-hair px-2.5"
-		style:background={active ? 'color-mix(in oklab, var(--accent) 7%, var(--bg-shell))' : 'var(--bg-shell)'}
-	>
-		<!-- drag handle: press + drag a tile by its header to re-tile the grid -->
-		<div
-			class="flex min-w-0 flex-1 items-center gap-2 {dragging ? 'cursor-grabbing' : 'cursor-grab'}"
-			onpointerdown={(e) => grab?.(e)}
-			role="button"
-			tabindex="-1"
-			title="Drag to re-tile"
-		>
+	<PaneHeader {tileId} {layout} {grab} {onClose}>
+		{#snippet title()}
 			<StatusDot color={live.dotColor} pulse={live.pulse} size={6} />
 			{#if editingName}
 				<!-- stopPropagation so typing/clicking doesn't start a header drag -->
@@ -248,63 +232,59 @@
 				{identity.tag}
 			</span>
 			<span class="min-w-0 flex-1 truncate text-meta text-ink-3">{summary}</span>
-		</div>
+		{/snippet}
 
-		{#if badge}
-			<span class="shrink-0">
-				{#if badge.kind === 'new'}
-					<StateBadge kind="new" count={badge.count} />
-				{:else}
-					<StateBadge kind={badge.kind} />
-				{/if}
-			</span>
-		{/if}
-
-		{#if time}
-			<span class="shrink-0 font-mono text-micro text-ink-3">{time}</span>
-		{/if}
-
-		{#if canSwitch}
-			<!-- transport toggle: only when the harness speaks both rich + term -->
-			<div class="flex shrink-0 items-center gap-1.5">
-				{#if switchError}
-					<span class="text-micro" style:color="var(--red)" title={switchError}>
-						{switchError}
-					</span>
-				{/if}
-				<div
-					class="flex overflow-hidden rounded-[7px] border border-hair-strong text-micro"
-				>
-					<button
-						type="button"
-						title="Rich (ACP) conversation"
-						disabled={switching}
-						class="px-2 py-0.5 font-bold disabled:opacity-50 {session.transport === 'acp'
-							? 'bg-brand text-app'
-							: 'text-ink-2'}"
-						onclick={() => switchTransport('acp')}
-					>
-						rich
-					</button>
-					<button
-						type="button"
-						title="Terminal"
-						disabled={switching}
-						class="px-2 py-0.5 font-bold disabled:opacity-50 {session.transport === 'terminal'
-							? 'bg-brand text-app'
-							: 'text-ink-2'}"
-						onclick={() => switchTransport('terminal')}
-					>
-						term
-					</button>
+		{#snippet meta()}
+			{#if badge}
+				<span class="shrink-0">
+					{#if badge.kind === 'new'}
+						<StateBadge kind="new" count={badge.count} />
+					{:else}
+						<StateBadge kind={badge.kind} />
+					{/if}
+				</span>
+			{/if}
+			{#if time}
+				<span class="shrink-0 font-mono text-micro text-ink-3">{time}</span>
+			{/if}
+			{#if canSwitch}
+				<!-- transport toggle: only when the harness speaks both rich + term -->
+				<div class="flex shrink-0 items-center gap-1.5">
+					{#if switchError}
+						<span class="text-micro" style:color="var(--red)" title={switchError}>
+							{switchError}
+						</span>
+					{/if}
+					<div class="flex overflow-hidden rounded-[7px] border border-hair-strong text-micro">
+						<button
+							type="button"
+							title="Rich (ACP) conversation"
+							disabled={switching}
+							class="px-2 py-0.5 font-bold disabled:opacity-50 {session.transport === 'acp'
+								? 'bg-brand text-app'
+								: 'text-ink-2'}"
+							onclick={() => switchTransport('acp')}
+						>
+							rich
+						</button>
+						<button
+							type="button"
+							title="Terminal"
+							disabled={switching}
+							class="px-2 py-0.5 font-bold disabled:opacity-50 {session.transport === 'terminal'
+								? 'bg-brand text-app'
+								: 'text-ink-2'}"
+							onclick={() => switchTransport('terminal')}
+						>
+							term
+						</button>
+					</div>
 				</div>
-			</div>
-		{/if}
+			{/if}
+			<VDiv height={18} />
+		{/snippet}
 
-		<VDiv height={18} />
-
-		<!-- per-pane actions: grouped tightly so the cluster reads as one unit -->
-		<div class="flex shrink-0 items-center gap-0.5">
+		{#snippet actions()}
 			<div class="relative">
 				<IconButton
 					icon="more"
@@ -314,7 +294,6 @@
 					active={menuOpen}
 					onclick={() => (menuOpen = !menuOpen)}
 				/>
-
 				<Popover bind:open={menuOpen} class="right-0 top-[28px] w-[150px]">
 					{#if isLive}
 						<MenuItem icon="pause" onclick={suspend}>Suspend</MenuItem>
@@ -338,7 +317,6 @@
 					/>
 				</Popover>
 			</div>
-
 			<IconButton
 				icon="panel-right"
 				size={14}
@@ -348,18 +326,8 @@
 				tone="accent"
 				onclick={() => (detailsOpen = !detailsOpen)}
 			/>
-			<IconButton
-				icon={focusedMode ? 'shrink' : 'expand'}
-				size={14}
-				box={24}
-				title={focusedMode ? 'Restore grid' : 'Maximize pane'}
-				active={focusedMode}
-				tone="accent"
-				onclick={toggleFocus}
-			/>
-			<IconButton icon="close" size={14} box={24} title="Close pane" onclick={onClose} />
-		</div>
-	</div>
+		{/snippet}
+	</PaneHeader>
 
 	<!-- stream (live terminal) + optional in-tile Details -->
 	<div class="flex min-h-0 flex-1">
