@@ -113,6 +113,106 @@ defmodule Legend.Core.Acp.ConnectionTest do
     assert {:conversation_id, "sess-xyz"} in effects
   end
 
+  test "session/new result with modes and models emits mode and model config items" do
+    {state, [init]} = Connection.new(%{cwd: "/tmp", mcp_servers: [], mode: :new})
+    init_id = Jason.decode!(init)["id"]
+
+    {state, _, _, _} =
+      Connection.handle_bytes(
+        state,
+        Jason.encode!(%{
+          "jsonrpc" => "2.0",
+          "id" => init_id,
+          "result" => %{"protocolVersion" => 1, "agentCapabilities" => %{}}
+        }) <> "\n"
+      )
+
+    {_state, items, _replies, _effects} =
+      Connection.handle_bytes(
+        state,
+        Jason.encode!(%{
+          "jsonrpc" => "2.0",
+          "id" => 2,
+          "result" => %{
+            "sessionId" => "sess-xyz",
+            "modes" => %{
+              "currentModeId" => "default",
+              "availableModes" => [
+                %{"id" => "default", "name" => "Default", "description" => "asks first"},
+                %{"id" => "plan", "name" => "Plan Mode", "description" => "no execution"}
+              ]
+            },
+            "models" => %{
+              "currentModelId" => "claude-sonnet",
+              "availableModels" => [
+                %{"modelId" => "claude-sonnet", "name" => "Sonnet"},
+                %{"modelId" => "claude-opus", "name" => "Opus", "description" => "most capable"}
+              ]
+            }
+          }
+        }) <> "\n"
+      )
+
+    by_id = Map.new(items, &{&1["id"], &1})
+
+    assert by_id["mode"]["type"] == "mode"
+    assert by_id["mode"]["current"] == "default"
+
+    assert [%{"id" => "default", "name" => "Default"}, %{"id" => "plan", "name" => "Plan Mode"}] =
+             by_id["mode"]["available"]
+
+    assert by_id["model"]["type"] == "model"
+    assert by_id["model"]["current"] == "claude-sonnet"
+    # availableModels carries `modelId`; normalize to `id` so the UI treats both
+    # selectors uniformly as {id, name, description}.
+    assert [%{"id" => "claude-sonnet", "name" => "Sonnet"}, %{"id" => "claude-opus"}] =
+             by_id["model"]["available"]
+  end
+
+  test "a session/new result without modes/models emits no config items (only sessionId)" do
+    {state, [init]} = Connection.new(%{cwd: "/tmp", mcp_servers: [], mode: :new})
+    init_id = Jason.decode!(init)["id"]
+
+    {state, _, _, _} =
+      Connection.handle_bytes(
+        state,
+        Jason.encode!(%{
+          "jsonrpc" => "2.0",
+          "id" => init_id,
+          "result" => %{"protocolVersion" => 1, "agentCapabilities" => %{}}
+        }) <> "\n"
+      )
+
+    {_state, items, _replies, _effects} =
+      Connection.handle_bytes(
+        state,
+        Jason.encode!(%{"jsonrpc" => "2.0", "id" => 2, "result" => %{"sessionId" => "sess-xyz"}}) <>
+          "\n"
+      )
+
+    assert items == []
+  end
+
+  test "current_mode_update emits a mode item carrying only the new current id" do
+    state = connected_state()
+
+    {_state, [item], _, _} =
+      Connection.handle_bytes(state, update("current_mode_update", %{"currentModeId" => "plan"}))
+
+    # No `available` here — the AcpTimeline merge-by-id preserves the list set at
+    # handshake, so a mid-session mode change must not clobber it.
+    assert item == %{"id" => "mode", "type" => "mode", "current" => "plan"}
+  end
+
+  test "set_model sends session/set_model with the agent session id and modelId" do
+    state = connected_state()
+    {_state, [frame]} = Connection.set_model(state, "claude-opus")
+    msg = Jason.decode!(frame)
+    assert msg["method"] == "session/set_model"
+    assert msg["params"]["sessionId"] == "sess-xyz"
+    assert msg["params"]["modelId"] == "claude-opus"
+  end
+
   test "partial frames buffer until newline" do
     {state, [init]} = Connection.new(%{cwd: "/tmp", mcp_servers: [], mode: :new})
     init_id = Jason.decode!(init)["id"]

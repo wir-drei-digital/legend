@@ -94,6 +94,11 @@ defmodule LegendWeb.SessionChannel do
     {:noreply, socket}
   end
 
+  def handle_in("set_model", %{"model" => model}, socket) when is_binary(model) do
+    SessionServer.acp_set_model(socket.assigns.session_id, model)
+    {:noreply, socket}
+  end
+
   def handle_in("permission", %{"request_id" => req, "option_id" => opt}, socket)
       when is_binary(req) and is_binary(opt) do
     SessionServer.acp_permission(socket.assigns.session_id, req, opt)

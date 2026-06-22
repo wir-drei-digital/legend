@@ -179,6 +179,21 @@ defmodule Legend.Core.Acp.Connection do
     {state, [frame]}
   end
 
+  @spec set_model(t(), String.t()) :: {t(), [binary()]}
+  def set_model(state, model_id) do
+    # Wire method `session/set_model` (ACP SDK AGENT_METHODS); the adapter's
+    # `unstable_` prefix is only on its TS method name, not the wire name.
+    {state, frame} =
+      request(
+        state,
+        "session/set_model",
+        %{"sessionId" => state.session_id, "modelId" => model_id},
+        :set_model
+      )
+
+    {state, [frame]}
+  end
+
   @spec answer_permission(t(), String.t(), String.t()) :: {t(), [binary()]}
   def answer_permission(state, request_id, option_id) do
     case Map.pop(state.perms, request_id) do
@@ -300,14 +315,17 @@ defmodule Legend.Core.Acp.Connection do
     {state, replies, effects} = maybe_initial_prompt(state)
     # {:session_ready} is the "handshake completed" signal that disarms the
     # SessionServer's handshake watchdog. {:conversation_id} persists the id.
-    {state, [], replies, [{:session_ready}, {:conversation_id, cid} | effects]}
+    # config_items surfaces the adapter's mode/model selectors to the timeline.
+    {state, config_items(result), replies, [{:session_ready}, {:conversation_id, cid} | effects]}
   end
 
-  defp handle_response(state, :session_load, _result) do
+  defp handle_response(state, :session_load, result) do
     # session/load has no sessionId in the result — keep the launch conversation_id.
     # History replays as session/update notifications (handled in Task 6).
     # {:session_ready} signals the SessionServer that the handshake completed.
-    {%{state | session_id: state.launch[:conversation_id]}, [], [], [{:session_ready}]}
+    # A load result MAY carry mode/model config too (forward-compat).
+    {%{state | session_id: state.launch[:conversation_id]}, config_items(result), [],
+     [{:session_ready}]}
   end
 
   defp handle_response(state, :prompt, result) do
@@ -315,6 +333,43 @@ defmodule Legend.Core.Acp.Connection do
   end
 
   defp handle_response(state, _tag, _result), do: {state, [], [], []}
+
+  # Build the mode/model singleton render items from a session/new|load result.
+  # The adapter returns `modes`/`models` objects ({currentXId, availableXs}); we
+  # key the items by stable id ("mode"/"model") so later current_*_update
+  # notifications and set_model optimism merge onto them via the AcpTimeline.
+  # An absent config object yields no item.
+  defp config_items(result) do
+    Enum.reject(
+      [config_item("mode", result["modes"]), config_item("model", result["models"])],
+      &is_nil/1
+    )
+  end
+
+  defp config_item(id, %{} = config) do
+    available = config["availableModes"] || config["availableModels"]
+
+    if is_list(available) do
+      %{
+        "id" => id,
+        "type" => id,
+        "current" => config["currentModeId"] || config["currentModelId"],
+        "available" => Enum.map(available, &config_option/1)
+      }
+    end
+  end
+
+  defp config_item(_id, _), do: nil
+
+  # Normalize a mode/model descriptor to a uniform {id, name, description?}.
+  # Modes use "id"; models use "modelId" — map both to "id" so the UI treats the
+  # two selectors identically.
+  defp config_option(o) do
+    %{"id" => o["id"] || o["modelId"], "name" => o["name"]}
+    |> then(fn opt ->
+      if o["description"], do: Map.put(opt, "description", o["description"]), else: opt
+    end)
+  end
 
   # Send the instructions as the first prompt on a fresh session only.
   defp maybe_initial_prompt(%{launch: %{mode: :new, instructions: text}} = state)
@@ -433,7 +488,9 @@ defmodule Legend.Core.Acp.Connection do
        %{"id" => "commands", "type" => "commands", "commands" => u["availableCommands"] || []}}
 
   defp reduce_update(state, u, "current_mode_update"),
-    do: {state, %{"id" => "mode", "type" => "mode", "mode" => u["currentModeId"]}}
+    # Only `current` — the AcpTimeline merge-by-id preserves the `available` list
+    # captured at handshake, so a mid-session mode change never clobbers it.
+    do: {state, %{"id" => "mode", "type" => "mode", "current" => u["currentModeId"]}}
 
   defp reduce_update(state, _u, _other), do: {state, nil}
 

@@ -1,5 +1,8 @@
 <script lang="ts">
 	import Queue from './Queue.svelte';
+	import ConfigChip, { type ConfigOption } from './ConfigChip.svelte';
+
+	type Config = { current: string | null; available: ConfigOption[] };
 
 	// The composer's PRIMARY job is sending a TEXT prompt via onPrompt(text).
 	// When the agent is busy, the text is pushed onto a queue that flushes (one item)
@@ -11,28 +14,50 @@
 		busy,
 		commands,
 		mode,
+		model,
+		turns,
+		tools,
 		queueState,
 		onPrompt,
 		onCancel,
-		onSetMode
+		onSetMode,
+		onSetModel
 	}: {
 		busy: boolean;
 		commands: string[];
-		mode: string | null;
+		mode: Config;
+		model: Config;
+		turns: number;
+		tools: number;
 		queueState: { items: string[] };
 		onPrompt: (text: string) => void;
 		onCancel: () => void;
 		onSetMode: (mode: string) => void;
+		onSetModel: (model: string) => void;
 	} = $props();
 
 	let text = $state('');
 	let wasBusy = $state(false);
 
+	// Per-message thinking effort. claude-code-acp has no mid-session thinking
+	// control, so the selected level's keyword is appended to the prompt on send
+	// (Claude Code reads it to scale its thinking budget). The option id IS the
+	// keyword; 'off' appends nothing. Sticky across sends.
+	const THINKING: ConfigOption[] = [
+		{ id: 'off', name: 'off', description: 'No extended thinking' },
+		{ id: 'think', name: 'low', description: 'Appends “think”' },
+		{ id: 'think harder', name: 'high', description: 'Appends “think harder”' },
+		{ id: 'ultrathink', name: 'max', description: 'Appends “ultrathink”' }
+	];
+	let thinking = $state('off');
+
 	function submit() {
 		const value = text.trim();
 		if (!value) return;
-		if (busy) queueState.items = [...queueState.items, value];
-		else onPrompt(value);
+		// Bake the thinking keyword in at compose time so queued items carry it too.
+		const msg = thinking === 'off' ? value : `${value}\n\n${thinking}`;
+		if (busy) queueState.items = [...queueState.items, msg];
+		else onPrompt(msg);
 		text = '';
 	}
 
@@ -78,13 +103,6 @@
 		text = value;
 	}
 
-	// Mode chip cycles to the next mode the harness reports. Phase-1: we only have
-	// the current mode string, so the chip simply re-asserts it (a no-op toggle hook
-	// for the host to extend) — clicking surfaces intent without inventing modes.
-	function cycleMode() {
-		if (mode) onSetMode(mode);
-	}
-
 	// Slash hints: surface the first few commands the harness advertises.
 	const slashHints = $derived(commands.slice(0, 4));
 </script>
@@ -120,16 +138,26 @@
 
 			<span class="flex-1"></span>
 
-			{#if mode}
-				<button
-					type="button"
-					onclick={cycleMode}
-					title="Session mode"
-					class="rounded-sm border border-hair-strong bg-panel px-2 py-1 text-meta text-ink-2 hover:bg-raised"
-				>
-					{mode} ▾
-				</button>
+			<!-- live config selectors, populated from the adapter's session/new handshake -->
+			{#if model.available.length}
+				<ConfigChip value={model.current} options={model.available} onSelect={onSetModel} title="Model" />
 			{/if}
+			{#if mode.available.length}
+				<ConfigChip
+					value={mode.current}
+					options={mode.available}
+					onSelect={onSetMode}
+					title="Permission mode"
+				/>
+			{/if}
+			<ConfigChip
+				value={thinking}
+				options={THINKING}
+				onSelect={(id) => (thinking = id)}
+				title="Thinking effort — appended to your message on send"
+				label="think"
+				active={thinking !== 'off'}
+			/>
 
 			{#if busy}
 				<button
@@ -169,6 +197,16 @@
 				</span>
 			{/if}
 			<span class="flex items-center gap-1">⏎ send · ⇧⏎ newline</span>
+
+			<!-- honest context counters: concrete timeline facts, no token estimates -->
+			{#if turns > 0 || tools > 0}
+				<span class="flex-1"></span>
+				<span class="flex items-center gap-1.5 font-mono">
+					<span>{turns} {turns === 1 ? 'turn' : 'turns'}</span>
+					<span class="text-ink-2">·</span>
+					<span>{tools} {tools === 1 ? 'tool' : 'tools'}</span>
+				</span>
+			{/if}
 		</div>
 	</div>
 </div>

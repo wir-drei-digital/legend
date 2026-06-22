@@ -75,6 +75,7 @@ defmodule Legend.Core.Agents.SessionServer do
   def acp_prompt(id, content), do: cast(id, {:acp_prompt, content})
   def acp_cancel(id), do: cast(id, :acp_cancel)
   def acp_set_mode(id, mode), do: cast(id, {:acp_set_mode, mode})
+  def acp_set_model(id, model), do: cast(id, {:acp_set_model, model})
 
   def acp_permission(id, request_id, option_id),
     do: cast(id, {:acp_permission, request_id, option_id})
@@ -544,6 +545,25 @@ defmodule Legend.Core.Agents.SessionServer do
     {:noreply, %{state | acp: acp}}
   end
 
+  def handle_cast({:acp_set_model, _model}, %{exited?: true} = state), do: {:noreply, state}
+
+  def handle_cast({:acp_set_model, model}, %{transport: :acp} = state) do
+    {acp, frames} = Legend.Core.Acp.Connection.set_model(state.acp, model)
+    Enum.each(frames, &state.runtime.write(state.handle, &1))
+
+    # The adapter emits no model-update notification, so optimistically advance
+    # the `model` item's `current`; merge-by-id preserves the `available` list
+    # captured at handshake so reattach/live readers reflect the switch.
+    state =
+      append_acp_item(%{state | acp: acp}, %{
+        "id" => "model",
+        "type" => "model",
+        "current" => model
+      })
+
+    {:noreply, state}
+  end
+
   def handle_cast({:acp_permission, _req, _opt}, %{exited?: true} = state), do: {:noreply, state}
 
   def handle_cast({:acp_permission, req, opt}, %{transport: :acp} = state) do
@@ -574,6 +594,7 @@ defmodule Legend.Core.Agents.SessionServer do
   def handle_cast({:acp_prompt, _content}, state), do: {:noreply, state}
   def handle_cast(:acp_cancel, state), do: {:noreply, state}
   def handle_cast({:acp_set_mode, _mode}, state), do: {:noreply, state}
+  def handle_cast({:acp_set_model, _model}, state), do: {:noreply, state}
   def handle_cast({:acp_permission, _req, _opt}, state), do: {:noreply, state}
 
   @impl true

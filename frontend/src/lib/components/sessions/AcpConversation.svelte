@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onDestroy } from 'svelte';
-	import { createAcpSession } from '$lib/shell/acpSession.svelte';
+	import { createAcpSession, type AcpItem } from '$lib/shell/acpSession.svelte';
 	import ToolCall from './acp-parts/ToolCall.svelte';
 	import PermissionCard from './acp-parts/PermissionCard.svelte';
 	import PlanBar from './acp-parts/PlanBar.svelte';
@@ -33,16 +33,36 @@
 	const asCount = (value: unknown) =>
 		typeof value === 'number' || typeof value === 'string' ? String(value) : '';
 
-	// The reducer emits at most one `commands` and one `mode` singleton; derive
-	// them from the stream for the composer.
+	// The reducer emits at most one `commands`, `mode`, and `model` singleton;
+	// derive them from the stream for the composer.
 	const commandsItem = $derived(acp.items.find((it) => it.type === 'commands'));
 	const commands = $derived(
 		commandsItem && Array.isArray(commandsItem.commands)
 			? (commandsItem.commands as unknown[]).filter((c): c is string => typeof c === 'string')
 			: ([] as string[])
 	);
-	const modeItem = $derived(acp.items.find((it) => it.type === 'mode'));
-	const mode = $derived(modeItem && typeof modeItem.mode === 'string' ? modeItem.mode : null);
+
+	// mode/model singletons carry `current` (selected id) + `available` (the
+	// adapter's option list). Coerce both into the uniform shape the composer's
+	// ConfigChip expects.
+	type ConfigOption = { id: string; name?: string; description?: string };
+	const toConfig = (item: AcpItem | undefined) => ({
+		current: item && typeof item.current === 'string' ? item.current : null,
+		available:
+			item && Array.isArray(item.available)
+				? (item.available as unknown[]).filter(
+						(o): o is ConfigOption =>
+							!!o && typeof o === 'object' && typeof (o as ConfigOption).id === 'string'
+					)
+				: ([] as ConfigOption[])
+	});
+	const mode = $derived(toConfig(acp.items.find((it) => it.type === 'mode')));
+	const model = $derived(toConfig(acp.items.find((it) => it.type === 'model')));
+
+	// Honest context counters: concrete facts from the timeline (the adapter
+	// exposes no token/context usage over ACP, so no token meter is shown).
+	const turns = $derived(acp.items.filter((it) => it.type === 'turn').length);
+	const tools = $derived(acp.items.filter((it) => it.type === 'tool').length);
 </script>
 
 <div class="flex h-full min-h-0 flex-col bg-app">
@@ -87,10 +107,14 @@
 			busy={acp.busy}
 			{commands}
 			{mode}
+			{model}
+			{turns}
+			{tools}
 			{queueState}
 			onPrompt={acp.prompt}
 			onCancel={acp.cancel}
 			onSetMode={acp.setMode}
+			onSetModel={acp.setModel}
 		/>
 	</div>
 </div>

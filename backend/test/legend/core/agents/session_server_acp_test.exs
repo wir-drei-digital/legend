@@ -142,6 +142,75 @@ defmodule Legend.Core.Agents.SessionServerAcpTest do
                    1_000
   end
 
+  test "acp session: the session/new handshake broadcasts mode and model config items" do
+    {:ok, s} =
+      Agents.start_session(%{harness_id: "claude_code", runtime_id: "test", transport: :acp})
+
+    Phoenix.PubSub.subscribe(Legend.PubSub, "session:#{s.id}")
+
+    assert_receive {:test_runtime, :write, init}, 1_000
+    init_id = Jason.decode!(init)["id"]
+
+    send_output(s.id, %{
+      "jsonrpc" => "2.0",
+      "id" => init_id,
+      "result" => %{"protocolVersion" => 1, "agentCapabilities" => %{}}
+    })
+
+    assert_receive {:test_runtime, :write, new_req}, 1_000
+    new_id = Jason.decode!(new_req)["id"]
+
+    send_output(s.id, %{
+      "jsonrpc" => "2.0",
+      "id" => new_id,
+      "result" => %{
+        "sessionId" => "sess-xyz",
+        "modes" => %{
+          "currentModeId" => "default",
+          "availableModes" => [%{"id" => "default", "name" => "Default"}]
+        },
+        "models" => %{
+          "currentModelId" => "m1",
+          "availableModels" => [%{"modelId" => "m1", "name" => "M1"}]
+        }
+      }
+    })
+
+    assert_receive {:session_event, _seq,
+                    %{
+                      "id" => "mode",
+                      "current" => "default",
+                      "available" => [%{"id" => "default"}]
+                    }},
+                   1_000
+
+    assert_receive {:session_event, _seq,
+                    %{"id" => "model", "current" => "m1", "available" => [%{"id" => "m1"}]}},
+                   1_000
+  end
+
+  test "acp session: acp_set_model writes a set_model frame and broadcasts an optimistic model item" do
+    {:ok, s} =
+      Agents.start_session(%{harness_id: "claude_code", runtime_id: "test", transport: :acp})
+
+    Phoenix.PubSub.subscribe(Legend.PubSub, "session:#{s.id}")
+    drive_to_live(s.id)
+    drain_test_runtime_writes()
+
+    Agents.SessionServer.acp_set_model(s.id, "claude-opus")
+
+    assert_receive {:test_runtime, :write, frame}, 1_000
+    decoded = Jason.decode!(frame)
+    assert decoded["method"] == "session/set_model"
+    assert decoded["params"]["modelId"] == "claude-opus"
+
+    # No model-update notification exists, so the server optimistically advances
+    # the `model` item's `current` for reattach/live correctness.
+    assert_receive {:session_event, _seq,
+                    %{"id" => "model", "type" => "model", "current" => "claude-opus"}},
+                   1_000
+  end
+
   test "acp session: a finished turn broadcasts a turn timeline item" do
     {:ok, s} =
       Agents.start_session(%{harness_id: "claude_code", runtime_id: "test", transport: :acp})

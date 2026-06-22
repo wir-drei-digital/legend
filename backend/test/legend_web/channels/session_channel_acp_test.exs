@@ -112,6 +112,12 @@ defmodule LegendWeb.SessionChannelAcpTest do
     decoded_mode = Jason.decode!(set_mode)
     assert decoded_mode["method"] == "session/set_mode"
     assert decoded_mode["params"]["modeId"] == "plan"
+
+    push(socket, "set_model", %{"model" => "claude-opus"})
+    assert_receive {:test_runtime, :write, set_model}
+    decoded_model = Jason.decode!(set_model)
+    assert decoded_model["method"] == "session/set_model"
+    assert decoded_model["params"]["modelId"] == "claude-opus"
   end
 
   test "non-string/non-list prompt content does not crash the session" do
