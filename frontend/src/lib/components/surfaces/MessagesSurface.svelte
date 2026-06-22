@@ -1,14 +1,20 @@
 <script lang="ts">
 	import MessageComposer from '$lib/components/MessageComposer.svelte';
 	import SectionLabel from '$lib/components/shell/SectionLabel.svelte';
+	import PaneHeader from '$lib/components/shell/PaneHeader.svelte';
+	import Icon from '$lib/components/shell/Icon.svelte';
+	import { workspaceStore } from '$lib/shell/workspace.svelte';
 	import type { Message } from '$lib/messages';
 	import { messagesStore } from '$lib/stores/messages.svelte';
 	import { sessionsStore } from '$lib/stores/sessions.svelte';
 
-	// tileId/params/grab are part of the uniform surface contract but unused by
-	// this surface; declared so the registry Component type matches.
+	// params is part of the uniform surface contract but unused by this surface;
+	// declared so the registry Component type matches.
 	let { tileId, params, grab }: { tileId: string; params: Record<string, unknown>; grab?: (e: PointerEvent) => void } =
 		$props();
+
+	const layout = $derived(workspaceStore.active.layout);
+	const dragging = $derived(layout.draggingId === tileId);
 
 	$effect(() => {
 		messagesStore.connect();
@@ -63,10 +69,21 @@
 	};
 </script>
 
-<div class="h-full min-h-0">
-	<div class="flex h-full flex-col gap-3 p-4">
-		<h1 class="text-title font-semibold text-ink-1">Messages</h1>
+<!-- svelte-ignore a11y_no_static_element_interactions -->
+<div
+	class="flex h-full min-h-0 flex-col bg-app transition-opacity"
+	style:opacity={dragging ? 0.45 : 1}
+	onpointerdown={() => layout.setActive(tileId)}
+>
+	<PaneHeader {tileId} {layout} {grab} onClose={() => workspaceStore.closeTile(tileId)}>
+		{#snippet title()}
+			<Icon name="message" size={14} class="shrink-0 text-ink-3" />
+			<span class="shrink-0 text-ui font-semibold text-ink-1">Messages</span>
+			<span class="font-mono text-micro text-ink-3">{messagesStore.messages.length}</span>
+		{/snippet}
+	</PaneHeader>
 
+	<div class="flex min-h-0 flex-1 flex-col gap-3 p-4">
 		<div class="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
 			{#each groups as group (group.root)}
 				<section class="rounded-[10px] border border-hair">
