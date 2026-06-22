@@ -61,6 +61,19 @@ defmodule Legend.Core.Agents.Session do
         where present(:name)
       end
 
+      # Normalize cwd up front so grouping keys are stable across sessions
+      # ("~/p" and "/Users/x/p/" collapse to one). Runtime-aware — see
+      # normalize_cwd/2 (remote sandbox paths stay opaque).
+      change fn changeset, _context ->
+        cwd = Ash.Changeset.get_attribute(changeset, :cwd)
+        rid = Ash.Changeset.get_attribute(changeset, :runtime_id)
+
+        case __MODULE__.normalize_cwd(cwd, rid) do
+          nil -> changeset
+          normalized -> Ash.Changeset.force_change_attribute(changeset, :cwd, normalized)
+        end
+      end
+
       # Default transport from the harness when the picker didn't supply one.
       # The attribute carries default: :terminal, so a fresh changeset already
       # reports :terminal — check the action input (params), not the resolved
@@ -327,6 +340,45 @@ defmodule Legend.Core.Agents.Session do
 
   @doc false
   def default_cwd, do: System.user_home!()
+
+  @doc """
+  Normalizes a session working directory so grouping keys are stable.
+
+  Local runtime (`"local_pty"`): expands a leading `~`, absolutizes (collapsing
+  `.`/`..`), and strips a trailing slash. Remote runtimes: treats the path as
+  opaque — strips only a trailing slash; the path lives in a sandbox, not on this
+  host, so host-home expansion would be wrong. Blank/`nil` → `nil` (the attribute
+  default applies).
+  """
+  @spec normalize_cwd(String.t() | nil, String.t() | nil) :: String.t() | nil
+  def normalize_cwd(nil, _runtime_id), do: nil
+
+  def normalize_cwd(cwd, runtime_id) when is_binary(cwd) do
+    case String.trim(cwd) do
+      "" ->
+        nil
+
+      trimmed when runtime_id == "local_pty" ->
+        trimmed |> expand_local() |> strip_trailing_slash()
+
+      trimmed ->
+        strip_trailing_slash(trimmed)
+    end
+  end
+
+  defp expand_local("~"), do: System.user_home!()
+  defp expand_local("~/" <> rest), do: System.user_home!() |> Path.join(rest) |> Path.expand()
+  defp expand_local("/" <> _ = abs), do: Path.expand(abs)
+  defp expand_local(other), do: other
+
+  defp strip_trailing_slash("/"), do: "/"
+
+  defp strip_trailing_slash(path) do
+    case String.replace_trailing(path, "/", "") do
+      "" -> "/"
+      stripped -> stripped
+    end
+  end
 
   @doc false
   def generate_token, do: :crypto.strong_rand_bytes(24) |> Base.url_encode64(padding: false)
