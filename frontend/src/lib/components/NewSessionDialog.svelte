@@ -5,6 +5,8 @@
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
 	import SectionLabel from '$lib/components/shell/SectionLabel.svelte';
+	import Icon from '$lib/components/shell/Icon.svelte';
+	import { sessionsStore } from '$lib/stores/sessions.svelte';
 	import { sessionsLayout } from '$lib/shell/sessions-layout.svelte';
 	import {
 		applyHarnessSetup,
@@ -33,6 +35,25 @@
 
 	const selectedHarness = $derived(harnesses.find((h) => h.id === harnessId));
 	const selectedRuntime = $derived(runtimes.find((r) => r.id === runtimeId));
+
+	// Existing project dirs, distinct, filtered by what's typed — picking one
+	// makes the new session join that directory's group instead of a near-miss.
+	const dirSuggestions = $derived.by(() => {
+		const typed = cwd.trim().toLowerCase();
+		const seen = new Set<string>();
+		const out: string[] = [];
+		for (const s of sessionsStore.sessions) {
+			const d = s.cwd?.trim();
+			if (!d || seen.has(d)) continue;
+			seen.add(d);
+			if (!typed || d.toLowerCase().includes(typed)) out.push(d);
+		}
+		return out.slice(0, 6);
+	});
+
+	const localRuntime = $derived(!selectedRuntime || selectedRuntime.id === 'local_pty');
+	// Empty dir on a local runtime falls back to the home dir — the footgun we nudge against.
+	const cautionHome = $derived(localRuntime && cwd.trim() === '');
 
 	// Transports are harness-specific; default to the harness's first (its
 	// preferred transport) whenever the selection changes, and only show the
@@ -237,10 +258,34 @@
 				<Input
 					id="cwd"
 					bind:value={cwd}
-					placeholder={selectedRuntime && selectedRuntime.id !== 'local_pty'
-						? 'sprite working directory (e.g. /root)'
-						: 'defaults to your home directory'}
+					placeholder={localRuntime
+						? 'pick or type a project folder'
+						: 'sprite working directory (e.g. /root)'}
 				/>
+
+				{#if dirSuggestions.length}
+					<div class="flex flex-col overflow-hidden rounded-md border border-hair">
+						{#each dirSuggestions as dir (dir)}
+							<button
+								type="button"
+								onclick={() => (cwd = dir)}
+								class="flex items-center gap-1.5 px-2 py-1 text-left transition-colors hover:bg-[var(--hover-tint)]"
+							>
+								<Icon name="folder" size={12} class="shrink-0 text-ink-3" />
+								<span class="shrink-0 text-ui text-ink-2">
+									{dir.replace(/\/+$/, '').split('/').pop()}
+								</span>
+								<span class="min-w-0 flex-1 truncate text-meta text-ink-3">{dir}</span>
+							</button>
+						{/each}
+					</div>
+				{/if}
+
+				{#if cautionHome}
+					<p class="text-meta" style:color="var(--amber)">
+						Agents here can read everything in your home folder. Pick or create a project folder.
+					</p>
+				{/if}
 			</div>
 
 			{#if incompatible && selectedHarness && selectedRuntime}
