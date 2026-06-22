@@ -29,24 +29,31 @@
 	/* Text ramp */
 	--text-1: #edeaf7;
 	--text-2: #a49ebc;
-	--text-3: #685f85;
+	--text-3: #83849b; /* oklch(0.62 0.035 285) — bumped from #685f85 so 9px labels clear AA (≥4.5:1) on shell/app */
 
-	/* Accent (themeable) — every selection/active state derives from this */
-	--accent: #14b8a6;
-	--accent-hi: #2dd4bf;
-	--accent-soft: rgba(20, 184, 166, 0.16);
-	--accent-contrast: #ffffff;
+	/* Accent (themeable) — every selection/active/focus state derives from this.
+	   Currently MONOCHROME: a plain white accent. Neutral by design — it never
+	   competes or clashes with the agent-identity or status hues, and on the
+	   violet-black surfaces white is the cleanest possible "primary". White is a
+	   fill, so its contrast text (--accent-contrast) is the dark void, and active/
+	   brand text on dark resolves to white at max contrast. Re-theme to a hue =
+	   swap these three and flip --accent-contrast back to #fff. */
+	--accent: #ffffff; /* fill / primary buttons — dark text on top */
+	--accent-hi: #ffffff; /* focus ring, active icons, brand-hi text — max contrast on dark */
+	--accent-soft: rgba(255, 255, 255, 0.1); /* selection / pulse wash — neutral light tint */
+	--accent-contrast: #08070d; /* dark void — text/icons sitting on the white fill */
 
-	/* Status */
-	--green: #34d399;
-	--amber: #fbbf24;
-	--red: #f87171;
+	/* Status — hand-tuned in OKLCH, off the Tailwind default scale */
+	--green: #4bdba0; /* oklch(0.800 0.150 162) */
+	--amber: #e9c944; /* oklch(0.840 0.150 95) — yellower, to read distinct from the orange accent */
+	--red: #fa5153; /* oklch(0.670 0.205 24) */
 
-	/* Agent identities — each distinct from the accent and from each other */
-	--claude: #e0745c;
-	--hermes: #4d9ff5;
-	--openclaw: #ef4444;
-	--legend: #2dd4bf;
+	/* Agent identities — each distinct from the accent and from each other.
+	   OpenClaw moved off red (was #ef4444) so it never reads as the error state. */
+	--claude: #e0745c; /* coral — real Claude brand */
+	--hermes: #5b9aed; /* oklch(0.680 0.140 256) — blue */
+	--openclaw: #0dc1d0; /* oklch(0.740 0.125 205) — cyan (was error-red) */
+	--legend: #ffffff; /* = accent-hi: Legend itself wears the (white) accent */
 
 	/* Neutral hover/selection tint — intentionally NOT derived from the accent,
 	   so a loud accent never bleeds into every surface. */

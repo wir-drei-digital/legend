@@ -10,6 +10,17 @@ One app, two delivery targets: a web app and a Tauri desktop app sharing the sam
 2. **Web prod:** the SPA build is copied into `backend/priv/static` and served by Phoenix from the `legend` release.
 3. **Desktop:** Tauri loads the static build; the backend ships *inside the app* as a Burrito-packaged sidecar binary listening on `127.0.0.1:4807`.
 
+## Design Context
+
+Frontend design intent lives in [PRODUCT.md](PRODUCT.md) (strategic: register, users, personality, anti-references, principles) and [docs/DESIGN_SYSTEM.md](docs/DESIGN_SYSTEM.md) (visual: tokens, primitives). Orientation:
+
+- **Register:** product — design serves the task; the tool disappears into the work.
+- **Users:** developers / power users orchestrating multiple AI coding agents in parallel; keyboard-first, high density, pro-tool conventions expected.
+- **Personality:** Precise · Calm · Technical. References: Linear, Zed. Anti-references: generic SaaS dashboard, playful consumer AI chat, neon "AI/crypto" hype, cluttered enterprise IDE.
+- **Principles:** the tool disappears into the task · the human is the conductor · restraint over spectacle · transparency earns trust · terminal is the floor, rich UI is enhancement.
+
+Use the impeccable design commands (`/impeccable critique|polish|layout|…`) for UI work; they read PRODUCT.md + DESIGN.md.
+
 ## Commands
 
 ```bash

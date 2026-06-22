@@ -203,8 +203,9 @@
 
 		{#if row.unread > 0}
 			<span
-				class="grid h-[15px] min-w-[15px] shrink-0 place-items-center rounded-full px-1 text-micro font-bold leading-none text-white"
+				class="grid h-[15px] min-w-[15px] shrink-0 place-items-center rounded-full px-1 text-micro font-bold leading-none"
 				style:background="var(--accent)"
+				style:color="var(--accent-contrast)"
 			>
 				{row.unread}
 			</span>

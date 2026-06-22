@@ -1,7 +1,6 @@
 <script lang="ts">
 	import type { Snippet } from 'svelte';
 	import { onMount } from 'svelte';
-	import TopBar from './TopBar.svelte';
 	import StatusBar from './StatusBar.svelte';
 	import SpacesOverlay from './SpacesOverlay.svelte';
 	import SettingsModal from './SettingsModal.svelte';
@@ -74,8 +73,6 @@
 <svelte:window onkeydown={onKeydown} />
 
 <div class="relative flex h-dvh w-full flex-col overflow-hidden bg-shell">
-	<TopBar {isTauri} />
-
 	{#snippet surfaceTile(id: string, grab: (e: PointerEvent) => void)}
 		{@const b = workspaceStore.binding(id)}
 		{@const Surface = b ? SURFACES[b.kind]?.component : undefined}
@@ -90,7 +87,7 @@
 	{/snippet}
 
 	<div class="flex min-h-0 flex-1">
-		<Dock />
+		<Dock {isTauri} />
 		<div class="min-w-0 flex-1 overflow-hidden bg-app">
 			<TileGrid
 				layout={space.layout}

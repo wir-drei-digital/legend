@@ -7,7 +7,11 @@ truth for what those tokens *mean* and which primitive to reach for — keep it 
 sync when either layer changes.
 
 The aesthetic: **dark only**, a near-black violet surface ramp, a single themeable
-teal accent, dense rows, tabular figures. Two layers sit between feature code and
+**amber / ember accent**, dense rows, tabular figures. The accent is a warm orange
+(~55°) set near-complementary to the cool violet-black surfaces — deliberately off the
+teal/indigo/violet "AI dark tool" default, and an instrument-light nod to the terminal
+heritage. It's two-tone: a deep ember fill (white text stays legible) + a bright amber
+highlight for rings/active/brand text. Two layers sit between feature code and
 Tailwind/shadcn:
 
 1. **Token layer** (`layout.css`) — CSS custom properties + Tailwind `@theme`
@@ -48,7 +52,7 @@ Dark only. All values are literal from `layout.css`.
 | --- | --- | --- | --- |
 | `--text-1` | `#edeaf7` | `text-ink-1` | primary text |
 | `--text-2` | `#a49ebc` | `text-ink-2` | secondary text, titles in chrome |
-| `--text-3` | `#685f85` | `text-ink-3` | tertiary: labels, captions, idle icons |
+| `--text-3` | `#83849b` | `text-ink-3` | tertiary: labels, captions, idle icons (AA on 9px labels) |
 
 ### Accent (themeable)
 
@@ -57,9 +61,9 @@ Every selection/active/focus state derives from these. **Re-theming = changing
 
 | Token | Value | Utility | Use |
 | --- | --- | --- | --- |
-| `--accent` | `#14b8a6` | `text-brand` / `bg-brand` / shadcn `--primary` | brand fill, primary buttons |
-| `--accent-hi` | `#2dd4bf` | `text-brand-hi` | brighter accent: active icons, focus ring (`--ring`) |
-| `--accent-soft` | `rgba(20,184,166,0.16)` | `bg-brand-soft` | tinted accent backgrounds, pulse rings |
+| `--accent` | `#b75400` | `text-brand` / `bg-brand` / shadcn `--primary` | brand fill, primary buttons (deep ember; #fff text 4.90:1) |
+| `--accent-hi` | `#fea03f` | `text-brand-hi` | brighter accent: active icons, focus ring (`--ring`) — 9.6:1 on shell |
+| `--accent-soft` | `rgba(254,160,63,0.15)` | `bg-brand-soft` | tinted accent backgrounds, pulse rings |
 | `--accent-contrast` | `#ffffff` | (via `--primary-foreground`) | text/icon on an accent fill |
 
 Note: shadcn's own `--accent` is its **neutral hover/selection token**, mapped to
@@ -70,9 +74,9 @@ shadcn's `--primary`.
 
 | Token | Value | Utility |
 | --- | --- | --- |
-| `--green` | `#34d399` | `text-ok` / `bg-ok` (shadcn `--chart-5`) |
-| `--amber` | `#fbbf24` | `text-warn` / `bg-warn` (shadcn `--chart-4`) |
-| `--red` | `#f87171` | `text-bad` / `bg-bad` (shadcn `--destructive`) |
+| `--green` | `#4bdba0` | `text-ok` / `bg-ok` (shadcn `--chart-5`) |
+| `--amber` | `#e9c944` | `text-warn` / `bg-warn` (shadcn `--chart-4`) |
+| `--red` | `#fa5153` | `text-bad` / `bg-bad` (shadcn `--destructive`) |
 
 ### Agent identity ramp
 
@@ -81,9 +85,9 @@ Each distinct from the accent and from each other.
 | Token | Value | Utility | Identity |
 | --- | --- | --- | --- |
 | `--claude` | `#e0745c` | `text-claude` / `bg-claude` | Claude Code |
-| `--hermes` | `#4d9ff5` | `text-hermes` / `bg-hermes` | Hermes |
-| `--openclaw` | `#ef4444` | `text-openclaw` / `bg-openclaw` | OpenClaw |
-| `--legend` | `#2dd4bf` | `text-legend` / `bg-legend` | Legend itself |
+| `--hermes` | `#5b9aed` | `text-hermes` / `bg-hermes` | Hermes |
+| `--openclaw` | `#0dc1d0` | `text-openclaw` / `bg-openclaw` | OpenClaw (cyan — moved off error-red) |
+| `--legend` | `#fea03f` | `text-legend` / `bg-legend` | Legend itself (= accent-hi) |
 
 ### Neutral hover tint
 
