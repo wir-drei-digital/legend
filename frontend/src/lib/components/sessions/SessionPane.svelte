@@ -21,6 +21,7 @@
 	import {
 		deleteSession,
 		listHarnesses,
+		renameSession,
 		resumeSession,
 		setTransport,
 		type Harness,
@@ -124,6 +125,35 @@
 	let menuOpen = $state(false);
 	let detailsOpen = $state(false);
 
+	// ---- inline rename (triggered from the ⋯ menu; edits the header title) ----
+	let editingName = $state(false);
+	let nameDraft = $state('');
+
+	function startRename() {
+		nameDraft = session.name ?? '';
+		editingName = true;
+		menuOpen = false;
+	}
+
+	async function commitRename() {
+		if (!editingName) return;
+		editingName = false;
+		const next = nameDraft.trim();
+		if (next === (session.name ?? '')) return;
+		try {
+			await renameSession(session.id, next);
+			// The lobby 'changed' refetch updates session.name via the prop.
+		} catch {
+			// Keep the current name on failure; the header reflects session.name.
+		}
+	}
+
+	// Focus + select the input the moment it mounts so the name is editable at once.
+	function autofocus(node: HTMLInputElement) {
+		node.focus();
+		node.select();
+	}
+
 	/** Suspend: terminate the agent process; the session becomes resumable. */
 	function suspend() {
 		if (session.transport === 'acp') acpView?.requestStop();
@@ -188,9 +218,29 @@
 			title="Drag to re-tile"
 		>
 			<StatusDot color={live.dotColor} pulse={live.pulse} size={6} />
-			<span class="shrink-0 text-ui font-semibold text-ink-1">
-				{session.name || session.harness_id}
-			</span>
+			{#if editingName}
+				<!-- stopPropagation so typing/clicking doesn't start a header drag -->
+				<input
+					class="shrink-0 rounded-[5px] border border-hair-strong bg-app px-1 text-ui font-semibold text-ink-1 outline-none"
+					bind:value={nameDraft}
+					onpointerdown={(e) => e.stopPropagation()}
+					onblur={commitRename}
+					onkeydown={(e) => {
+						if (e.key === 'Enter') {
+							e.preventDefault();
+							commitRename();
+						} else if (e.key === 'Escape') {
+							e.preventDefault();
+							editingName = false;
+						}
+					}}
+					use:autofocus
+				/>
+			{:else}
+				<span class="shrink-0 text-ui font-semibold text-ink-1">
+					{session.name || session.harness_id}
+				</span>
+			{/if}
 			<span
 				class="shrink-0 font-mono text-micro font-bold tracking-[0.04em]"
 				style:color="var({identity.colorVar})"
@@ -279,6 +329,7 @@
 							{resumeLabel}
 						</MenuItem>
 					{/if}
+					<MenuItem icon="pencil" onclick={startRename}>Rename</MenuItem>
 					<div class="my-1 h-px bg-hair"></div>
 					<ConfirmButton
 						idleLabel="Delete session"

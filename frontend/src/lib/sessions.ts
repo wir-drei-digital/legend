@@ -115,6 +115,15 @@ export async function setTransport(id: string, transport: 'terminal' | 'acp'): P
 	if (!res.ok) throw new Error(await errorMessage(res, 'switching transport failed'));
 }
 
+export async function renameSession(id: string, name: string): Promise<void> {
+	const res = await fetch(`${apiBase}/api/sessions/${id}/rename`, {
+		method: 'PATCH',
+		headers: { 'Content-Type': JSONAPI, Accept: JSONAPI },
+		body: JSON.stringify({ data: { type: 'session', id, attributes: { name } } })
+	});
+	if (!res.ok) throw new Error(await errorMessage(res, 'renaming session failed'));
+}
+
 export async function deleteSession(id: string): Promise<void> {
 	const res = await fetch(`${apiBase}/api/sessions/${id}`, {
 		method: 'DELETE',
