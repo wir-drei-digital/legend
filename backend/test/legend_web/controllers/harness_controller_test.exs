@@ -6,7 +6,7 @@ defmodule LegendWeb.HarnessControllerTest do
 
     assert %{"data" => harnesses} = json_response(conn, 200)
     ids = Enum.map(harnesses, & &1["id"]) |> Enum.sort()
-    assert ids == ["claude_code", "codex", "gemini", "hermes"]
+    assert ids == ["claude_code", "codex", "gemini", "hermes", "opencode"]
 
     claude = Enum.find(harnesses, &(&1["id"] == "claude_code"))
     assert claude["name"] == "Claude Code"

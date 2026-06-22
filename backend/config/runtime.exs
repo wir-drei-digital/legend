@@ -17,6 +17,7 @@ config :legend, :harness_commands,
   codex: env!("HARNESS_CODEX_CMD", :string, "codex"),
   codex_acp: env!("HARNESS_CODEX_ACP_CMD", :string, "codex-acp"),
   gemini: env!("HARNESS_GEMINI_CMD", :string, "gemini"),
+  opencode: env!("HARNESS_OPENCODE_CMD", :string, "opencode"),
   hermes: env!("HARNESS_HERMES_CMD", :string, "hermes"),
   hermes_primer_flag: env!("HARNESS_HERMES_PRIMER_FLAG", :string, nil)
 
