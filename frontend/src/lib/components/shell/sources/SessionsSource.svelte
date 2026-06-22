@@ -117,7 +117,6 @@
 </div>
 
 {#snippet benchRow(row: Row)}
-	{@const surfaced = row.state.attention}
 	{@const time = relativeTime(row.lastActive)}
 	<button
 		type="button"
@@ -132,16 +131,11 @@
 				params: { sessionId: row.session.id, name: row.session.name || row.session.harness_id },
 				label: row.session.name || row.session.harness_id
 			})}
-		class="group/row relative flex h-[var(--h-row)] w-full items-center gap-2 pl-3 pr-2 text-left transition-colors hover:bg-[var(--hover-tint)]"
+		class="group/row flex h-[var(--h-row)] w-full items-center gap-2 pl-3 pr-2 text-left transition-colors hover:bg-[var(--hover-tint)]"
 		style:background={row.placed ? 'var(--accent-soft)' : undefined}
 		title={`${row.identity.label} · ${row.state.label}`}
 	>
-		<!-- left spine -->
-		<span
-			class="absolute left-0 top-0 h-full w-[2px]"
-			style:background={row.placed ? 'var(--accent)' : surfaced ? 'var(--amber)' : 'transparent'}
-		></span>
-
+		<!-- placed = iris wash + bold weight; attention = dot color + flag. No side-stripe. -->
 		<!-- state: the dot color/pulse IS the live-state indicator -->
 		<StatusDot color={row.state.dotColor} pulse={row.state.pulse} size={6} />
 
