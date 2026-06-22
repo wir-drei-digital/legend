@@ -8,7 +8,7 @@
 
 Today every session is a `:terminal` harness: a CLI under a PTY, rendered as raw bytes in xterm. This spec adds **`:acp` sessions** — the [Agent Client Protocol](https://agentclientprotocol.com) (JSON-RPC 2.0 over stdio, client spawns the agent subprocess) — so a session that runs an ACP-capable agent gets a **rich structured UI** (streaming messages + reasoning, tool calls with diffs, interactive permission prompts, plans, slash commands) instead of a terminal.
 
-The same Claude Code conversation can be driven through **either** transport and **switched live**, because Legend's session id already *is* the agent's conversation id and Claude Code's terminal CLI and its ACP adapter share one on-disk conversation store. The design also covers running ACP agents on **cloud/remote runtimes** and adding **Codex** (and Gemini) as further ACP harnesses.
+The same Claude Code conversation can be driven through **either** transport and **switched live**, because Legend's session id already *is* the agent's conversation id and Claude Code's terminal CLI and its ACP adapter share one on-disk conversation store. The design also covers running ACP agents on **cloud/remote runtimes** and adding **Codex, Gemini, OpenCode and OpenClaw** as further harnesses (terminal-first auth, with rich ACP for the dual-transport three; OpenClaw is terminal-only).
 
 This realizes the `:acp` extension point reserved in the PoC (`kind` + `CommandSpec.io: :pty | :pipes`).
 
@@ -35,7 +35,7 @@ Legend is an orchestrator for AI agents — a unified interface across harnesses
 
 | Decision | Choice |
 |---|---|
-| Phase 1 scope | Depth-first: full rich UI for **Claude Code on the local runtime**; cloud + Codex designed-for, phased |
+| Phase 1 scope | Depth-first: full rich UI for **Claude Code on the local runtime**; cloud + Codex designed-for, phased (Phase 3 now built) |
 | Transport model | **One harness, switchable transport.** Drop `Definition.kind`; add `Definition.transports :: [:terminal \| :acp \| :native]` (ordered, first = default). Add `session.transport`. |
 | Live switching | Suspend → relaunch into the **same `conversation_id`** under the other transport. Mid-turn loss is acceptable (same as suspend/resume today). |
 | Conversation identity | New `session.conversation_id`: pinned to Legend's id when we can (terminal `--session-id`), captured from the agent when we can't (ACP `session/new`). All resume/switch key off it. |
