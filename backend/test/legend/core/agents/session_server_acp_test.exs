@@ -604,6 +604,54 @@ defmodule Legend.Core.Agents.SessionServerAcpTest do
     assert Enum.at(spec.args, resume_idx + 1) == resume_id
   end
 
+  test "acp session: the first prompt auto-names a blank session" do
+    {:ok, s} =
+      Agents.start_session(%{harness_id: "claude_code", runtime_id: "test", transport: :acp})
+
+    drive_to_live(s.id)
+    drain_test_runtime_writes()
+
+    Agents.SessionServer.acp_prompt(s.id, "Refactor the auth module")
+
+    assert eventually(fn -> Agents.get_session!(s.id).name == "Refactor the auth module" end)
+  end
+
+  test "acp session: the first prompt does not overwrite a user-provided name" do
+    {:ok, s} =
+      Agents.start_session(%{
+        harness_id: "claude_code",
+        runtime_id: "test",
+        transport: :acp,
+        name: "My session"
+      })
+
+    drive_to_live(s.id)
+    drain_test_runtime_writes()
+
+    Agents.SessionServer.acp_prompt(s.id, "Refactor the auth module")
+    # Let the cast finish processing before reading the record.
+    _ = :sys.get_state(Agents.SessionServer.whereis(s.id))
+
+    assert Agents.get_session!(s.id).name == "My session"
+  end
+
+  test "acp session: only the first prompt names the session" do
+    {:ok, s} =
+      Agents.start_session(%{harness_id: "claude_code", runtime_id: "test", transport: :acp})
+
+    drive_to_live(s.id)
+    drain_test_runtime_writes()
+
+    Agents.SessionServer.acp_prompt(s.id, "First task here")
+    assert eventually(fn -> Agents.get_session!(s.id).name == "First task here" end)
+
+    # A later prompt (queued behind the in-flight first turn) must NOT re-derive.
+    Agents.SessionServer.acp_prompt(s.id, "A completely different second task")
+    _ = :sys.get_state(Agents.SessionServer.whereis(s.id))
+
+    assert Agents.get_session!(s.id).name == "First task here"
+  end
+
   # Poll briefly: the conversation id is persisted from the server process, so it
   # may lag the synchronous response we just fed in.
   defp eventually(fun, attempts \\ 50)

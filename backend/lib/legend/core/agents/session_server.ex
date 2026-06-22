@@ -178,6 +178,7 @@ defmodule Legend.Core.Agents.SessionServer do
              handle: handle,
              tunnel: tunnel,
              exited?: false,
+             auto_named?: false,
              nudge_count: 0,
              nudge_froms: MapSet.new(),
              nudge_timer: nil
@@ -523,6 +524,7 @@ defmodule Legend.Core.Agents.SessionServer do
   def handle_cast({:acp_prompt, _content}, %{exited?: true} = state), do: {:noreply, state}
 
   def handle_cast({:acp_prompt, content}, %{transport: :acp} = state) do
+    state = maybe_auto_name(state, content)
     {:noreply, send_or_queue_prompt(state, content)}
   end
 
@@ -841,6 +843,37 @@ defmodule Legend.Core.Agents.SessionServer do
   end
 
   defp prompt_text(_), do: ""
+
+  # Best-effort: name a still-unnamed ACP session from its first prompt. Fires at
+  # most once (auto_named? guard), only when the user left the name blank, and
+  # never blocks the prompt — a rename failure is logged and the turn proceeds.
+  defp maybe_auto_name(%{auto_named?: true} = state, _content), do: state
+
+  defp maybe_auto_name(state, content) do
+    cond do
+      not blank_name?(state.session.name) ->
+        %{state | auto_named?: true}
+
+      true ->
+        case Legend.Core.Agents.SessionName.derive(prompt_text(content)) do
+          nil ->
+            state
+
+          name ->
+            case Agents.rename_session(state.session, %{name: name}) do
+              {:ok, session} ->
+                %{state | session: session, auto_named?: true}
+
+              {:error, reason} ->
+                Logger.warning("[acp #{state.session.id}] auto-name failed: #{inspect(reason)}")
+                %{state | auto_named?: true}
+            end
+        end
+    end
+  end
+
+  defp blank_name?(nil), do: true
+  defp blank_name?(name) when is_binary(name), do: String.trim(name) == ""
 
   # Post-turn drain: send at most ONE prompt (one turn at a time). Prefer a
   # queued user prompt; otherwise wake the agent with a deferred nudge line.
