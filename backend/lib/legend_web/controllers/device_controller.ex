@@ -21,6 +21,7 @@ defmodule LegendWeb.DeviceController do
     case Devices.get_device(id) do
       {:ok, device} ->
         revoked = Devices.revoke_device!(device)
+        Devices.audit!(%{device_id: id, session_id: nil, action: "revoke"})
         # Drop any live sockets this device holds.
         LegendWeb.Endpoint.broadcast("device:#{id}", "disconnect", %{})
         json(conn, %{data: device_view(revoked)})

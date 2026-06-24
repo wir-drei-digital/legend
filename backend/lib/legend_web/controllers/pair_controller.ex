@@ -14,6 +14,8 @@ defmodule LegendWeb.PairController do
 
     case Devices.redeem_pairing_code(code, attrs) do
       {:ok, device} ->
+        Devices.audit!(%{device_id: device.id, session_id: nil, action: "pair"})
+
         json(conn, %{
           token: DeviceToken.sign(device.id),
           device: %{id: device.id, name: device.name}

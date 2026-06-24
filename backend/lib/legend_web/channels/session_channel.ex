@@ -14,6 +14,7 @@ defmodule LegendWeb.SessionChannel do
   def join("session:" <> id, _payload, socket) do
     case Agents.get_session(id) do
       {:ok, session} ->
+        maybe_audit_attach(socket.assigns[:device_id], id)
         Phoenix.PubSub.subscribe(Legend.PubSub, "session:#{id}")
         {reply, offset} = attach_reply(session)
         {:ok, reply, assign(socket, session_id: id, offset: offset)}
@@ -22,6 +23,16 @@ defmodule LegendWeb.SessionChannel do
         {:error, %{reason: "not found"}}
     end
   end
+
+  defp maybe_audit_attach(nil, _session_id), do: :ok
+
+  defp maybe_audit_attach(device_id, session_id),
+    do:
+      Legend.Core.Devices.audit!(%{
+        device_id: device_id,
+        session_id: session_id,
+        action: "attach"
+      })
 
   defp attach_reply(session) do
     case SessionServer.attach(session.id) do

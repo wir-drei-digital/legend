@@ -22,6 +22,11 @@ defmodule Legend.Core.Devices do
       define :pairing_code_by_code, action: :by_code, args: [:code]
       define :mark_pairing_code_redeemed, action: :mark_redeemed
     end
+
+    resource Legend.Core.Devices.AuditEvent do
+      define :audit, action: :record
+      define :list_audit, action: :list
+    end
   end
 
   @doc "Fetch a device by id; `{:error, :not_found}` when absent."
