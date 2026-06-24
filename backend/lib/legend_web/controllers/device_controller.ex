@@ -26,8 +26,11 @@ defmodule LegendWeb.DeviceController do
         LegendWeb.Endpoint.broadcast("device:#{id}", "disconnect", %{})
         json(conn, %{data: device_view(revoked)})
 
-      {:error, _} ->
+      {:error, :not_found} ->
         conn |> put_status(404) |> json(%{error: "device not found"})
+
+      {:error, _} ->
+        conn |> put_status(500) |> json(%{error: "internal error"})
     end
   end
 

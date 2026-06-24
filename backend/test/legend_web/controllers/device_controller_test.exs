@@ -20,4 +20,9 @@ defmodule LegendWeb.DeviceControllerTest do
     revoked = json_response(delete(conn, "/api/devices/#{device.id}"), 200)
     assert revoked["data"]["revoked_at"]
   end
+
+  test "revoking an unknown device id returns 404", %{conn: conn} do
+    conn = delete(conn, "/api/devices/#{Ecto.UUID.generate()}")
+    assert json_response(conn, 404) == %{"error" => "device not found"}
+  end
 end

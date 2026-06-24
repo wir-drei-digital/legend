@@ -6,6 +6,8 @@ defmodule LegendWeb.PairController do
   """
   use LegendWeb, :controller
 
+  require Logger
+
   alias Legend.Core.Devices
   alias LegendWeb.DeviceToken
 
@@ -22,7 +24,8 @@ defmodule LegendWeb.PairController do
         })
 
       {:error, reason} ->
-        conn |> put_status(422) |> json(%{error: "pairing failed: #{reason}"})
+        Logger.info("pairing redeem rejected: #{reason}")
+        conn |> put_status(422) |> json(%{error: "pairing failed"})
     end
   end
 
