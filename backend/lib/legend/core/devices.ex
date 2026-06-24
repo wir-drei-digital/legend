@@ -6,13 +6,21 @@ defmodule Legend.Core.Devices do
   """
   use Ash.Domain, otp_app: :legend, extensions: [AshJsonApi.Domain]
 
+  alias Legend.Core.Devices.{Device, PairingCode}
+
   resources do
-    resource Legend.Core.Devices.Device do
+    resource Device do
       define :create_device, action: :pair
       define :get_device_record, action: :read, get_by: :id
       define :list_devices, action: :list
       define :touch_device, action: :touch
       define :revoke_device, action: :revoke
+    end
+
+    resource PairingCode do
+      define :generate_pairing_code, action: :generate
+      define :pairing_code_by_code, action: :by_code, args: [:code]
+      define :mark_pairing_code_redeemed, action: :mark_redeemed
     end
   end
 
@@ -38,6 +46,29 @@ defmodule Legend.Core.Devices do
 
       {:error, _} = err ->
         err
+    end
+  end
+
+  @doc """
+  Redeem a code, minting a paired device. Single-use and TTL-bounded:
+  `{:error, :invalid | :expired | :used}` on the unhappy paths.
+  """
+  def redeem_pairing_code(code, attrs) when is_binary(code) do
+    case pairing_code_by_code(code) do
+      {:ok, %PairingCode{redeemed_at: redeemed}} when not is_nil(redeemed) ->
+        {:error, :used}
+
+      {:ok, %PairingCode{expires_at: exp} = pc} ->
+        if DateTime.compare(exp, DateTime.utc_now()) == :gt do
+          device = create_device!(Map.take(attrs, [:name, :public_key]))
+          _ = mark_pairing_code_redeemed!(pc)
+          {:ok, device}
+        else
+          {:error, :expired}
+        end
+
+      _ ->
+        {:error, :invalid}
     end
   end
 end
