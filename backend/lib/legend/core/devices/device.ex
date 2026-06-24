@@ -52,7 +52,7 @@ defmodule Legend.Core.Devices.Device do
     # Reserved for the future zero-knowledge relay; unused in v1.
     attribute :public_key, :string, public?: true
 
-    attribute :paired_at, :utc_datetime_usec, public?: true
+    attribute :paired_at, :utc_datetime_usec, allow_nil?: false, public?: true
     attribute :last_seen_at, :utc_datetime_usec, public?: true
     attribute :revoked_at, :utc_datetime_usec, public?: true
 

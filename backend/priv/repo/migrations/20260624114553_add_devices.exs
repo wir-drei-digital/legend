@@ -13,7 +13,7 @@ defmodule Legend.Repo.Migrations.AddDevices do
       add :inserted_at, :utc_datetime_usec, null: false
       add :revoked_at, :utc_datetime_usec
       add :last_seen_at, :utc_datetime_usec
-      add :paired_at, :utc_datetime_usec
+      add :paired_at, :utc_datetime_usec, null: false
       add :public_key, :text
       add :name, :text
       add :id, :uuid, null: false, primary_key: true
