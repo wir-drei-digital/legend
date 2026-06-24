@@ -60,9 +60,8 @@ defmodule Legend.Core.Devices do
 
       {:ok, %PairingCode{expires_at: exp} = pc} ->
         if DateTime.compare(exp, DateTime.utc_now()) == :gt do
-          device = create_device!(Map.take(attrs, [:name, :public_key]))
           _ = mark_pairing_code_redeemed!(pc)
-          {:ok, device}
+          {:ok, create_device!(Map.take(attrs, [:name, :public_key]))}
         else
           {:error, :expired}
         end
