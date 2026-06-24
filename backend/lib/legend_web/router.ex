@@ -5,10 +5,24 @@ defmodule LegendWeb.Router do
     plug :accepts, ["json"]
   end
 
+  pipeline :device_auth do
+    plug LegendWeb.DeviceAuth
+  end
+
+  # Public (NOT device-gated): health probe, agent MCP (own session token),
+  # pairing redeem (the sole pre-auth human write).
   scope "/api", LegendWeb do
     pipe_through :api
 
     get "/health", HealthController, :show
+    post "/mcp", MCPController, :handle
+    post "/pair", PairController, :redeem
+  end
+
+  # Device-authenticated human surfaces.
+  scope "/api", LegendWeb do
+    pipe_through [:api, :device_auth]
+
     get "/harnesses", HarnessController, :index
     post "/harnesses/:id/setup", HarnessController, :apply_setup
 
@@ -23,11 +37,14 @@ defmodule LegendWeb.Router do
     put "/settings/library-path", SettingsController, :update_library_path
     delete "/settings/library-path", SettingsController, :delete_library_path
 
-    post "/mcp", MCPController, :handle
+    get "/devices", DeviceController, :index
+    post "/devices/pair-code", DeviceController, :create_pair_code
+    delete "/devices/:id", DeviceController, :revoke
   end
 
+  # Device-authenticated Ash JSON:API (sessions). MUST stay last under /api.
   scope "/api" do
-    pipe_through :api
+    pipe_through [:api, :device_auth]
     forward "/", LegendWeb.AshJsonApiRouter
   end
 
