@@ -1,13 +1,29 @@
 defmodule LegendWeb.PairController do
   @moduledoc """
-  Stub placeholder — fleshed out in Task 6 (pairing redeem endpoint). Exists so
-  the router's compile-time controller checks pass while the route is wired.
+  Public pairing redeem — the sole pre-auth human write. Validates a single-use,
+  TTL-bounded code and mints a device token. Rate-limited at the router/edge in a
+  later phase; single-use + short TTL bound abuse here.
   """
   use LegendWeb, :controller
 
-  def redeem(conn, _params) do
-    conn
-    |> put_status(501)
-    |> json(%{error: "not_implemented"})
+  alias Legend.Core.Devices
+  alias LegendWeb.DeviceToken
+
+  def redeem(conn, %{"code" => code} = params) when is_binary(code) do
+    attrs = %{name: params["name"], public_key: params["public_key"]}
+
+    case Devices.redeem_pairing_code(code, attrs) do
+      {:ok, device} ->
+        json(conn, %{
+          token: DeviceToken.sign(device.id),
+          device: %{id: device.id, name: device.name}
+        })
+
+      {:error, reason} ->
+        conn |> put_status(422) |> json(%{error: "pairing failed: #{reason}"})
+    end
   end
+
+  def redeem(conn, _params),
+    do: conn |> put_status(422) |> json(%{error: "missing required param: code"})
 end
