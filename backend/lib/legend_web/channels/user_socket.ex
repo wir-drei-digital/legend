@@ -1,6 +1,9 @@
 defmodule LegendWeb.UserSocket do
   use Phoenix.Socket
 
+  alias Legend.Core.Devices
+  alias LegendWeb.{DeviceToken, RemotePeer}
+
   # A Socket handler
   #
   # It's possible to control the websocket connection and
@@ -39,8 +42,18 @@ defmodule LegendWeb.UserSocket do
   # See `Phoenix.Token` documentation for examples in
   # performing token verification on connect.
   @impl true
-  def connect(_params, socket, _connect_info) do
-    {:ok, socket}
+  def connect(params, socket, connect_info) do
+    if loopback?(connect_info) do
+      {:ok, assign(socket, :device_id, nil)}
+    else
+      with token when is_binary(token) <- params["token"],
+           {:ok, device} <- DeviceToken.verify(token) do
+        _ = Devices.touch_device!(device)
+        {:ok, assign(socket, :device_id, device.id)}
+      else
+        _ -> :error
+      end
+    end
   end
 
   # Socket IDs are topics that allow you to identify all sockets for a given user:
@@ -54,5 +67,11 @@ defmodule LegendWeb.UserSocket do
   #
   # Returning `nil` makes this socket anonymous.
   @impl true
+  def id(%{assigns: %{device_id: device_id}}) when is_binary(device_id),
+    do: "device:#{device_id}"
+
   def id(_socket), do: nil
+
+  defp loopback?(%{peer_data: %{address: address}}), do: RemotePeer.loopback?(address)
+  defp loopback?(_), do: false
 end

@@ -2,7 +2,7 @@ defmodule LegendWeb.Endpoint do
   use Phoenix.Endpoint, otp_app: :legend
 
   socket "/socket", LegendWeb.UserSocket,
-    websocket: true,
+    websocket: [connect_info: [:peer_data]],
     longpoll: false
 
   # The session will be stored in the cookie and signed,
