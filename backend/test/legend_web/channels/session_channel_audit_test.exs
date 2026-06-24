@@ -1,7 +1,17 @@
 defmodule LegendWeb.SessionChannelAuditTest do
-  use LegendWeb.ChannelCase, async: true
+  use LegendWeb.ChannelCase, async: false
 
   alias Legend.Core.{Agents, Devices}
+
+  setup do
+    on_exit(fn ->
+      for {_, pid, _, _} <- DynamicSupervisor.which_children(Legend.Core.Agents.SessionSupervisor) do
+        DynamicSupervisor.terminate_child(Legend.Core.Agents.SessionSupervisor, pid)
+      end
+    end)
+
+    :ok
+  end
 
   test "a remote-device attach is audited; a loopback attach is not" do
     session = Agents.start_session!(%{harness_id: "claude_code", runtime_id: "test", cwd: "/tmp"})
