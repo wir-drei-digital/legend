@@ -34,6 +34,16 @@ defmodule LegendWeb.SessionChannel do
         action: "attach"
       })
 
+  # Record a remote device's control action (stop/prompt/permission). Loopback
+  # sockets (device_id nil) are not audited; keystrokes/view changes are not
+  # control actions and so don't reach this helper.
+  defp audit_control(%{assigns: %{device_id: device_id, session_id: session_id}}, action)
+       when is_binary(device_id) do
+    Legend.Core.Devices.audit!(%{device_id: device_id, session_id: session_id, action: action})
+  end
+
+  defp audit_control(_socket, _action), do: :ok
+
   defp attach_reply(session) do
     case SessionServer.attach(session.id) do
       {:ok, %{transport: :acp, items: items, cursor: cursor, status: status, busy: busy}} ->
@@ -83,6 +93,7 @@ defmodule LegendWeb.SessionChannel do
   end
 
   def handle_in("stop", _payload, socket) do
+    audit_control(socket, "stop")
     SessionServer.stop(socket.assigns.session_id)
     {:noreply, socket}
   end
@@ -91,6 +102,7 @@ defmodule LegendWeb.SessionChannel do
 
   def handle_in("prompt", %{"content" => content}, socket)
       when is_binary(content) or is_list(content) do
+    audit_control(socket, "prompt")
     SessionServer.acp_prompt(socket.assigns.session_id, content)
     {:noreply, socket}
   end
@@ -112,6 +124,7 @@ defmodule LegendWeb.SessionChannel do
 
   def handle_in("permission", %{"request_id" => req, "option_id" => opt}, socket)
       when is_binary(req) and is_binary(opt) do
+    audit_control(socket, "permission")
     SessionServer.acp_permission(socket.assigns.session_id, req, opt)
     {:noreply, socket}
   end
