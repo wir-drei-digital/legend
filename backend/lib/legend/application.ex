@@ -15,6 +15,9 @@ defmodule Legend.Application do
       # After the Migrator so the settings table is readable for root
       # resolution; a bad root raises here and aborts boot loudly.
       Legend.Core.Library.Seeder,
+      # Applies the remote_access bind to the endpoint config before it starts
+      # (Repo is up so the setting is readable). No-op when disabled (loopback).
+      Legend.Core.Remote.Boot,
       {DNSCluster, query: Application.get_env(:legend, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Legend.PubSub},
       Legend.Core.Agents.Supervisor,
