@@ -36,7 +36,10 @@ defmodule Legend.Core.Remote do
   end
 
   @spec clear() :: :ok
-  def clear, do: Settings.remove_setting(@key)
+  def clear do
+    Settings.remove_setting(@key)
+    :ok
+  end
 
   @doc """
   Pure: merge remote overrides onto the endpoint's existing config. Enabled →
@@ -74,4 +77,5 @@ defmodule Legend.Core.Remote do
   defp disabled, do: %{enabled: false, host: nil}
   defp blank_to_nil(v) when v in [nil, ""], do: nil
   defp blank_to_nil(v) when is_binary(v), do: v
+  defp blank_to_nil(_), do: nil
 end

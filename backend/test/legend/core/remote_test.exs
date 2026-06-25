@@ -43,4 +43,13 @@ defmodule Legend.Core.RemoteTest do
     assert out[:http][:ip] == {0, 0, 0, 0}
     assert out[:check_origin] == ["//localhost"]
   end
+
+  test "config fail-safes a corrupted non-string host to nil rather than raising" do
+    Legend.Core.Settings.put_setting!(%{
+      key: "remote_access",
+      value: ~s({"enabled":true,"host":42})
+    })
+
+    assert Remote.config() == %{enabled: true, host: nil}
+  end
 end
