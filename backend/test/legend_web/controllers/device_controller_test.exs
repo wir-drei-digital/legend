@@ -1,5 +1,5 @@
 defmodule LegendWeb.DeviceControllerTest do
-  use LegendWeb.ConnCase, async: true
+  use LegendWeb.ConnCase, async: false
 
   alias Legend.Core.Devices
 

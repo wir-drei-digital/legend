@@ -1,5 +1,5 @@
 defmodule LegendWeb.DeviceTokenTest do
-  use Legend.DataCase, async: true
+  use Legend.DataCase, async: false
 
   alias Legend.Core.Devices
   alias LegendWeb.DeviceToken

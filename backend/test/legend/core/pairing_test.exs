@@ -1,5 +1,5 @@
 defmodule Legend.Core.PairingTest do
-  use Legend.DataCase, async: true
+  use Legend.DataCase, async: false
 
   alias Legend.Core.Devices
   alias Legend.Core.Devices.{Device, PairingCode}

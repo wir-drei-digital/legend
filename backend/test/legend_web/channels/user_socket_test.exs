@@ -1,5 +1,5 @@
 defmodule LegendWeb.UserSocketTest do
-  use LegendWeb.ChannelCase, async: true
+  use LegendWeb.ChannelCase, async: false
 
   alias Legend.Core.Devices
   alias LegendWeb.{DeviceToken, UserSocket}
