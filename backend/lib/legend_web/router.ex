@@ -37,6 +37,10 @@ defmodule LegendWeb.Router do
     put "/settings/library-path", SettingsController, :update_library_path
     delete "/settings/library-path", SettingsController, :delete_library_path
 
+    get "/settings/remote-access", RemoteController, :show
+    put "/settings/remote-access", RemoteController, :update
+    delete "/settings/remote-access", RemoteController, :delete
+
     get "/devices", DeviceController, :index
     post "/devices/pair-code", DeviceController, :create_pair_code
     delete "/devices/:id", DeviceController, :revoke
