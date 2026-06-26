@@ -57,4 +57,15 @@ defmodule Legend.Core.RemoteTest do
     Legend.Core.Settings.put_setting!(%{key: "remote_access", value: ~s({"enabled":true})})
     assert %{enabled: false, host: nil} = Legend.Core.Remote.config()
   end
+
+  test "enabling remote disables force_ssl (http over mesh)" do
+    existing = [http: [port: 4807], force_ssl: [rewrite_on: [:x_forwarded_proto]]]
+    out = Legend.Core.Remote.endpoint_overrides(existing, %{enabled: true, host: "laptop.ts.net"})
+    assert out[:force_ssl] == false
+  end
+
+  test "disabling leaves force_ssl untouched" do
+    existing = [force_ssl: [rewrite_on: [:x_forwarded_proto]]]
+    assert Legend.Core.Remote.endpoint_overrides(existing, %{enabled: false}) == existing
+  end
 end

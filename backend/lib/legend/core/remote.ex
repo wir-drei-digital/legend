@@ -61,6 +61,7 @@ defmodule Legend.Core.Remote do
 
     existing
     |> Keyword.put(:http, http)
+    |> Keyword.put(:force_ssl, false)
     |> maybe_put_host(host)
   end
 
