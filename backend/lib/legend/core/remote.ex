@@ -20,7 +20,14 @@ defmodule Legend.Core.Remote do
       raw ->
         case Jason.decode(raw) do
           {:ok, %{"enabled" => enabled} = m} ->
-            %{enabled: !!enabled, host: blank_to_nil(m["host"])}
+            host = blank_to_nil(m["host"])
+            # Fail safe: enabling without a host would bind 0.0.0.0 with no
+            # origin/url host — treat malformed/partial config as disabled.
+            if !!enabled and host != nil do
+              %{enabled: true, host: host}
+            else
+              disabled()
+            end
 
           _ ->
             disabled()

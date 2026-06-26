@@ -44,12 +44,17 @@ defmodule Legend.Core.RemoteTest do
     assert out[:check_origin] == ["//localhost"]
   end
 
-  test "config fail-safes a corrupted non-string host to nil rather than raising" do
+  test "config fail-safes a corrupted non-string host to disabled rather than raising" do
     Legend.Core.Settings.put_setting!(%{
       key: "remote_access",
       value: ~s({"enabled":true,"host":42})
     })
 
-    assert Remote.config() == %{enabled: true, host: nil}
+    assert Remote.config() == %{enabled: false, host: nil}
+  end
+
+  test "enabled without a host fails safe to disabled" do
+    Legend.Core.Settings.put_setting!(%{key: "remote_access", value: ~s({"enabled":true})})
+    assert %{enabled: false, host: nil} = Legend.Core.Remote.config()
   end
 end
