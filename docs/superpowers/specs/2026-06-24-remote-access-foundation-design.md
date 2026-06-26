@@ -116,9 +116,14 @@ An append-only `AuditEvent` (`device_id`, `session_id`, `action`, `at`) covering
 
 ### Remote UX
 
-- **Same SPA, same origin** — a phone hitting `https://laptop.tailnet.ts.net` gets the real app with zero transport config (the frontend already defaults to same-origin; `wss://` channels "just work").
-- **A minimal responsive session route** — the desktop tiling shell (`docs/VISION.md` windowing core) is rough at ~380px, so v1 adds a lean phone path: **session list → single-session view** (terminal/ACP) with input affordances. A responsive route, **not** a separate app; heavier mobile polish is deferred. *(This is the one genuinely visual surface; mock it during planning if useful.)*
-- **A `Devices` management screen** (loopback-trusted): list paired devices, `last_seen_at`, **revoke**; generate pairing QR; view the audit trail.
+The frontend is a desktop tiling shell (`LegendShell`: dock + tile grid + spaces), always mounted by the root layout. Phase 2b adds a **viewport branch** in that root layout so phones get a lean path instead of the tiling cockpit, and threads the device token through the API/socket clients.
+
+- **Same SPA, same origin** — a phone hitting `http(s)://laptop.tailnet.ts.net:<port>` gets the real app with zero transport config (the frontend defaults to same-origin; `ws(s)://` channels "just work"; Phase 2a's `check_origin` already admits the mesh host).
+- **Device token plumbing** — a `localStorage` device token, injected as the socket `token` param and an `Authorization: Bearer` header on every `/api/*` call (one shared `apiFetch`). Loopback (desktop / local browser) sends none and is unchanged. A 401 / socket-auth rejection clears the token and routes to `/pair`.
+- **`/pair`** — a standalone, **shell-less** route the phone loads from the QR (`…/pair?code=<code>`); redeems via `POST /api/pair`, stores the token, enters the app.
+- **Lean mobile shell** (chosen over a responsive tiling collapse) — the root layout selects a dedicated `MobileShell` for phone viewports: **session list → single-session view**, reusing the existing session-body components (`AcpConversation`/`Terminal`) + stores as-is, wrapped in mobile chrome (slim top bar, composer pinned above the keyboard). **Rich (ACP) is the default transport on mobile** (xterm at ~380px is unusable); the terminal stays toggle-available. Not a separate app — a second shell over the same surfaces; heavier polish deferred.
+- **`Devices` management** (loopback-trusted) — a new **Remote access** section in the desktop Settings modal: the `remote_access` toggle (reachable URL + restart-to-apply), paired devices (`last_seen_at`, **revoke**), generate pairing code → **QR** (`…/pair?code=`), and the read-only audit trail. The phone's own settings are minimal (unpair-self only) since management is loopback-only.
+- **Backend addition (the only one):** a `GET /api/devices/audit` endpoint over the existing `Devices.list_audit!/0` to surface the trail; the toggle, devices, pair-code, and pair-redeem endpoints already exist from Phases 1–2a.
 
 ## Setup & operability (what the user actually does)
 
@@ -173,7 +178,7 @@ None of Slice 3 is built here; this section justifies the two seams Slice 1 *doe
 - **`PairingCode` store** — table vs Cachex/ETS; the plan pins it (leaning a table for auditability + TTL sweep).
 - **Token expiry policy** — long-lived + revocation (simplest) vs short-lived + refresh; v1 leans long-lived signed token with server-side revocation.
 - **Desktop sidecar bind** — how `main.rs` learns "remote enabled" (env from the setting, or the sidecar reads it on boot) and how the reachable interface/cert are selected.
-- **Responsive route shape** — reuse the tiling session surface at a phone breakpoint vs a dedicated mobile route; decided with a mock in planning.
+- **Responsive route shape** — *resolved (Phase 2b design):* a dedicated **lean `MobileShell`** selected by a root-layout viewport branch, reusing the session-body components (`AcpConversation`/`Terminal`) + stores rather than collapsing the tiling grid; rich (ACP)-first. The tiling shell stays desktop-only and uncompromised.
 
 ## Decisions log
 
@@ -193,3 +198,4 @@ None of Slice 3 is built here; this section justifies the two seams Slice 1 *doe
 | Audit at control-action granularity, not keystrokes | Proportionate insurance for RCE-grade exposure without high-volume, low-value keystroke logging |
 | Mesh is the user's transport; Legend bundles no VPN | Keeps Legend transport-agnostic and dependency-free; the mesh choice (Tailscale free vs OSS Headscale/WireGuard) is the user's ops trade |
 | Bind `0.0.0.0` + DeviceAuth, not a specific-interface bind | Desktop needs loopback (webview) + mesh (remote) at once; `0.0.0.0` serves both and the tested auth rule is the gate. Interface-isolation (dual listener) deferred as defense-in-depth. |
+| Lean mobile shell (viewport-branched) over a responsive tiling collapse | The tiling cockpit is desktop-first (conductor, density, keyboard); a dedicated lean shell reusing the same session-body components keeps the desktop UX uncompromised and gives the phone a real list→session flow — "a route, not a separate app." |
