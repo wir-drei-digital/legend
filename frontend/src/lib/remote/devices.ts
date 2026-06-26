@@ -25,3 +25,66 @@ export async function redeemPairCode(code: string, name?: string): Promise<PairR
 	if (!res.ok) await fail(res, 'pairing failed');
 	return res.json();
 }
+
+export interface RemoteAccess {
+	enabled: boolean;
+	host: string | null;
+}
+
+export interface Device {
+	id: string;
+	name: string | null;
+	paired_at: string | null;
+	last_seen_at: string | null;
+	revoked_at: string | null;
+}
+
+export interface AuditEvent {
+	id: string;
+	device_id: string | null;
+	session_id: string | null;
+	action: string;
+	at: string;
+}
+
+export async function getRemoteAccess(): Promise<RemoteAccess> {
+	const res = await apiFetch('/api/settings/remote-access');
+	if (!res.ok) await fail(res, 'loading remote access failed');
+	return (await res.json()).data;
+}
+
+export async function setRemoteAccess(
+	enabled: boolean,
+	host: string | null
+): Promise<{ data: RemoteAccess; restart_required?: boolean }> {
+	const res = await apiFetch('/api/settings/remote-access', {
+		method: 'PUT',
+		headers: { 'Content-Type': 'application/json' },
+		body: JSON.stringify({ enabled, host })
+	});
+	if (!res.ok) await fail(res, 'saving remote access failed');
+	return res.json();
+}
+
+export async function listDevices(): Promise<Device[]> {
+	const res = await apiFetch('/api/devices');
+	if (!res.ok) await fail(res, 'listing devices failed');
+	return (await res.json()).data;
+}
+
+export async function generatePairCode(): Promise<{ code: string; expires_at: string }> {
+	const res = await apiFetch('/api/devices/pair-code', { method: 'POST' });
+	if (!res.ok) await fail(res, 'generating pairing code failed');
+	return res.json();
+}
+
+export async function revokeDevice(id: string): Promise<void> {
+	const res = await apiFetch(`/api/devices/${id}`, { method: 'DELETE' });
+	if (!res.ok) await fail(res, 'revoking device failed');
+}
+
+export async function listAudit(): Promise<AuditEvent[]> {
+	const res = await apiFetch('/api/devices/audit');
+	if (!res.ok) await fail(res, 'loading audit failed');
+	return (await res.json()).data;
+}

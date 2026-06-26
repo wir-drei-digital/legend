@@ -6,6 +6,7 @@
 	import { Input } from '$lib/components/ui/input';
 	import { Label } from '$lib/components/ui/label';
 	import SectionLabel from '$lib/components/shell/SectionLabel.svelte';
+	import RemoteAccessSection from '$lib/components/shell/RemoteAccessSection.svelte';
 	import {
 		getLibraryPath,
 		putLibraryPath,
@@ -167,6 +168,8 @@
 				<p class="text-ui text-bad">{error}</p>
 			{/if}
 		</section>
+
+		<RemoteAccessSection />
 
 		{#if withSetup.length > 0 || harnessError}
 			<section class="flex flex-col gap-3">
