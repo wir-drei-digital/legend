@@ -33,7 +33,42 @@ defmodule LegendWeb.RemoteController do
     json(conn, %{data: Remote.config()})
   end
 
+  @doc """
+  Enumerates this machine's non-loopback IPv4 addresses so the settings UI can
+  suggest a reachable mesh host. `suggested` flags the Tailscale CGNAT-range
+  address (`100.64.0.0/10`) when present.
+  """
+  def interfaces(conn, _params) do
+    candidates =
+      case :inet.getifaddrs() do
+        {:ok, ifs} ->
+          for {_name, opts} <- ifs,
+              {:addr, addr} <- opts,
+              # IPv4 only: getifaddrs also yields 8-element IPv6 tuples — guard
+              # tuple_size so they neither crash the destructure nor pollute the list.
+              tuple_size(addr) == 4,
+              {a, b, c, d} = addr,
+              a != 127 do
+            "#{a}.#{b}.#{c}.#{d}"
+          end
+
+        _ ->
+          []
+      end
+      |> Enum.uniq()
+
+    suggested = Enum.find(candidates, &tailscale?/1)
+    json(conn, %{data: %{candidates: candidates, suggested: suggested}})
+  end
+
   defp blank?(v), do: v in [nil, ""]
   defp valid_host?(v), do: is_binary(v) and v =~ ~r/\A[^[:cntrl:]]+\z/u
   defp error(conn, msg), do: conn |> put_status(422) |> json(%{error: msg})
+
+  defp tailscale?(ip) do
+    case String.split(ip, ".") do
+      [a, b | _] -> a == "100" and String.to_integer(b) in 64..127
+      _ -> false
+    end
+  end
 end

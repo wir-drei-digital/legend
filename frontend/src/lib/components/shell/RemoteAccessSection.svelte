@@ -12,6 +12,7 @@
 	import {
 		getRemoteAccess,
 		setRemoteAccess,
+		getRemoteInterfaces,
 		listDevices,
 		generatePairCode,
 		revokeDevice,
@@ -23,6 +24,7 @@
 
 	let remote = $state<RemoteAccess>({ enabled: false, host: null });
 	let host = $state('');
+	let detected = $state<string[]>([]);
 	let saving = $state(false);
 	let restartRequired = $state(false);
 	let error = $state('');
@@ -64,6 +66,15 @@
 			audit = await listAudit();
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'failed to load remote access';
+		}
+		// Non-fatal: interface detection is a convenience, never blocks the section.
+		try {
+			const ifs = await getRemoteInterfaces();
+			detected = ifs.candidates;
+			// Pre-fill the likely mesh IP only when nothing is saved/typed yet.
+			if (!host.trim() && ifs.suggested) host = ifs.suggested;
+		} catch {
+			// leave detection empty
 		}
 	}
 
@@ -119,6 +130,20 @@
 	<div class="flex flex-col gap-2">
 		<Label for="remote-host">Mesh host (the name/IP this machine is reached at)</Label>
 		<Input id="remote-host" bind:value={host} placeholder="laptop.tailnet.ts.net" />
+		{#if detected.length > 0}
+			<div class="flex flex-wrap items-center gap-1.5">
+				<span class="text-meta text-ink-3">Detected:</span>
+				{#each detected as ip (ip)}
+					<button
+						type="button"
+						class="rounded-[6px] border border-hair px-1.5 py-0.5 font-mono text-meta text-ink-2 hover:text-ink-1"
+						onclick={() => (host = ip)}
+					>
+						{ip}
+					</button>
+				{/each}
+			</div>
+		{/if}
 	</div>
 
 	<div class="flex items-center gap-2">

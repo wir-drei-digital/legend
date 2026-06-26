@@ -47,6 +47,18 @@ export interface AuditEvent {
 	at: string;
 }
 
+export interface RemoteInterfaces {
+	candidates: string[];
+	suggested: string | null;
+}
+
+/** This machine's non-loopback IPv4 addresses; `suggested` flags the Tailscale CGNAT one. */
+export async function getRemoteInterfaces(): Promise<RemoteInterfaces> {
+	const res = await apiFetch('/api/settings/remote-access/interfaces');
+	if (!res.ok) await fail(res, 'detecting interfaces failed');
+	return (await res.json()).data;
+}
+
 export async function getRemoteAccess(): Promise<RemoteAccess> {
 	const res = await apiFetch('/api/settings/remote-access');
 	if (!res.ok) await fail(res, 'loading remote access failed');

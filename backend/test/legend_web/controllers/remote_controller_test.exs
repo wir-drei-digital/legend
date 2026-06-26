@@ -33,6 +33,14 @@ defmodule LegendWeb.RemoteControllerTest do
            )
   end
 
+  test "GET interfaces lists non-loopback IPv4 candidates with a suggested key", %{conn: conn} do
+    body = json_response(get(conn, "/api/settings/remote-access/interfaces"), 200)
+
+    assert is_list(body["data"]["candidates"])
+    refute "127.0.0.1" in body["data"]["candidates"]
+    assert Map.has_key?(body["data"], "suggested")
+  end
+
   test "DELETE disables", %{conn: conn} do
     Remote.put_config(%{enabled: true, host: "x.ts.net"})
 

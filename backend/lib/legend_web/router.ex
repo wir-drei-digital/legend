@@ -47,6 +47,7 @@ defmodule LegendWeb.Router do
     get "/settings/remote-access", RemoteController, :show
     put "/settings/remote-access", RemoteController, :update
     delete "/settings/remote-access", RemoteController, :delete
+    get "/settings/remote-access/interfaces", RemoteController, :interfaces
 
     get "/devices", DeviceController, :index
     post "/devices/pair-code", DeviceController, :create_pair_code
