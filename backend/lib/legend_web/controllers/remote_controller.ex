@@ -1,6 +1,8 @@
 defmodule LegendWeb.RemoteController do
   @moduledoc """
-  `/api/settings/remote-access` — the opt-in toggle. Device-gated. Enabling binds
+  `/api/settings/remote-access` — the opt-in toggle. Loopback-only
+  (`LegendWeb.LoopbackOnly`): reconfiguring the network boundary requires
+  physical possession of the instance, never a remote device token. Enabling binds
   `0.0.0.0` at the next boot (restart-to-apply); `host` is the mesh name/IP the
   instance is reached at (for `check_origin`/`url`). A host is required when
   enabling so the WebSocket origin check stays meaningful.

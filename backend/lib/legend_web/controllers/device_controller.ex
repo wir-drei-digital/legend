@@ -1,20 +1,17 @@
 defmodule LegendWeb.DeviceController do
   @moduledoc """
-  Device management — generate pairing codes, list devices, revoke. Device-gated
-  by `DeviceAuth` (loopback or a paired device); in practice driven from the
-  loopback-trusted instance. Revoking disconnects the device's live sockets.
+  Device management — generate pairing codes, list devices, revoke, audit.
+  Loopback-only (`LegendWeb.LoopbackOnly`): management/enrollment requires
+  physical possession of the instance, never a remote device token. Revoking
+  disconnects the device's live sockets.
   """
   use LegendWeb, :controller
 
   alias Legend.Core.Devices
 
   def create_pair_code(conn, _params) do
-    if conn.assigns.device == :local do
-      code = Devices.generate_pairing_code!()
-      json(conn, %{code: code.code, expires_at: code.expires_at})
-    else
-      conn |> put_status(403) |> json(%{error: "device enrollment is local-only"})
-    end
+    code = Devices.generate_pairing_code!()
+    json(conn, %{code: code.code, expires_at: code.expires_at})
   end
 
   def index(conn, _params) do
@@ -29,7 +26,7 @@ defmodule LegendWeb.DeviceController do
         # in session_id (free string column) so the trail still says what was
         # revoked — no schema change.
         Devices.audit!(%{
-          device_id: actor_id(conn.assigns.device),
+          device_id: actor_id(Map.get(conn.assigns, :device)),
           session_id: id,
           action: "revoke"
         })

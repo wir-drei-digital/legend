@@ -49,4 +49,15 @@ defmodule LegendWeb.RemoteControllerTest do
 
     assert Remote.config().enabled == false
   end
+
+  test "remote-access config is rejected for a remote (non-loopback) caller", %{conn: conn} do
+    # Reconfiguring the network boundary is loopback-only — a remote device
+    # token must not reach it.
+    conn =
+      conn
+      |> Map.put(:remote_ip, {203, 0, 113, 7})
+      |> get("/api/settings/remote-access")
+
+    assert json_response(conn, 403) == %{"error" => "loopback only"}
+  end
 end

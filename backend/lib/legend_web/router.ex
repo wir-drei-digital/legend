@@ -9,6 +9,12 @@ defmodule LegendWeb.Router do
     plug LegendWeb.DeviceAuth
   end
 
+  # Management/enrollment is loopback-only: physical possession of the instance.
+  # A valid remote device token authenticates session USE, not management.
+  pipeline :loopback_only do
+    plug LegendWeb.LoopbackOnly
+  end
+
   # Threads the authenticated device into the Ash actor (loopback => no actor) so
   # the JSON:API session lifecycle can attribute remote interventions in the audit
   # trail. MUST run after :device_auth (which assigns conn.assigns.device).
@@ -43,16 +49,21 @@ defmodule LegendWeb.Router do
     get "/settings/library-path", SettingsController, :show_library_path
     put "/settings/library-path", SettingsController, :update_library_path
     delete "/settings/library-path", SettingsController, :delete_library_path
+  end
 
-    get "/settings/remote-access", RemoteController, :show
-    put "/settings/remote-access", RemoteController, :update
-    delete "/settings/remote-access", RemoteController, :delete
-    get "/settings/remote-access/interfaces", RemoteController, :interfaces
+  # Loopback-only: device management/enrollment + remote-access config.
+  scope "/api", LegendWeb do
+    pipe_through [:api, :loopback_only]
 
     get "/devices", DeviceController, :index
     post "/devices/pair-code", DeviceController, :create_pair_code
     delete "/devices/:id", DeviceController, :revoke
     get "/devices/audit", DeviceController, :audit
+
+    get "/settings/remote-access", RemoteController, :show
+    put "/settings/remote-access", RemoteController, :update
+    delete "/settings/remote-access", RemoteController, :delete
+    get "/settings/remote-access/interfaces", RemoteController, :interfaces
   end
 
   # Device-authenticated Ash JSON:API (sessions). MUST stay last under /api.

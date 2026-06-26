@@ -21,7 +21,42 @@ defmodule LegendWeb.DeviceControllerTest do
       |> put_req_header("authorization", "Bearer " <> token)
       |> post("/api/devices/pair-code", %{})
 
-    assert json_response(conn, 403) == %{"error" => "device enrollment is local-only"}
+    assert json_response(conn, 403) == %{"error" => "loopback only"}
+  end
+
+  test "revoke is rejected for a remote (non-loopback) caller", %{conn: conn} do
+    device = Devices.create_device!(%{name: "victim", public_key: nil})
+    token = LegendWeb.DeviceToken.sign(device.id)
+
+    # A valid remote device token must NOT be able to revoke any device.
+    conn =
+      conn
+      |> Map.put(:remote_ip, {203, 0, 113, 7})
+      |> put_req_header("authorization", "Bearer " <> token)
+      |> delete("/api/devices/#{device.id}")
+
+    assert json_response(conn, 403) == %{"error" => "loopback only"}
+    # The device is untouched: the loopback plug halts before the controller.
+    assert {:ok, fetched} = Devices.get_device(device.id)
+    refute fetched.revoked_at
+  end
+
+  test "device list is rejected for a remote (non-loopback) caller", %{conn: conn} do
+    conn =
+      conn
+      |> Map.put(:remote_ip, {203, 0, 113, 7})
+      |> get("/api/devices")
+
+    assert json_response(conn, 403) == %{"error" => "loopback only"}
+  end
+
+  test "audit trail is rejected for a remote (non-loopback) caller", %{conn: conn} do
+    conn =
+      conn
+      |> Map.put(:remote_ip, {203, 0, 113, 7})
+      |> get("/api/devices/audit")
+
+    assert json_response(conn, 403) == %{"error" => "loopback only"}
   end
 
   test "list and revoke devices", %{conn: conn} do
