@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { authHeaders, apiFetch } from './api';
-import { setDeviceToken } from './remote/deviceToken';
+import { getDeviceToken, setDeviceToken } from './remote/deviceToken';
 
 function memoryStorage(): Storage {
 	const m = new Map<string, string>();
@@ -16,6 +16,10 @@ function memoryStorage(): Storage {
 
 beforeEach(() => {
 	vi.stubGlobal('localStorage', memoryStorage());
+});
+
+afterEach(() => {
+	vi.unstubAllGlobals();
 });
 
 describe('authHeaders', () => {
@@ -46,5 +50,30 @@ describe('apiFetch', () => {
 			Authorization: 'Bearer tok123',
 			Accept: 'application/json'
 		});
+	});
+
+	it('clears the token and redirects to /pair on 401', async () => {
+		setDeviceToken('tok');
+		vi.stubGlobal('window', { location: { pathname: '/sessions', href: '' } });
+		vi.stubGlobal('fetch', () => Promise.resolve(new Response('', { status: 401 })));
+
+		await apiFetch('/api/sessions');
+
+		expect(getDeviceToken()).toBeNull();
+		expect(
+			(globalThis as unknown as { window: { location: { href: string } } }).window.location.href
+		).toBe('/pair');
+	});
+
+	it('does not redirect when the 401 happens on /pair', async () => {
+		setDeviceToken('tok');
+		vi.stubGlobal('window', { location: { pathname: '/pair', href: '' } });
+		vi.stubGlobal('fetch', () => Promise.resolve(new Response('', { status: 401 })));
+
+		await apiFetch('/api/pair');
+
+		expect(
+			(globalThis as unknown as { window: { location: { href: string } } }).window.location.href
+		).toBe('');
 	});
 });

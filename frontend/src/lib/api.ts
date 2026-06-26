@@ -15,10 +15,13 @@ export function authHeaders(): Record<string, string> {
  * user to /pair to re-pair. Loopback never 401s, so the desktop path is
  * unaffected; the /pair page is exempt to avoid a redirect loop.
  */
-export async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
+export async function apiFetch(
+	path: string,
+	init: Omit<RequestInit, 'headers'> & { headers?: Record<string, string> } = {}
+): Promise<Response> {
 	const res = await fetch(`${apiBase}${path}`, {
 		...init,
-		headers: { ...authHeaders(), ...(init.headers as Record<string, string> | undefined) }
+		headers: { ...authHeaders(), ...init.headers }
 	});
 
 	if (res.status === 401 && typeof window !== 'undefined' && window.location.pathname !== '/pair') {
