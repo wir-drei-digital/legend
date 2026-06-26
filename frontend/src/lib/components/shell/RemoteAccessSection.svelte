@@ -7,6 +7,8 @@
 	import SectionLabel from '$lib/components/shell/SectionLabel.svelte';
 	import ConfirmButton from '$lib/components/shell/ConfirmButton.svelte';
 	import { relativeTime } from '$lib/shell/format';
+	import { apiBase } from '$lib/api';
+	import { buildPairUrl } from '$lib/remote/pairUrl';
 	import {
 		getRemoteAccess,
 		setRemoteAccess,
@@ -36,14 +38,13 @@
 
 	const activeDevices = $derived(devices.filter((d) => !d.revoked_at));
 
-	// The phone reaches the instance at the configured mesh host on the same port
-	// the desktop browser is using (0.0.0.0 binds both). TLS is deferred → http.
+	// The phone reaches the instance at the configured mesh host on the backend
+	// port (0.0.0.0 binds both). Desktop renders inside tauri://localhost (no
+	// port), so buildPairUrl derives the port from apiBase there; the web release
+	// has a blank apiBase and uses window.location.port. TLS is deferred → http.
 	const pairUrl = $derived.by(() => {
-		const h = (remote.host || host).trim();
-		if (!h || !code) return '';
-		const port = typeof window !== 'undefined' ? window.location.port : '';
-		const authority = port ? `${h}:${port}` : h;
-		return `http://${authority}/pair?code=${encodeURIComponent(code)}`;
+		const windowPort = typeof window !== 'undefined' ? window.location.port : '';
+		return buildPairUrl(remote.host || host, code, apiBase, windowPort);
 	});
 
 	$effect(() => {
