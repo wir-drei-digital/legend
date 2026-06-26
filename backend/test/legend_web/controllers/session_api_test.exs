@@ -1,6 +1,9 @@
 defmodule LegendWeb.SessionApiTest do
   use LegendWeb.ConnCase, async: false
 
+  alias Legend.Core.{Agents, Devices}
+  alias LegendWeb.DeviceToken
+
   @jsonapi "application/vnd.api+json"
 
   setup %{conn: conn} do
@@ -117,5 +120,62 @@ defmodule LegendWeb.SessionApiTest do
       )
 
     assert conn.status == 400
+  end
+
+  test "a remote device's DELETE is audited, attributing the device", %{conn: conn} do
+    session = Agents.start_session!(%{harness_id: "hermes", runtime_id: "test", cwd: "/tmp"})
+    device = Devices.create_device!(%{name: "phone", public_key: nil})
+    token = DeviceToken.sign(device.id)
+
+    conn =
+      %{conn | remote_ip: {100, 64, 1, 2}}
+      |> put_req_header("authorization", "Bearer " <> token)
+      |> delete("/api/sessions/#{session.id}")
+
+    assert response(conn, 200)
+
+    rows = Enum.filter(Devices.list_audit!(), &(&1.action == "delete"))
+    assert [%{device_id: device_id, session_id: session_id}] = rows
+    assert device_id == device.id
+    assert session_id == session.id
+  end
+
+  test "a loopback DELETE is audited with device_id nil", %{conn: conn} do
+    session = Agents.start_session!(%{harness_id: "hermes", runtime_id: "test", cwd: "/tmp"})
+
+    # ConnCase conns are loopback ({127,0,0,1}) by default.
+    conn = delete(conn, "/api/sessions/#{session.id}")
+    assert response(conn, 200)
+
+    rows =
+      Devices.list_audit!()
+      |> Enum.filter(&(&1.action == "delete" and &1.session_id == session.id))
+
+    assert [%{device_id: nil}] = rows
+  end
+
+  test "a remote device's resume is audited, attributing the device", %{conn: conn} do
+    session =
+      Agents.start_session!(%{harness_id: "claude_code", runtime_id: "test", cwd: "/tmp"})
+
+    Agents.SessionServer.ensure_stopped(session.id)
+    Agents.interrupt_session!(Agents.get_session!(session.id))
+
+    device = Devices.create_device!(%{name: "phone", public_key: nil})
+    token = DeviceToken.sign(device.id)
+
+    conn
+    |> Map.put(:remote_ip, {100, 64, 1, 2})
+    |> put_req_header("authorization", "Bearer " <> token)
+    |> patch(
+      "/api/sessions/#{session.id}/resume",
+      Jason.encode!(%{data: %{type: "session", id: session.id, attributes: %{}}})
+    )
+    |> json_response(200)
+
+    rows = Enum.filter(Devices.list_audit!(), &(&1.action == "resume"))
+    assert [%{device_id: device_id, session_id: session_id}] = rows
+    assert device_id == device.id
+    assert session_id == session.id
   end
 end

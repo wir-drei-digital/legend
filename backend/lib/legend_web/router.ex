@@ -9,6 +9,13 @@ defmodule LegendWeb.Router do
     plug LegendWeb.DeviceAuth
   end
 
+  # Threads the authenticated device into the Ash actor (loopback => no actor) so
+  # the JSON:API session lifecycle can attribute remote interventions in the audit
+  # trail. MUST run after :device_auth (which assigns conn.assigns.device).
+  pipeline :ash_actor do
+    plug LegendWeb.AshActor
+  end
+
   # Public (NOT device-gated): health probe, agent MCP (own session token),
   # pairing redeem (the sole pre-auth human write).
   scope "/api", LegendWeb do
@@ -49,7 +56,7 @@ defmodule LegendWeb.Router do
 
   # Device-authenticated Ash JSON:API (sessions). MUST stay last under /api.
   scope "/api" do
-    pipe_through [:api, :device_auth]
+    pipe_through [:api, :device_auth, :ash_actor]
     forward "/", LegendWeb.AshJsonApiRouter
   end
 

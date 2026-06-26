@@ -111,6 +111,9 @@ defmodule Legend.Core.Agents.Session do
         end
       end
 
+      # Best-effort audit attributing the acting device (loopback => nil).
+      change {Legend.Core.Agents.Changes.AuditLifecycle, action: "start"}
+
       # after_transaction (not after_action): SessionServer.start_session/1
       # writes to the DB from the server process, which must run OUTSIDE the
       # enclosing create transaction.
@@ -178,6 +181,9 @@ defmodule Legend.Core.Agents.Session do
 
       validate Legend.Core.Agents.Validations.ResumableStatus
 
+      # Best-effort audit attributing the acting device (loopback => nil).
+      change {Legend.Core.Agents.Changes.AuditLifecycle, action: "resume"}
+
       change set_attribute(:status, :starting)
       change set_attribute(:exit_code, nil)
       change set_attribute(:error, nil)
@@ -221,6 +227,9 @@ defmodule Legend.Core.Agents.Session do
     update :set_transport do
       require_atomic? false
       accept [:transport]
+
+      # Best-effort audit attributing the acting device (loopback => nil).
+      change {Legend.Core.Agents.Changes.AuditLifecycle, action: "transport"}
 
       # Switching transport relaunches the run, so reset the same four lifecycle
       # fields :resume does — otherwise an :exited/:failed session would surface
@@ -307,6 +316,9 @@ defmodule Legend.Core.Agents.Session do
     destroy :destroy do
       primary? true
       require_atomic? false
+
+      # Best-effort audit attributing the acting device (loopback => nil).
+      change {Legend.Core.Agents.Changes.AuditLifecycle, action: "delete"}
 
       change before_action(fn changeset, _context ->
                session = changeset.data
