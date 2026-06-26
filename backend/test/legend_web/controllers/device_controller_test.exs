@@ -11,6 +11,19 @@ defmodule LegendWeb.DeviceControllerTest do
     assert is_binary(code)
   end
 
+  test "pair-code generation is rejected for a remote (non-loopback) caller", %{conn: conn} do
+    device = Devices.create_device!(%{name: "phone", public_key: nil})
+    token = LegendWeb.DeviceToken.sign(device.id)
+
+    conn =
+      conn
+      |> Map.put(:remote_ip, {203, 0, 113, 7})
+      |> put_req_header("authorization", "Bearer " <> token)
+      |> post("/api/devices/pair-code", %{})
+
+    assert json_response(conn, 403) == %{"error" => "device enrollment is local-only"}
+  end
+
   test "list and revoke devices", %{conn: conn} do
     device = Devices.create_device!(%{name: "laptop", public_key: nil})
 

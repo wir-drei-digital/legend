@@ -9,8 +9,12 @@ defmodule LegendWeb.DeviceController do
   alias Legend.Core.Devices
 
   def create_pair_code(conn, _params) do
-    code = Devices.generate_pairing_code!()
-    json(conn, %{code: code.code, expires_at: code.expires_at})
+    if conn.assigns.device == :local do
+      code = Devices.generate_pairing_code!()
+      json(conn, %{code: code.code, expires_at: code.expires_at})
+    else
+      conn |> put_status(403) |> json(%{error: "device enrollment is local-only"})
+    end
   end
 
   def index(conn, _params) do
