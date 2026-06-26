@@ -108,16 +108,19 @@ defmodule LegendWeb.SessionChannel do
   end
 
   def handle_in("cancel", _payload, socket) do
+    audit_control(socket, "cancel")
     SessionServer.acp_cancel(socket.assigns.session_id)
     {:noreply, socket}
   end
 
   def handle_in("set_mode", %{"mode" => mode}, socket) when is_binary(mode) do
+    audit_control(socket, "set_mode")
     SessionServer.acp_set_mode(socket.assigns.session_id, mode)
     {:noreply, socket}
   end
 
   def handle_in("set_model", %{"model" => model}, socket) when is_binary(model) do
+    audit_control(socket, "set_model")
     SessionServer.acp_set_model(socket.assigns.session_id, model)
     {:noreply, socket}
   end

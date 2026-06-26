@@ -25,7 +25,15 @@ defmodule LegendWeb.DeviceController do
     case Devices.get_device(id) do
       {:ok, device} ->
         revoked = Devices.revoke_device!(device)
-        Devices.audit!(%{device_id: id, session_id: nil, action: "revoke"})
+        # device_id = the ACTOR (loopback => nil); the revoked target id is kept
+        # in session_id (free string column) so the trail still says what was
+        # revoked — no schema change.
+        Devices.audit!(%{
+          device_id: actor_id(conn.assigns.device),
+          session_id: id,
+          action: "revoke"
+        })
+
         # Drop any live sockets this device holds.
         LegendWeb.Endpoint.broadcast("device:#{id}", "disconnect", %{})
         json(conn, %{data: device_view(revoked)})
@@ -41,6 +49,11 @@ defmodule LegendWeb.DeviceController do
   def audit(conn, _params) do
     json(conn, %{data: Enum.map(Devices.list_audit!(), &audit_view/1)})
   end
+
+  # The audit actor: a paired device records its id; the loopback/local actor
+  # (`:local`) records nil per the AuditEvent contract.
+  defp actor_id(%Legend.Core.Devices.Device{id: id}), do: id
+  defp actor_id(_), do: nil
 
   defp device_view(d) do
     %{

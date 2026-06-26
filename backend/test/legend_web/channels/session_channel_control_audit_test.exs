@@ -33,4 +33,21 @@ defmodule LegendWeb.SessionChannelControlAuditTest do
     _ = :sys.get_state(local.channel_pid)
     assert length(Enum.filter(Devices.list_audit!(), &(&1.action == "stop"))) == 1
   end
+
+  test "a remote device's cancel is audited with the socket's device as actor", %{
+    session: session
+  } do
+    socket = join_as("d1", session)
+    push(socket, "cancel", %{})
+    _ = :sys.get_state(socket.channel_pid)
+
+    cancels = Enum.filter(Devices.list_audit!(), &(&1.action == "cancel"))
+    assert [%{device_id: "d1", session_id: sid}] = cancels
+    assert sid == session.id
+
+    local = join_as(nil, session)
+    push(local, "cancel", %{})
+    _ = :sys.get_state(local.channel_pid)
+    assert length(Enum.filter(Devices.list_audit!(), &(&1.action == "cancel"))) == 1
+  end
 end

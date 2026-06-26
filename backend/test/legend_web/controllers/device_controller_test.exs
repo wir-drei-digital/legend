@@ -34,6 +34,16 @@ defmodule LegendWeb.DeviceControllerTest do
     assert revoked["data"]["revoked_at"]
   end
 
+  test "revoke audits the actor (loopback => nil), not the revoked target", %{conn: conn} do
+    device = Devices.create_device!(%{name: "old", public_key: nil})
+    delete(conn, "/api/devices/#{device.id}")
+
+    rows = Devices.list_audit!() |> Enum.filter(&(&1.action == "revoke"))
+    assert Enum.any?(rows), "a revoke audit row should exist"
+    # actor is loopback here => device_id nil; it must NOT be the revoked target id
+    assert Enum.all?(rows, &(&1.device_id != device.id))
+  end
+
   test "revoking an unknown device id returns 404", %{conn: conn} do
     conn = delete(conn, "/api/devices/#{Ecto.UUID.generate()}")
     assert json_response(conn, 404) == %{"error" => "device not found"}
