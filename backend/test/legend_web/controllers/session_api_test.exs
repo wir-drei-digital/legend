@@ -140,10 +140,10 @@ defmodule LegendWeb.SessionApiTest do
     assert session_id == session.id
   end
 
-  test "a loopback DELETE is audited with device_id nil", %{conn: conn} do
+  test "a loopback DELETE writes no audit row (remote-only)", %{conn: conn} do
     session = Agents.start_session!(%{harness_id: "hermes", runtime_id: "test", cwd: "/tmp"})
 
-    # ConnCase conns are loopback ({127,0,0,1}) by default.
+    # ConnCase conns are loopback ({127,0,0,1}) by default => no device actor.
     conn = delete(conn, "/api/sessions/#{session.id}")
     assert response(conn, 200)
 
@@ -151,7 +151,7 @@ defmodule LegendWeb.SessionApiTest do
       Devices.list_audit!()
       |> Enum.filter(&(&1.action == "delete" and &1.session_id == session.id))
 
-    assert [%{device_id: nil}] = rows
+    assert rows == []
   end
 
   test "a remote device's resume is audited, attributing the device", %{conn: conn} do
@@ -164,8 +164,7 @@ defmodule LegendWeb.SessionApiTest do
     device = Devices.create_device!(%{name: "phone", public_key: nil})
     token = DeviceToken.sign(device.id)
 
-    conn
-    |> Map.put(:remote_ip, {100, 64, 1, 2})
+    %{conn | remote_ip: {100, 64, 1, 2}}
     |> put_req_header("authorization", "Bearer " <> token)
     |> patch(
       "/api/sessions/#{session.id}/resume",

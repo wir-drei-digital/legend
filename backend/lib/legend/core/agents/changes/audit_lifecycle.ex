@@ -1,12 +1,14 @@
 defmodule Legend.Core.Agents.Changes.AuditLifecycle do
   @moduledoc """
-  Best-effort audit of a session lifecycle action (start/resume/transport/delete).
+  Best-effort, remote-only audit of a session lifecycle action
+  (start/resume/transport/delete).
 
   After the primary transaction commits, records an `AuditEvent` attributing the
-  Ash actor — the device threaded in by `LegendWeb.AshActor`. A loopback/local
-  caller (or any non-device actor) records `device_id: nil` per the AuditEvent
-  contract. The audit runs post-commit and is wrapped so a failed audit insert
-  can never roll back or fail the session operation.
+  Ash actor — the device threaded in by `LegendWeb.AshActor`. Remote-only, like
+  the channel audit (`SessionChannel.audit_control/2`): a loopback/local/internal
+  caller (no device actor) writes NO row, since the trail records remote
+  interventions, not local activity. The audit runs post-commit and is wrapped so
+  a failed audit insert can never roll back or fail the session operation.
 
   Pass the external lifecycle name as the `:action` option, e.g.
   `change {AuditLifecycle, action: "transport"}` for the `:set_transport` action.
@@ -39,6 +41,9 @@ defmodule Legend.Core.Agents.Changes.AuditLifecycle do
   defp session_id(changeset, record) do
     (is_map(record) && Map.get(record, :id)) || changeset.data.id
   end
+
+  # Remote-only: a loopback/internal/MCP-spawned actor (device_id nil) writes no row.
+  defp record_audit(nil, _session_id, _action), do: :ok
 
   defp record_audit(device_id, session_id, action) do
     Devices.audit!(%{device_id: device_id, session_id: session_id, action: action})
