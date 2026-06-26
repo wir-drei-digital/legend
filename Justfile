@@ -38,6 +38,13 @@ build:
 package-backend:
     #!/usr/bin/env bash
     set -euo pipefail
+    # Same-origin SPA for the sidecar (remote devices load it from the sidecar
+    # origin). Blank PUBLIC_* => same-origin; distinct from the Tauri webview's
+    # localhost-baked frontend/build.
+    cd frontend && bun run build
+    cd ..
+    rm -rf backend/priv/static/_app backend/priv/static/index.html
+    cp -R frontend/build/. backend/priv/static/
     backend/scripts/build-release.sh legend_desktop
     triple=$(rustc -vV | sed -n 's/host: //p')
     mkdir -p desktop/src-tauri/binaries
