@@ -3,6 +3,8 @@
 	import favicon from '$lib/assets/favicon.svg';
 	import { page } from '$app/state';
 	import LegendShell from '$lib/components/shell/LegendShell.svelte';
+	import MobileShell from '$lib/components/mobile/MobileShell.svelte';
+	import { isMobile } from '$lib/remote/viewport.svelte';
 
 	let { children } = $props();
 
@@ -14,6 +16,8 @@
 
 {#if bare}
 	{@render children()}
+{:else if isMobile.current}
+	<MobileShell />
 {:else}
 	<LegendShell>
 		{@render children()}
