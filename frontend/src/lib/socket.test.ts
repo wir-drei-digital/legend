@@ -12,12 +12,17 @@ function memoryStorage(): Storage {
 	} as Storage;
 }
 
-// Capture the params the phoenix Socket constructor is called with.
+// Capture the params the phoenix Socket constructor is called with, plus any
+// onError handlers registered on the instance.
 const ctorCalls: Array<{ url: string; opts: unknown }> = [];
+const onErrorCalls: Array<(...args: unknown[]) => void> = [];
 vi.mock('phoenix', () => ({
 	Socket: class {
 		constructor(url: string, opts: unknown) {
 			ctorCalls.push({ url, opts });
+		}
+		onError(cb: (...args: unknown[]) => void) {
+			onErrorCalls.push(cb);
 		}
 		connect() {}
 	}
@@ -25,6 +30,7 @@ vi.mock('phoenix', () => ({
 
 beforeEach(() => {
 	ctorCalls.length = 0;
+	onErrorCalls.length = 0;
 	vi.stubGlobal('localStorage', memoryStorage());
 	vi.resetModules();
 });
@@ -41,5 +47,19 @@ describe('getSocket', () => {
 		const { getSocket } = await import('./socket');
 		getSocket();
 		expect(ctorCalls[0].opts).toEqual({});
+	});
+
+	it('registers an onError handler when a token is present', async () => {
+		localStorage.setItem('legend.device_token', 'tok123');
+		const { getSocket } = await import('./socket');
+		getSocket();
+		expect(onErrorCalls).toHaveLength(1);
+		expect(typeof onErrorCalls[0]).toBe('function');
+	});
+
+	it('does not register an onError handler on loopback (no token)', async () => {
+		const { getSocket } = await import('./socket');
+		getSocket();
+		expect(onErrorCalls).toHaveLength(0);
 	});
 });

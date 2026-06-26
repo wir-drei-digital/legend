@@ -43,13 +43,19 @@
 		<h1 class="text-title font-semibold text-ink-1">Pair this device</h1>
 		<p class="mt-1 text-ui text-ink-3">Enter the pairing code shown in Legend on your computer.</p>
 
-		<div class="mt-5 flex flex-col gap-3">
+		<form
+			class="mt-5 flex flex-col gap-3"
+			onsubmit={(e) => {
+				e.preventDefault();
+				pair();
+			}}
+		>
 			<Input bind:value={code} placeholder="Pairing code" autocomplete="off" />
 			<Input bind:value={name} placeholder="Device name (optional)" autocomplete="off" />
-			<Button onclick={pair} disabled={!code.trim() || status === 'pairing'}>
+			<Button type="submit" disabled={!code.trim() || status === 'pairing'}>
 				{status === 'pairing' ? 'Pairing…' : 'Pair'}
 			</Button>
-		</div>
+		</form>
 
 		{#if status === 'error'}
 			<p class="mt-3 text-ui text-bad">{error}</p>
