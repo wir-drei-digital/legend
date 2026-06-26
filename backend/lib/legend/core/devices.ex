@@ -20,7 +20,7 @@ defmodule Legend.Core.Devices do
     resource PairingCode do
       define :generate_pairing_code, action: :generate
       define :pairing_code_by_code, action: :by_code, args: [:code]
-      define :mark_pairing_code_redeemed, action: :mark_redeemed
+      define :claim_pairing_code, action: :claim
     end
 
     resource Legend.Core.Devices.AuditEvent do
@@ -60,13 +60,18 @@ defmodule Legend.Core.Devices do
   """
   def redeem_pairing_code(code, attrs) when is_binary(code) do
     case pairing_code_by_code(code) do
-      {:ok, %PairingCode{redeemed_at: redeemed}} when not is_nil(redeemed) ->
-        {:error, :used}
-
       {:ok, %PairingCode{expires_at: exp} = pc} ->
         if DateTime.compare(exp, DateTime.utc_now()) == :gt do
-          _ = mark_pairing_code_redeemed!(pc)
-          {:ok, create_device!(Map.take(attrs, [:name, :public_key]))}
+          # Atomic single-use claim: the guarded `claim` update flips
+          # `redeemed_at` only while it is still NULL, so exactly one concurrent
+          # redeemer can win. A losing claim matches zero rows and returns a
+          # stale-record error, which we normalize to `:used`. The device is
+          # minted only on a successful claim — never on the check-then-update
+          # gap that previously let two redeems mint two devices.
+          case claim_pairing_code(pc) do
+            {:ok, _claimed} -> {:ok, create_device!(Map.take(attrs, [:name, :public_key]))}
+            {:error, _stale} -> {:error, :used}
+          end
         else
           {:error, :expired}
         end

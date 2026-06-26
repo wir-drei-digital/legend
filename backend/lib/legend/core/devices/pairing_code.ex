@@ -34,9 +34,14 @@ defmodule Legend.Core.Devices.PairingCode do
       filter expr(code == ^arg(:code))
     end
 
-    update :mark_redeemed do
+    # Atomic single-use claim: the `filter` is appended to the UPDATE's WHERE
+    # clause, so the row is claimable only while `redeemed_at IS NULL`. A second
+    # claim of an already-redeemed code matches zero rows and Ash surfaces a
+    # stale-record error instead of re-stamping — this is the TOCTOU chokepoint.
+    update :claim do
       require_atomic? false
       change set_attribute(:redeemed_at, &DateTime.utc_now/0)
+      change filter expr(is_nil(redeemed_at))
     end
 
     # Test-only: backdate expiry to exercise the expired path.
