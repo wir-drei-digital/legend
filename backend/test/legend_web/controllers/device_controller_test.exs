@@ -25,4 +25,17 @@ defmodule LegendWeb.DeviceControllerTest do
     conn = delete(conn, "/api/devices/#{Ecto.UUID.generate()}")
     assert json_response(conn, 404) == %{"error" => "device not found"}
   end
+
+  test "audit trail returns recorded events with the view shape", %{conn: conn} do
+    Devices.audit!(%{device_id: nil, session_id: nil, action: "pair"})
+
+    list = json_response(get(conn, "/api/devices/audit"), 200)
+    assert is_list(list["data"])
+
+    event = Enum.find(list["data"], &(&1["action"] == "pair"))
+    assert event
+    assert Map.has_key?(event, "device_id")
+    assert Map.has_key?(event, "session_id")
+    assert Map.has_key?(event, "at")
+  end
 end

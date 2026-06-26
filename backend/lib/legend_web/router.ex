@@ -44,6 +44,7 @@ defmodule LegendWeb.Router do
     get "/devices", DeviceController, :index
     post "/devices/pair-code", DeviceController, :create_pair_code
     delete "/devices/:id", DeviceController, :revoke
+    get "/devices/audit", DeviceController, :audit
   end
 
   # Device-authenticated Ash JSON:API (sessions). MUST stay last under /api.

@@ -34,6 +34,10 @@ defmodule LegendWeb.DeviceController do
     end
   end
 
+  def audit(conn, _params) do
+    json(conn, %{data: Enum.map(Devices.list_audit!(), &audit_view/1)})
+  end
+
   defp device_view(d) do
     %{
       id: d.id,
@@ -41,6 +45,16 @@ defmodule LegendWeb.DeviceController do
       paired_at: d.paired_at,
       last_seen_at: d.last_seen_at,
       revoked_at: d.revoked_at
+    }
+  end
+
+  defp audit_view(e) do
+    %{
+      id: e.id,
+      device_id: e.device_id,
+      session_id: e.session_id,
+      action: e.action,
+      at: e.inserted_at
     }
   end
 end
