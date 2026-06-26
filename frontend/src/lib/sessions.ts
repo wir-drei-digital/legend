@@ -1,4 +1,4 @@
-import { apiBase } from './api';
+import { apiFetch } from './api';
 
 export type SessionStatus = 'starting' | 'provisioning' | 'running' | 'exited' | 'failed' | 'interrupted';
 
@@ -59,7 +59,7 @@ async function errorMessage(res: Response, fallback: string): Promise<string> {
 }
 
 export async function listHarnesses(): Promise<Harness[]> {
-	const res = await fetch(`${apiBase}/api/harnesses`);
+	const res = await apiFetch('/api/harnesses');
 	if (!res.ok) throw new Error(`listing harnesses failed: ${res.status}`);
 	return (await res.json()).data;
 }
@@ -70,13 +70,13 @@ export interface Runtime {
 }
 
 export async function listRuntimes(): Promise<Runtime[]> {
-	const res = await fetch(`${apiBase}/api/runtimes`);
+	const res = await apiFetch('/api/runtimes');
 	if (!res.ok) throw new Error(`listing runtimes failed: ${res.status}`);
 	return (await res.json()).data;
 }
 
 export async function listSessions(): Promise<Session[]> {
-	const res = await fetch(`${apiBase}/api/sessions`, { headers: { Accept: JSONAPI } });
+	const res = await apiFetch('/api/sessions', { headers: { Accept: JSONAPI } });
 	if (!res.ok) throw new Error(`listing sessions failed: ${res.status}`);
 	return (await res.json()).data.map(toSession);
 }
@@ -88,7 +88,7 @@ export async function createSession(attrs: {
 	cwd?: string;
 	transport?: 'terminal' | 'acp';
 }): Promise<Session> {
-	const res = await fetch(`${apiBase}/api/sessions`, {
+	const res = await apiFetch('/api/sessions', {
 		method: 'POST',
 		headers: { 'Content-Type': JSONAPI, Accept: JSONAPI },
 		body: JSON.stringify({ data: { type: 'session', attributes: attrs } })
@@ -98,7 +98,7 @@ export async function createSession(attrs: {
 }
 
 export async function resumeSession(id: string): Promise<void> {
-	const res = await fetch(`${apiBase}/api/sessions/${id}/resume`, {
+	const res = await apiFetch(`/api/sessions/${id}/resume`, {
 		method: 'PATCH',
 		headers: { 'Content-Type': JSONAPI, Accept: JSONAPI },
 		body: JSON.stringify({ data: { type: 'session', id, attributes: {} } })
@@ -107,7 +107,7 @@ export async function resumeSession(id: string): Promise<void> {
 }
 
 export async function setTransport(id: string, transport: 'terminal' | 'acp'): Promise<void> {
-	const res = await fetch(`${apiBase}/api/sessions/${id}/transport`, {
+	const res = await apiFetch(`/api/sessions/${id}/transport`, {
 		method: 'PATCH',
 		headers: { 'Content-Type': JSONAPI, Accept: JSONAPI },
 		body: JSON.stringify({ data: { type: 'session', id, attributes: { transport } } })
@@ -116,7 +116,7 @@ export async function setTransport(id: string, transport: 'terminal' | 'acp'): P
 }
 
 export async function renameSession(id: string, name: string): Promise<void> {
-	const res = await fetch(`${apiBase}/api/sessions/${id}/rename`, {
+	const res = await apiFetch(`/api/sessions/${id}/rename`, {
 		method: 'PATCH',
 		headers: { 'Content-Type': JSONAPI, Accept: JSONAPI },
 		body: JSON.stringify({ data: { type: 'session', id, attributes: { name } } })
@@ -125,7 +125,7 @@ export async function renameSession(id: string, name: string): Promise<void> {
 }
 
 export async function deleteSession(id: string): Promise<void> {
-	const res = await fetch(`${apiBase}/api/sessions/${id}`, {
+	const res = await apiFetch(`/api/sessions/${id}`, {
 		method: 'DELETE',
 		headers: { Accept: JSONAPI }
 	});
@@ -133,7 +133,7 @@ export async function deleteSession(id: string): Promise<void> {
 }
 
 export async function applyHarnessSetup(id: string): Promise<HarnessSetup> {
-	const res = await fetch(`${apiBase}/api/harnesses/${id}/setup`, { method: 'POST' });
+	const res = await apiFetch(`/api/harnesses/${id}/setup`, { method: 'POST' });
 	if (!res.ok) {
 		let detail = `${res.status}`;
 		try {

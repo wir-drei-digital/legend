@@ -1,4 +1,4 @@
-import { apiBase } from './api';
+import { apiFetch } from './api';
 
 export interface LibraryPathInfo {
 	effective: string;
@@ -18,13 +18,13 @@ async function fail(res: Response, fallback: string): Promise<never> {
 }
 
 export async function getLibraryPath(): Promise<LibraryPathInfo> {
-	const res = await fetch(`${apiBase}/api/settings/library-path`);
+	const res = await apiFetch('/api/settings/library-path');
 	if (!res.ok) await fail(res, 'loading settings failed');
 	return (await res.json()).data;
 }
 
 export async function putLibraryPath(path: string): Promise<LibraryPathInfo> {
-	const res = await fetch(`${apiBase}/api/settings/library-path`, {
+	const res = await apiFetch('/api/settings/library-path', {
 		method: 'PUT',
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify({ path })
@@ -34,7 +34,7 @@ export async function putLibraryPath(path: string): Promise<LibraryPathInfo> {
 }
 
 export async function resetLibraryPath(): Promise<LibraryPathInfo> {
-	const res = await fetch(`${apiBase}/api/settings/library-path`, { method: 'DELETE' });
+	const res = await apiFetch('/api/settings/library-path', { method: 'DELETE' });
 	if (!res.ok) await fail(res, 'resetting library path failed');
 	return (await res.json()).data;
 }

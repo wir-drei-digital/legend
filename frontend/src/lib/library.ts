@@ -1,4 +1,4 @@
-import { apiBase } from './api';
+import { apiFetch } from './api';
 
 export interface LibraryEntry {
 	path: string;
@@ -18,19 +18,19 @@ async function fail(res: Response, fallback: string): Promise<never> {
 }
 
 export async function listTree(): Promise<LibraryEntry[]> {
-	const res = await fetch(`${apiBase}/api/library/tree`);
+	const res = await apiFetch('/api/library/tree');
 	if (!res.ok) await fail(res, 'listing library failed');
 	return (await res.json()).data;
 }
 
 export async function readFile(path: string): Promise<string> {
-	const res = await fetch(`${apiBase}/api/library/file?path=${encodeURIComponent(path)}`);
+	const res = await apiFetch(`/api/library/file?path=${encodeURIComponent(path)}`);
 	if (!res.ok) await fail(res, 'reading file failed');
 	return (await res.json()).data.content;
 }
 
 export async function writeFile(path: string, content: string): Promise<void> {
-	const res = await fetch(`${apiBase}/api/library/file`, {
+	const res = await apiFetch('/api/library/file', {
 		method: 'PUT',
 		headers: { 'Content-Type': 'application/json' },
 		body: JSON.stringify({ path, content })
@@ -39,7 +39,7 @@ export async function writeFile(path: string, content: string): Promise<void> {
 }
 
 export async function deleteFile(path: string): Promise<void> {
-	const res = await fetch(`${apiBase}/api/library/file?path=${encodeURIComponent(path)}`, {
+	const res = await apiFetch(`/api/library/file?path=${encodeURIComponent(path)}`, {
 		method: 'DELETE'
 	});
 	if (!res.ok) await fail(res, 'deleting file failed');

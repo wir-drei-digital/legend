@@ -1,4 +1,4 @@
-import { apiBase } from './api';
+import { apiFetch } from './api';
 
 export type MessageKind = 'message' | 'handoff' | 'system';
 
@@ -17,7 +17,7 @@ const JSONAPI = 'application/vnd.api+json';
 
 /** Human composer: POSTs the send_as_human action (sender is always the human). */
 export async function sendMessage(to_session_id: string, payload: string): Promise<void> {
-	const res = await fetch(`${apiBase}/api/messages`, {
+	const res = await apiFetch('/api/messages', {
 		method: 'POST',
 		headers: { 'Content-Type': JSONAPI, Accept: JSONAPI },
 		body: JSON.stringify({ data: { type: 'message', attributes: { to_session_id, payload } } })
