@@ -17,9 +17,66 @@ defmodule LegendWeb.RemoteControllerTest do
     body = %{enabled: true, host: "laptop.tailnet.ts.net"}
     resp = json_response(put(conn, "/api/settings/remote-access", body), 200)
 
-    assert resp["data"] == %{"enabled" => true, "host" => "laptop.tailnet.ts.net"}
+    assert resp["data"]["enabled"] == true
+    assert resp["data"]["mode"] == "direct"
+    assert resp["data"]["host"] == "laptop.tailnet.ts.net"
     assert resp["restart_required"] == true
-    assert Remote.config() == %{enabled: true, host: "laptop.tailnet.ts.net"}
+
+    assert Remote.config() == %{
+             enabled: true,
+             mode: "direct",
+             host: "laptop.tailnet.ts.net",
+             relay_url: nil,
+             relay_handle: nil,
+             relay_secret: nil
+           }
+  end
+
+  test "PUT via_relay persists the relay fields and flags restart_required", %{conn: conn} do
+    body = %{
+      enabled: true,
+      mode: "via_relay",
+      relay_url: "https://relay.example.com",
+      relay_handle: "laptop",
+      relay_secret: "s3cr3t"
+    }
+
+    resp = json_response(put(conn, "/api/settings/remote-access", body), 200)
+
+    assert resp["data"]["mode"] == "via_relay"
+    assert resp["data"]["relay_url"] == "https://relay.example.com"
+    assert resp["data"]["relay_handle"] == "laptop"
+    assert resp["restart_required"] == true
+
+    c = Remote.config()
+    assert c.mode == "via_relay"
+    assert c.relay_url == "https://relay.example.com"
+    assert c.relay_handle == "laptop"
+    assert c.relay_secret == "s3cr3t"
+  end
+
+  test "PUT via_relay missing relay fields is rejected (422)", %{conn: conn} do
+    assert json_response(
+             put(conn, "/api/settings/remote-access", %{
+               enabled: true,
+               mode: "via_relay",
+               relay_url: "https://relay.example.com"
+             }),
+             422
+           )
+  end
+
+  test "PUT via_relay rejects relay fields with control characters (422)", %{conn: conn} do
+    assert json_response(
+             put(conn, "/api/settings/remote-access", %{
+               enabled: true,
+               mode: "via_relay",
+               relay_url: "https://relay.example.com",
+               relay_handle: "bad\x01handle",
+               relay_secret: "s"
+             }),
+             422
+           )
   end
 
   test "PUT enabled without a host is rejected (422)", %{conn: conn} do

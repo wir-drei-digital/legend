@@ -8,16 +8,33 @@ defmodule Legend.Core.RemoteTest do
     :ok
   end
 
+  @disabled %{
+    enabled: false,
+    mode: "direct",
+    host: nil,
+    relay_url: nil,
+    relay_handle: nil,
+    relay_secret: nil
+  }
+
   test "config defaults to disabled when unset" do
-    assert Remote.config() == %{enabled: false, host: nil}
+    assert Remote.config() == @disabled
   end
 
   test "put_config persists and round-trips; clear disables" do
     :ok = Remote.put_config(%{enabled: true, host: "laptop.tailnet.ts.net"})
-    assert Remote.config() == %{enabled: true, host: "laptop.tailnet.ts.net"}
+
+    assert Remote.config() == %{
+             enabled: true,
+             mode: "direct",
+             host: "laptop.tailnet.ts.net",
+             relay_url: nil,
+             relay_handle: nil,
+             relay_secret: nil
+           }
 
     :ok = Remote.clear()
-    assert Remote.config() == %{enabled: false, host: nil}
+    assert Remote.config() == @disabled
   end
 
   test "endpoint_overrides leaves config untouched when disabled" do
@@ -50,7 +67,7 @@ defmodule Legend.Core.RemoteTest do
       value: ~s({"enabled":true,"host":42})
     })
 
-    assert Remote.config() == %{enabled: false, host: nil}
+    assert Remote.config() == @disabled
   end
 
   test "enabled without a host fails safe to disabled" do
@@ -71,5 +88,66 @@ defmodule Legend.Core.RemoteTest do
 
   test "relay ingress is disabled by default" do
     refute Legend.Core.Remote.relay_ingress_enabled?()
+  end
+
+  test "direct mode is the default and leaves relay fields nil" do
+    :ok = Remote.put_config(%{enabled: true, host: "laptop.ts.net"})
+    c = Remote.config()
+
+    assert c.mode == "direct"
+    assert c.relay_url == nil
+    assert c.relay_handle == nil
+    assert c.relay_secret == nil
+    refute Remote.relay_ingress_enabled?()
+  end
+
+  test "a persisted via_relay config exposes the relay fields and enables the ingress" do
+    Legend.Core.Settings.put_setting!(%{
+      key: "remote_access",
+      value:
+        ~s({"enabled":true,"mode":"via_relay","relay_url":"https://relay.example.com","relay_handle":"laptop","relay_secret":"s"})
+    })
+
+    c = Remote.config()
+    assert c.enabled
+    assert c.mode == "via_relay"
+    assert c.relay_url == "https://relay.example.com"
+    assert c.relay_handle == "laptop"
+    assert c.relay_secret == "s"
+
+    assert Remote.relay_ingress_enabled?()
+  end
+
+  test "via_relay round-trips through put_config" do
+    :ok =
+      Remote.put_config(%{
+        enabled: true,
+        mode: "via_relay",
+        relay_url: "https://relay.example.com",
+        relay_handle: "laptop",
+        relay_secret: "s3cr3t"
+      })
+
+    assert Remote.config() == %{
+             enabled: true,
+             mode: "via_relay",
+             host: nil,
+             relay_url: "https://relay.example.com",
+             relay_handle: "laptop",
+             relay_secret: "s3cr3t"
+           }
+
+    assert Remote.relay_ingress_enabled?()
+  end
+
+  test "via_relay missing a relay field fails safe to disabled (ingress off)" do
+    Legend.Core.Settings.put_setting!(%{
+      key: "remote_access",
+      value:
+        ~s({"enabled":true,"mode":"via_relay","relay_url":"https://relay.example.com","relay_handle":"laptop"})
+    })
+
+    refute Remote.config().enabled
+    refute Remote.relay_ingress_enabled?()
   end
 end

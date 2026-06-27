@@ -1,17 +1,34 @@
 defmodule Legend.Core.Remote do
   @moduledoc """
   Opt-in remote reachability. Reads the `"remote_access"` setting and produces
-  endpoint config overrides applied at boot (`Legend.Core.Remote.Boot`). When
-  enabled the endpoint binds `0.0.0.0` — the Phase-1 loopback-or-token gate
-  (`DeviceAuth` + socket auth) is the network boundary. Off by default
-  (loopback-only). Reconfiguring is restart-to-apply.
+  endpoint config overrides applied at boot (`Legend.Core.Remote.Boot`). Two
+  modes:
+
+    * `"direct"` (default) — the main endpoint binds `0.0.0.0` for mesh/LAN
+      reach; the Phase-1 loopback-or-token gate (`DeviceAuth` + socket auth) is
+      the network boundary, with `host` driving `check_origin`/`url`.
+    * `"via_relay"` — the main endpoint stays loopback; the `RelayIngressEndpoint`
+      + `Legend.Federation.RelayClient` carrier expose the instance through a
+      relay (`relay_url`/`relay_handle`/`relay_secret`). Relayed traffic is
+      stamped `via_relay` so it never inherits loopback trust.
+
+  Off by default (loopback-only). Reconfiguring is restart-to-apply.
   """
 
   alias Legend.Core.Settings
 
   @key "remote_access"
 
-  @spec config() :: %{enabled: boolean, host: String.t() | nil}
+  @type t :: %{
+          enabled: boolean,
+          mode: String.t(),
+          host: String.t() | nil,
+          relay_url: String.t() | nil,
+          relay_handle: String.t() | nil,
+          relay_secret: String.t() | nil
+        }
+
+  @spec config() :: t()
   def config do
     case Settings.get_setting(@key) do
       nil ->
@@ -19,28 +36,63 @@ defmodule Legend.Core.Remote do
 
       raw ->
         case Jason.decode(raw) do
-          {:ok, %{"enabled" => enabled} = m} ->
-            host = blank_to_nil(m["host"])
-            # Fail safe: enabling without a host would bind 0.0.0.0 with no
-            # origin/url host — treat malformed/partial config as disabled.
-            if !!enabled and host != nil do
-              %{enabled: true, host: host}
-            else
-              disabled()
-            end
-
-          _ ->
-            disabled()
+          {:ok, %{"enabled" => enabled} = m} -> build_config(!!enabled, m)
+          _ -> disabled()
         end
     end
   end
 
-  @spec put_config(%{enabled: boolean, host: String.t() | nil}) :: :ok
+  # "via_relay" needs the relay triple; "direct" (default) needs a host. Either
+  # way a partial/malformed config fails safe to disabled — the network boundary
+  # never half-opens.
+  defp build_config(false, _m), do: disabled()
+
+  defp build_config(true, m) do
+    case mode_of(m["mode"]) do
+      "via_relay" ->
+        relay_url = blank_to_nil(m["relay_url"])
+        relay_handle = blank_to_nil(m["relay_handle"])
+        relay_secret = blank_to_nil(m["relay_secret"])
+
+        if relay_url && relay_handle && relay_secret do
+          %{
+            enabled: true,
+            mode: "via_relay",
+            host: blank_to_nil(m["host"]),
+            relay_url: relay_url,
+            relay_handle: relay_handle,
+            relay_secret: relay_secret
+          }
+        else
+          disabled()
+        end
+
+      "direct" ->
+        case blank_to_nil(m["host"]) do
+          nil -> disabled()
+          host -> %{disabled() | enabled: true, mode: "direct", host: host}
+        end
+    end
+  end
+
+  @spec put_config(map) :: :ok
   def put_config(%{enabled: enabled} = cfg) do
-    payload = Jason.encode!(%{enabled: !!enabled, host: blank_to_nil(cfg[:host])})
+    payload =
+      Jason.encode!(%{
+        enabled: !!enabled,
+        mode: mode_of(cfg[:mode]),
+        host: blank_to_nil(cfg[:host]),
+        relay_url: blank_to_nil(cfg[:relay_url]),
+        relay_handle: blank_to_nil(cfg[:relay_handle]),
+        relay_secret: blank_to_nil(cfg[:relay_secret])
+      })
+
     Settings.put_setting!(%{key: @key, value: payload})
     :ok
   end
+
+  defp mode_of("via_relay"), do: "via_relay"
+  defp mode_of(_), do: "direct"
 
   @spec clear() :: :ok
   def clear do
@@ -49,15 +101,27 @@ defmodule Legend.Core.Remote do
   end
 
   @doc """
-  Whether the relay ingress endpoint should boot. Default off; Part 2 wires this
-  to the persisted "via relay" remote-access mode.
-
-  Reads the `:relay_ingress_enabled` application env (default `false`) rather
-  than a literal so the boot-time `if` in `Legend.Application` isn't compiled
-  away as a dead branch under `--warnings-as-errors`.
+  Whether the relay ingress endpoint (and its federation carrier) should boot:
+  remote access is on, the persisted mode is `"via_relay"`, and the relay triple
+  is present. `config/0` already fails partial via_relay configs safe to
+  disabled, so the field checks here are belt-and-suspenders.
   """
   @spec relay_ingress_enabled?() :: boolean()
-  def relay_ingress_enabled?, do: Application.get_env(:legend, :relay_ingress_enabled, false)
+  def relay_ingress_enabled? do
+    case config() do
+      %{
+        enabled: true,
+        mode: "via_relay",
+        relay_url: url,
+        relay_handle: handle,
+        relay_secret: secret
+      } ->
+        is_binary(url) and is_binary(handle) and is_binary(secret)
+
+      _ ->
+        false
+    end
+  end
 
   @doc """
   Pure: merge remote overrides onto the endpoint's existing config. Enabled →
@@ -93,7 +157,16 @@ defmodule Legend.Core.Remote do
     |> Keyword.update(:url, [host: host], &Keyword.put(&1, :host, host))
   end
 
-  defp disabled, do: %{enabled: false, host: nil}
+  defp disabled,
+    do: %{
+      enabled: false,
+      mode: "direct",
+      host: nil,
+      relay_url: nil,
+      relay_handle: nil,
+      relay_secret: nil
+    }
+
   defp blank_to_nil(v) when v in [nil, ""], do: nil
   defp blank_to_nil(v) when is_binary(v), do: v
   defp blank_to_nil(_), do: nil
