@@ -26,9 +26,15 @@ export async function redeemPairCode(code: string, name?: string): Promise<PairR
 	return res.json();
 }
 
+export type RemoteAccessMode = 'direct' | 'via_relay';
+
 export interface RemoteAccess {
 	enabled: boolean;
+	mode: RemoteAccessMode;
 	host: string | null;
+	relay_url: string | null;
+	relay_handle: string | null;
+	relay_secret: string | null;
 }
 
 export interface Device {
@@ -65,14 +71,22 @@ export async function getRemoteAccess(): Promise<RemoteAccess> {
 	return (await res.json()).data;
 }
 
+export type RemoteAccessUpdate = {
+	enabled: boolean;
+	mode?: RemoteAccessMode;
+	host?: string | null;
+	relay_url?: string | null;
+	relay_handle?: string | null;
+	relay_secret?: string | null;
+};
+
 export async function setRemoteAccess(
-	enabled: boolean,
-	host: string | null
+	payload: RemoteAccessUpdate
 ): Promise<{ data: RemoteAccess; restart_required?: boolean }> {
 	const res = await apiFetch('/api/settings/remote-access', {
 		method: 'PUT',
 		headers: { 'Content-Type': 'application/json' },
-		body: JSON.stringify({ enabled, host })
+		body: JSON.stringify(payload)
 	});
 	if (!res.ok) await fail(res, 'saving remote access failed');
 	return res.json();

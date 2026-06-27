@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { backendPort, buildPairUrl } from './pairUrl';
+import { backendPort, buildPairUrl, buildRelayPairUrl } from './pairUrl';
 
 describe('backendPort', () => {
 	it('parses the port from an absolute apiBase (desktop / tauri://localhost)', () => {
@@ -44,5 +44,29 @@ describe('buildPairUrl', () => {
 		);
 		expect(buildPairUrl('', 'CODE', '', '4807')).toBe('');
 		expect(buildPairUrl('laptop', '', '', '4807')).toBe('');
+	});
+});
+
+describe('buildRelayPairUrl', () => {
+	it('builds a relay-subdomain pair URL', () => {
+		expect(buildRelayPairUrl('https://relay.example.com', 'laptop', 'CODE')).toBe(
+			'https://laptop.relay.example.com/pair?code=CODE'
+		);
+	});
+
+	it('encodes the code', () => {
+		expect(buildRelayPairUrl('https://relay.example.com', 'laptop', 'ABC 123')).toBe(
+			'https://laptop.relay.example.com/pair?code=ABC%20123'
+		);
+	});
+
+	it('returns empty without handle/url/code', () => {
+		expect(buildRelayPairUrl('', 'laptop', 'CODE')).toBe('');
+		expect(buildRelayPairUrl('https://relay.example.com', '', 'CODE')).toBe('');
+		expect(buildRelayPairUrl('https://relay.example.com', 'laptop', '')).toBe('');
+	});
+
+	it('returns empty when the relay URL is unparseable', () => {
+		expect(buildRelayPairUrl('not a url', 'laptop', 'CODE')).toBe('');
 	});
 });
