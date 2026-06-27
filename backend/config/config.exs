@@ -90,6 +90,20 @@ config :legend, LegendWeb.Endpoint,
   pubsub_server: Legend.PubSub,
   live_view: [signing_salt: "+JFtBCHL"]
 
+# Dedicated endpoint for relay-routed device traffic (Part-2 federation carrier
+# splices relay streams to its loopback port). Mirrors LegendWeb.Endpoint's
+# render_errors/pubsub_server; `server: false` so it only listens when supervised
+# explicitly (Task 3) and never starts in other tests.
+config :legend, LegendWeb.RelayIngressEndpoint,
+  url: [host: "localhost"],
+  adapter: Bandit.PhoenixAdapter,
+  render_errors: [
+    formats: [json: LegendWeb.ErrorJSON],
+    layout: false
+  ],
+  pubsub_server: Legend.PubSub,
+  server: false
+
 # Configure Elixir's Logger
 config :logger, :default_formatter,
   format: "$time $metadata[$level] $message\n",

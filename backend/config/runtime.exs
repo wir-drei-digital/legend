@@ -71,6 +71,13 @@ if config_env() == :prod do
     ],
     secret_key_base: env!("SECRET_KEY_BASE", :string)
 
+  # Relay ingress shares the same secret. `check_origin: false` is a Part-1
+  # placeholder for isolated tests; Part 2 sets it to ["//<handle>.<relay-host>"]
+  # when relay mode is configured.
+  config :legend, LegendWeb.RelayIngressEndpoint,
+    secret_key_base: env!("SECRET_KEY_BASE", :string),
+    check_origin: false
+
   # The sidecar runs migrations on boot (no mix available in a release).
   config :legend, auto_migrate: env!("AUTO_MIGRATE", :boolean, true)
 end

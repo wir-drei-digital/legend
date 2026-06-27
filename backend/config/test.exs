@@ -18,6 +18,13 @@ config :legend, LegendWeb.Endpoint,
   secret_key_base: "Ah8utsZhD3fwDbacHdFV9JhxgB93r3J2hAc2PdPj+KamedpC2m0J4Q98Nq3PWSmZ",
   server: false
 
+# Relay ingress endpoint: config-only (server: false ⇒ no listener; the ingress
+# test dispatches in-process via Phoenix.ConnTest).
+config :legend, LegendWeb.RelayIngressEndpoint,
+  secret_key_base: String.duplicate("a", 64),
+  check_origin: false,
+  server: false
+
 # Print only warnings and errors during test
 config :logger, level: :warning
 
