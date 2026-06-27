@@ -58,4 +58,16 @@ defmodule LegendWeb.DeviceAuthTest do
 
     assert json_response(conn, 401)
   end
+
+  test "a via_relay conn on loopback is NOT trusted (token required)" do
+    conn =
+      build_conn()
+      |> Map.put(:remote_ip, {127, 0, 0, 1})
+      |> LegendWeb.ViaRelay.stamp()
+      |> LegendWeb.DeviceAuth.call([])
+
+    # no token + via_relay => denied even though remote_ip is loopback
+    assert conn.status == 401
+    assert conn.halted
+  end
 end

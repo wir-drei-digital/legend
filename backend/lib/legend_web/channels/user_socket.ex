@@ -43,7 +43,7 @@ defmodule LegendWeb.UserSocket do
   # performing token verification on connect.
   @impl true
   def connect(params, socket, connect_info) do
-    if loopback?(connect_info) do
+    if not LegendWeb.ViaRelay.info?(connect_info) and loopback?(connect_info) do
       {:ok, assign(socket, :device_id, nil)}
     else
       with token when is_binary(token) <- params["token"],

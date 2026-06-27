@@ -12,7 +12,7 @@ defmodule LegendWeb.LoopbackOnly do
   def init(opts), do: opts
 
   def call(conn, _opts) do
-    if RemotePeer.loopback?(conn.remote_ip) do
+    if not LegendWeb.ViaRelay.conn?(conn) and RemotePeer.loopback?(conn.remote_ip) do
       conn
     else
       conn

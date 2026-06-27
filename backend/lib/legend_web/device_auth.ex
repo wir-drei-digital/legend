@@ -12,7 +12,7 @@ defmodule LegendWeb.DeviceAuth do
 
   def call(conn, _opts) do
     cond do
-      RemotePeer.loopback?(conn.remote_ip) ->
+      not LegendWeb.ViaRelay.conn?(conn) and RemotePeer.loopback?(conn.remote_ip) ->
         assign(conn, :device, :local)
 
       true ->

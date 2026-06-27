@@ -43,4 +43,11 @@ defmodule LegendWeb.UserSocketTest do
     assert UserSocket.id(remote) == "device:#{device.id}"
     assert UserSocket.id(local) == nil
   end
+
+  test "via_relay connect on loopback without a token is refused" do
+    assert :error =
+             connect(UserSocket, %{},
+               connect_info: %{peer_data: %{address: {127, 0, 0, 1}}, via_relay: true}
+             )
+  end
 end
