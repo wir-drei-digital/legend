@@ -40,6 +40,11 @@ defmodule Relay.Device do
   end
 
   @impl ThousandIsland.Handler
+  # NO flow control / WINDOW backpressure in 3a: the codec carries WINDOW frames
+  # but neither side honors them — device bytes are forwarded to the carrier
+  # unbounded (memory-DoS surface). Acceptable for self-host (operator == victim).
+  # A non-self-host/managed deployment (3c) MUST first enforce per-stream WINDOW
+  # credit + read_timeout + connection rate-limiting on this public endpoint.
   def handle_data(data, _socket, %{carrier: carrier, stream_id: id} = state) do
     send(carrier, {:stream_data, id, data})
     {:continue, state}
@@ -53,6 +58,8 @@ defmodule Relay.Device do
   def handle_close(_socket, _state), do: :ok
 
   # Carrier frames (instance -> device), routed to this process by Relay.Carrier.
+  # Same 3a caveat as handle_data/3: no WINDOW backpressure — instance->device
+  # bytes are written unbounded. Acceptable for self-host; 3c must add credit.
   @impl GenServer
   def handle_info({:to_device, bytes}, {socket, state}) do
     _ = ThousandIsland.Socket.send(socket, bytes)

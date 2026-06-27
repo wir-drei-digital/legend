@@ -3,8 +3,28 @@ import Config
 # Runtime listener config, read from the environment in dev/prod (release-safe).
 # Test pins :start_listeners false and drives its own listener, so it stays out.
 if config_env() != :test do
+  # Carrier listen IP. Loopback by default: the carrier secret crosses this in
+  # cleartext, so it MUST sit behind a TLS-terminating front. Override only if
+  # the front terminates elsewhere. Malformed value => loopback (never crash boot).
+  carrier_ip =
+    case System.get_env("RELAY_CARRIER_IP") do
+      nil ->
+        {127, 0, 0, 1}
+
+      raw ->
+        case :inet.parse_address(String.to_charlist(raw)) do
+          {:ok, ip} ->
+            ip
+
+          {:error, _} ->
+            IO.warn("RELAY_CARRIER_IP: malformed address #{inspect(raw)}, using loopback")
+            {127, 0, 0, 1}
+        end
+    end
+
   config :relay,
     carrier_port: String.to_integer(System.get_env("RELAY_CARRIER_PORT", "4900")),
+    carrier_ip: carrier_ip,
     device_port: String.to_integer(System.get_env("RELAY_DEVICE_PORT", "4443")),
     certfile: System.get_env("RELAY_CERTFILE"),
     keyfile: System.get_env("RELAY_KEYFILE")

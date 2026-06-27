@@ -48,6 +48,11 @@ defmodule Relay.Carrier do
      %{state | streams: Map.put(state.streams, id, device_pid), next_id: id + 1}}
   end
 
+  # NO flow control / WINDOW backpressure in 3a: WINDOW frames exist in the codec
+  # but neither side honors them — device->instance bytes are pushed to the WS
+  # carrier unbounded (memory-DoS surface). Acceptable for self-host (operator ==
+  # victim); a managed/non-self-host deployment (3c) MUST enforce per-stream
+  # WINDOW credit + read_timeout + connection rate-limiting before this is public.
   def handle_info({:stream_data, id, bytes}, state) do
     {:push, {:binary, Mux.encode(%Frame{type: :data, stream_id: id, payload: bytes})}, state}
   end
@@ -62,7 +67,9 @@ defmodule Relay.Carrier do
   @impl true
   def terminate(_reason, _state), do: :ok
 
-  # instance → device routing
+  # instance → device routing. Same 3a caveat: instance->device DATA is forwarded
+  # to the device handler ({:to_device, …}) with no WINDOW backpressure — unbounded.
+  # Acceptable for self-host; 3c must add per-stream credit before this is public.
   defp route_from_instance(%Frame{type: :data, stream_id: id, payload: p}, state) do
     with %{^id => dpid} <- state.streams, do: send(dpid, {:to_device, p})
     state

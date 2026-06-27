@@ -2,7 +2,9 @@ defmodule Relay.Registry do
   @moduledoc "In-memory handle => carrier-pid map. Per-handle secret allowlist + DNS-label validation. Auto-clears on carrier death."
   use GenServer
 
-  @label ~r/^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$/
+  # \A…\z (not ^…$): in PCRE $ matches before a trailing newline, so "laptop\n"
+  # would pass — a hole in the subdomain/routing injection control.
+  @label ~r/\A[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\z/
 
   def start_link(_opts), do: GenServer.start_link(__MODULE__, %{}, name: __MODULE__)
 
@@ -27,7 +29,7 @@ defmodule Relay.Registry do
       not handle_valid?(handle) ->
         {:reply, {:error, :bad_handle}, state}
 
-      secret != allowed_secret(handle) ->
+      not secret_ok?(handle, secret) ->
         {:reply, {:error, :bad_secret}, state}
 
       Map.has_key?(state.by_handle, handle) ->
@@ -63,6 +65,15 @@ defmodule Relay.Registry do
     end
   end
 
-  # nil for an unknown handle => secret comparison fails with {:error, :bad_secret}
+  # Constant-time, nil-safe. Unknown handle (allowed_secret nil) or non-binary
+  # input => false (no crash, no early-exit timing leak).
+  defp secret_ok?(handle, secret) do
+    case allowed_secret(handle) do
+      s when is_binary(s) and is_binary(secret) -> Plug.Crypto.secure_compare(secret, s)
+      _ -> false
+    end
+  end
+
+  # nil for an unknown handle => secret_ok? returns false => {:error, :bad_secret}
   defp allowed_secret(handle), do: Map.get(Application.get_env(:relay, :handles, %{}), handle)
 end

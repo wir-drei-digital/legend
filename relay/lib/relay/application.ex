@@ -27,8 +27,16 @@ defmodule Relay.Application do
   # The instance dials this over WS (TLS terminated upstream — scheme: :http here)
   # and registers {handle, secret}; thereafter it is the mux hub for that handle.
   defp carrier_listener do
-    {Bandit,
-     plug: Relay.CarrierPlug, scheme: :http, port: Application.get_env(:relay, :carrier_port)}
+    {
+      Bandit,
+      # Loopback by default: the carrier secret crosses this in cleartext, so it
+      # MUST sit behind a TLS-terminating front (Caddy/WSS). Override with
+      # RELAY_CARRIER_IP only if the front is elsewhere.
+      plug: Relay.CarrierPlug,
+      scheme: :http,
+      port: Application.get_env(:relay, :carrier_port),
+      ip: Application.get_env(:relay, :carrier_ip, {127, 0, 0, 1})
+    }
   end
 
   # The device endpoint terminates TLS, so it needs a cert/key. Without them

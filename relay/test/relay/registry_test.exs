@@ -28,6 +28,12 @@ defmodule Relay.RegistryTest do
     assert Relay.Registry.handle_valid?("laptop")
   end
 
+  test "a trailing newline is rejected (\\A…\\z, not ^…$)" do
+    # PCRE $ matches before a trailing newline, so "laptop\n" would slip past ^…$.
+    refute Relay.Registry.handle_valid?("laptop\n")
+    assert Relay.Registry.handle_valid?("laptop")
+  end
+
   test "a second live registration of the same handle is rejected" do
     other = spawn(fn -> Process.sleep(:infinity) end)
     assert :ok = Relay.Registry.register("laptop", "s3cret", other)
