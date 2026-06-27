@@ -49,6 +49,17 @@ defmodule Legend.Core.Remote do
   end
 
   @doc """
+  Whether the relay ingress endpoint should boot. Default off; Part 2 wires this
+  to the persisted "via relay" remote-access mode.
+
+  Reads the `:relay_ingress_enabled` application env (default `false`) rather
+  than a literal so the boot-time `if` in `Legend.Application` isn't compiled
+  away as a dead branch under `--warnings-as-errors`.
+  """
+  @spec relay_ingress_enabled?() :: boolean()
+  def relay_ingress_enabled?, do: Application.get_env(:legend, :relay_ingress_enabled, false)
+
+  @doc """
   Pure: merge remote overrides onto the endpoint's existing config. Enabled →
   bind `0.0.0.0` (port preserved), extend `check_origin` and set `url` host for
   the configured host. Disabled → `existing` unchanged.

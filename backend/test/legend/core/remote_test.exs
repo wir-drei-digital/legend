@@ -68,4 +68,8 @@ defmodule Legend.Core.RemoteTest do
     existing = [force_ssl: [rewrite_on: [:x_forwarded_proto]]]
     assert Legend.Core.Remote.endpoint_overrides(existing, %{enabled: false}) == existing
   end
+
+  test "relay ingress is disabled by default" do
+    refute Legend.Core.Remote.relay_ingress_enabled?()
+  end
 end

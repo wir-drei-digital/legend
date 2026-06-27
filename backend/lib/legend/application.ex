@@ -7,7 +7,7 @@ defmodule Legend.Application do
 
   @impl true
   def start(_type, _args) do
-    children = [
+    base_children = [
       LegendWeb.Telemetry,
       Legend.Repo,
       {Ecto.Migrator,
@@ -26,6 +26,15 @@ defmodule Legend.Application do
       # Start to serve requests, typically the last entry
       LegendWeb.Endpoint
     ]
+
+    # The relay ingress is a separate `server: false` endpoint that only boots
+    # when remote access runs "via relay" (Part 2). Default off ⇒ not started ⇒
+    # zero behavior change.
+    children =
+      base_children ++
+        if Legend.Core.Remote.relay_ingress_enabled?(),
+          do: [LegendWeb.RelayIngressEndpoint],
+          else: []
 
     # See https://hexdocs.pm/elixir/Supervisor.html
     # for other strategies and supported options
