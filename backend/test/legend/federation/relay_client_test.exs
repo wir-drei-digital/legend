@@ -27,6 +27,7 @@ defmodule Legend.Federation.RelayClientTest do
   alias Legend.Core.Tunnel.Mux
   alias Legend.Core.Tunnel.Mux.Frame
   alias Legend.Federation.RelayClient
+  alias Legend.Federation.RelayClient.Carrier
 
   @moduletag :integration
 
@@ -102,6 +103,25 @@ defmodule Legend.Federation.RelayClientTest do
     assert_receive {:stream, id}, 2_000
     send(second_handler, {:device_data, id, "after-reconnect"})
     assert_receive {:from_instance, "after-reconnect"}, 5_000
+  end
+
+  test "a successful WS registration notifies the owner with {:carrier_up, _}",
+       %{relay_url: relay_url} do
+    # Drive the Carrier directly with the test as both `server` and `owner` so the
+    # post-register notifications land where we can assert on them. The backoff
+    # reset in RelayClient hangs off exactly this {:carrier_up, _} signal.
+    {:ok, carrier} =
+      Carrier.connect(%{
+        relay_url: relay_url,
+        handle: @handle,
+        secret: @secret,
+        server: self(),
+        owner: self()
+      })
+
+    assert_receive {:registered, _handler}, 5_000
+    assert_receive {:set_carrier, ^carrier}, 5_000
+    assert_receive {:carrier_up, ^carrier}, 5_000
   end
 
   # --- helpers ---------------------------------------------------------------

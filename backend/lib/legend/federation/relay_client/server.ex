@@ -89,6 +89,10 @@ defmodule Legend.Federation.RelayClient.Server do
     end
   end
 
+  # Defensive catch-all: a stray/unexpected message must not crash the splice and
+  # drop in-flight streams. Mirrors the `Carrier`'s own catch-all.
+  def handle_info(_msg, state), do: {:noreply, state}
+
   defp handle_frame(%Frame{type: :open, stream_id: id}, state) do
     cond do
       Map.has_key?(state.streams, id) ->

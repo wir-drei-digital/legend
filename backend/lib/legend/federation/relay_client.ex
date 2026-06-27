@@ -68,6 +68,11 @@ defmodule Legend.Federation.RelayClient do
   @impl true
   def handle_info(:reconnect, state), do: {:noreply, connect_carrier(state)}
 
+  # The carrier finished its WS upgrade+registration — only now do we know the dial
+  # actually succeeded, so reset the backoff. (start_link returning {:ok, pid} above
+  # happens before the dial, so it can't reset attempt without flattening the ramp.)
+  def handle_info({:carrier_up, _pid}, state), do: {:noreply, %{state | attempt: 0}}
+
   # The carrier (linked) died — reconnect with backoff. A fresh carrier re-registers
   # and re-points the server.
   def handle_info({:EXIT, pid, _reason}, %{carrier: pid} = state) do
@@ -96,15 +101,17 @@ defmodule Legend.Federation.RelayClient do
       relay_url: state.relay_url,
       handle: state.handle,
       secret: state.secret,
-      server: state.server
+      server: state.server,
+      owner: self()
     }
 
     case Carrier.connect(opts) do
       {:ok, carrier} ->
-        # start_link already linked us; record it and reset backoff. Actual
-        # connect/register happens in the carrier's :continue — a failure there
-        # surfaces as {:EXIT, carrier, …} and reconnects.
-        %{state | carrier: carrier, attempt: 0}
+        # start_link already linked us; record it but DON'T reset backoff yet —
+        # the dial/register happens in the carrier's :continue. Success surfaces
+        # as {:carrier_up, _} (resets attempt); failure as {:EXIT, carrier, …}
+        # (ramps the backoff). Resetting here would flatten the ramp.
+        %{state | carrier: carrier}
 
       {:error, reason} ->
         Logger.warning("[RelayClient] carrier start failed: #{inspect(reason)}")

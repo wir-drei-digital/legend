@@ -36,7 +36,8 @@ defmodule Legend.Federation.RelayClient.Carrier do
   Starts a linked carrier WebSocket GenServer.
 
   Opts (map): `relay_url` (e.g. `"wss://relay.example.com"`), `handle`, `secret`,
-  and `server` (the `RelayClient.Server` pid to splice with).
+  `server` (the `RelayClient.Server` pid to splice with), and optional `owner` (the
+  `RelayClient` pid notified with `{:carrier_up, self()}` once registration succeeds).
   """
   @spec connect(map()) :: {:ok, pid()} | {:error, term()}
   def connect(%{relay_url: _, handle: _, secret: _, server: _} = opts) do
@@ -84,6 +85,7 @@ defmodule Legend.Federation.RelayClient.Carrier do
       handle: opts.handle,
       secret: opts.secret,
       server: opts.server,
+      owner: Map.get(opts, :owner),
       conn: nil,
       websocket: nil,
       ref: nil
@@ -163,8 +165,10 @@ defmodule Legend.Federation.RelayClient.Carrier do
          {:ok, conn, status, resp_headers} <- await_upgrade(conn, ref),
          {:ok, conn, ws} <- Mint.WebSocket.new(conn, ref, status, resp_headers),
          {:ok, conn, ws} <- send_registration(conn, ws, ref, state) do
-      # Registered: wire ourselves to the splice so return traffic flows back here.
+      # Registered: wire ourselves to the splice so return traffic flows back here,
+      # and tell the owner the dial succeeded so it can reset its reconnect backoff.
       send(state.server, {:set_carrier, self()})
+      if state.owner, do: send(state.owner, {:carrier_up, self()})
       {:noreply, %{state | conn: conn, websocket: ws, ref: ref}}
     else
       {:error, reason} ->
