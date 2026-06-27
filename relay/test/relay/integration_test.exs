@@ -27,6 +27,8 @@ defmodule Relay.IntegrationTest do
   @moduletag :integration
 
   setup do
+    prev = Application.get_env(:relay, :handles)
+    on_exit(fn -> Application.put_env(:relay, :handles, prev) end)
     Application.put_env(:relay, :handles, %{"laptop" => "s3cret"})
     start_supervised!(Relay.Registry)
     port = free_port()
