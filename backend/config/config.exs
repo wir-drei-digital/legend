@@ -97,6 +97,10 @@ config :legend, LegendWeb.Endpoint,
 config :legend, LegendWeb.RelayIngressEndpoint,
   url: [host: "localhost"],
   adapter: Bandit.PhoenixAdapter,
+  # Loopback-only fixed port: the Part-2 carrier splices relayed device streams
+  # here (it must know the port in advance); relayed traffic never arrives
+  # publicly. `server: false` keeps this config-only until supervised (Task 3).
+  http: [ip: {127, 0, 0, 1}, port: 4808],
   render_errors: [
     formats: [json: LegendWeb.ErrorJSON],
     layout: false

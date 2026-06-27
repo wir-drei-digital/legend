@@ -25,4 +25,10 @@ defmodule LegendWeb.RelayIngressEndpointTest do
     conn = get(build_conn(), "/api/health")
     assert conn.status == 200
   end
+
+  test "ingress is configured for a fixed loopback http port" do
+    http = Application.get_env(:legend, LegendWeb.RelayIngressEndpoint)[:http]
+    assert http[:ip] == {127, 0, 0, 1}
+    assert is_integer(http[:port]) and http[:port] > 0
+  end
 end

@@ -73,8 +73,10 @@ if config_env() == :prod do
 
   # Relay ingress shares the same secret. `check_origin: false` is a Part-1
   # placeholder for isolated tests; Part 2 sets it to ["//<handle>.<relay-host>"]
-  # when relay mode is configured.
+  # when relay mode is configured. Loopback-only fixed port (RELAY_INGRESS_PORT
+  # overrides the 4808 default) so the federation carrier can splice to it.
   config :legend, LegendWeb.RelayIngressEndpoint,
+    http: [ip: {127, 0, 0, 1}, port: env!("RELAY_INGRESS_PORT", :integer, 4808)],
     secret_key_base: env!("SECRET_KEY_BASE", :string),
     check_origin: false
 
