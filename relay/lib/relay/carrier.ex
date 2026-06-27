@@ -7,6 +7,7 @@ defmodule Relay.Carrier do
   DATA/CLOSE frames to the owning device handler process.
   """
   @behaviour WebSock
+  require Logger
   alias Relay.Mux
   alias Relay.Mux.Frame
 
@@ -18,6 +19,7 @@ defmodule Relay.Carrier do
   def handle_in({msg, opcode: :binary}, %{registered: false} = state) do
     with {:ok, %{"handle" => h, "secret" => s}} <- Jason.decode(msg),
          :ok <- Relay.Registry.register(h, s, self()) do
+      Logger.info("[relay] carrier registered handle=#{h}")
       {:ok, %{state | registered: true}}
     else
       _ -> {:stop, :normal, 1008, state}

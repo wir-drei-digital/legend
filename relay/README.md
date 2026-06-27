@@ -66,9 +66,9 @@ mix run --no-halt
 
 The relay logs:
 
-- At boot: carrier listener on `:4900` (loopback) and device listener on `:4443` (TLS).
-- When an instance registers: the carrier `REGISTER` frame is accepted for handle `laptop`.
-- When an instance drops: the handle goes offline (reconnect is handled by the instance).
+- At boot: Bandit (carrier) and ThousandIsland (device) log their listeners coming up.
+- When an instance registers: `[relay] carrier registered handle=laptop`.
+- When an instance drops: `[relay] handle laptop offline` (reconnect is handled by the instance).
 
 ---
 
@@ -151,8 +151,9 @@ Run through these steps against a live relay + instance + phone before shipping.
 
 - [ ] Start the relay with `RELAY_HANDLES="laptop:s3cret"` + device TLS listener.
 - [ ] Configure the instance (via relay, URL/handle/secret) and restart.
-- [ ] **Observe relay logs:** `[Relay.Carrier] registered handle=laptop` (or equivalent). Handle is now online in `Relay.Registry`.
-- [ ] **Confirm:** no log line for a wrong-secret attempt reaching registration (try `RELAY_HANDLES="laptop:wrong"` on the instance — expect WS close from relay, not a silent accept).
+- [ ] **Observe relay logs:** `[relay] carrier registered handle=laptop`. Handle is now online in `Relay.Registry`.
+- [ ] **Confirm from the instance side:** the boot log shows remote access enabled (via relay) and there is NO `[RelayClient] carrier start failed` line (from `backend/lib/legend/federation/relay_client.ex`) — its absence means the carrier connected and registered.
+- [ ] **Confirm a wrong secret is rejected:** with a mismatched secret the relay closes the carrier WS (code 1008) without logging `[relay] carrier registered` — no silent accept.
 
 ### Gate 2 — Phone request routes relay → ingress → instance
 
@@ -184,10 +185,12 @@ Run through these steps against a live relay + instance + phone before shipping.
 
 ### Gate 5 — Carrier drop → reconnect
 
-- [ ] With a session active from the phone, kill or restart the relay process.
-- [ ] **Observe instance logs:** `[RelayClient] carrier start failed` / EXIT and then reconnect attempts with backoff.
-- [ ] Restart the relay (or let it stay up if you just disconnected momentarily).
-- [ ] **Observe:** `[RelayClient]` dials and re-registers. The relay logs the handle online again.
+- [ ] With a session active from the phone, drop the carrier. Two ways to exercise it:
+  - **Restart the instance** (relay survives): the relay logs `[relay] handle laptop offline` when the carrier connection dies.
+  - **Kill/restart the relay** (relay gone): the relay logs nothing at the drop (the process is dead); the instance's carrier just dies and enters its reconnect loop.
+- [ ] **Observe instance logs:** the carrier EXITs and `Legend.Federation.RelayClient` schedules reconnect with capped backoff (500 ms base, 30 s cap).
+- [ ] Bring the carrier back (instance back up, or relay restarted).
+- [ ] **Observe:** the carrier re-dials and re-registers; the relay logs `[relay] carrier registered handle=laptop` again.
 - [ ] Open a new session from the phone. Confirm it reaches the instance.
 - [ ] *Note:* in-flight streams at the time of drop are lost; new sessions after reconnect work normally.
 

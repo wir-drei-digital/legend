@@ -1,6 +1,7 @@
 defmodule Relay.Registry do
   @moduledoc "In-memory handle => carrier-pid map. Per-handle secret allowlist + DNS-label validation. Auto-clears on carrier death."
   use GenServer
+  require Logger
 
   # \A…\z (not ^…$): in PCRE $ matches before a trailing newline, so "laptop\n"
   # would pass — a hole in the subdomain/routing injection control.
@@ -61,6 +62,7 @@ defmodule Relay.Registry do
         {:noreply, state}
 
       {handle, by_ref} ->
+        Logger.info("[relay] handle #{handle} offline")
         {:noreply, %{state | by_handle: Map.delete(state.by_handle, handle), by_ref: by_ref}}
     end
   end
